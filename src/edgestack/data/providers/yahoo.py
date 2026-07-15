@@ -71,7 +71,17 @@ def parse_chart_payload(symbol: str, payload: dict[str, Any]) -> pd.DataFrame:
     # Yahoo pads halted/unavailable sessions with nulls: drop them.
     df = df.dropna(subset=["open", "high", "low", "close"])
     df["volume"] = df["volume"].fillna(0.0)
-    return df
+    # Occasionally the feed ships a malformed bar (high below close, zero
+    # price). Drop those rows rather than poisoning the whole batch.
+    ok = (
+        (df[["open", "high", "low", "close"]] > 0).all(axis=1)
+        & (df["high"] >= df[["open", "close", "low"]].max(axis=1))
+        & (df["low"] <= df[["open", "close", "high"]].min(axis=1))
+    )
+    if (~ok).any():
+        log_event(log, 30, "malformed bars dropped", symbol=symbol,
+                  count=int((~ok).sum()))
+    return df.loc[ok]
 
 
 class YahooProvider(PriceDataProvider):
@@ -109,7 +119,16 @@ class YahooProvider(PriceDataProvider):
                 log_event(log, 30, "symbol skipped", symbol=symbol, error=str(exc))
         if not frames:
             raise ProviderError(f"yahoo returned no data for any of {symbols!r}")
-        bars = validate_bars(pd.concat(frames, ignore_index=True), context="yahoo")
+        raw = pd.concat(frames, ignore_index=True)
+        # Re-apply the malformed-bar guard: cached responses may predate it.
+        ok = (
+            (raw[["open", "high", "low", "close"]] > 0).all(axis=1)
+            & (raw["high"] >= raw[["open", "close", "low"]].max(axis=1))
+            & (raw["low"] <= raw[["open", "close", "high"]].min(axis=1))
+        )
+        if (~ok).any():
+            log_event(log, 30, "malformed cached bars dropped", count=int((~ok).sum()))
+        bars = validate_bars(raw.loc[ok], context="yahoo")
         mask = (bars["date"] >= pd.Timestamp(start)) & (bars["date"] <= pd.Timestamp(end))
         return bars.loc[mask].reset_index(drop=True)
 

@@ -20,6 +20,11 @@ from edgestack.validation.metrics import (
 )
 
 MIN_OBS = 12
+#: Above this sample size the bootstrap machinery works on a deterministic
+#: random subsample: CIs/p-values become slightly conservative (wider), never
+#: optimistic, and memory stays bounded on broad-universe rules that fire
+#: hundreds of thousands of times.
+MAX_BOOT_N = 50_000
 
 
 @dataclass(frozen=True)
@@ -65,13 +70,16 @@ def study_returns(
     arr = arr[~np.isnan(arr)]
     if len(arr) < MIN_OBS:
         return None
+    boot_arr = arr
+    if len(arr) > MAX_BOOT_N:
+        boot_arr = arr[rng.choice(len(arr), size=MAX_BOOT_N, replace=False)]
 
     wins = arr[arr > 0]
     losses = arr[arr < 0]
     win_loss = float(wins.mean() / -losses.mean()) if len(wins) and len(losses) else 0.0
     var, es = var_es(arr)
     ci_low, ci_high = block_bootstrap_ci(
-        arr, rng=rng, block_length=block_length, n_boot=n_boot
+        boot_arr, rng=rng, block_length=block_length, n_boot=n_boot
     )
     cred_low, cred_high = normal_credible_interval(arr, prior_pseudo_n=prior_pseudo_n)
     downside = arr[arr < 0]
@@ -86,7 +94,7 @@ def study_returns(
         std=float(arr.std(ddof=1)),
         downside_deviation=dd_dev,
         hit_rate=hit_rate(arr),
-        p_value=mean_pvalue_bootstrap(arr, rng=rng, n_boot=n_boot),
+        p_value=mean_pvalue_bootstrap(boot_arr, rng=rng, n_boot=n_boot),
         ci_low=ci_low,
         ci_high=ci_high,
         posterior_prob_positive=prob_mean_positive(arr, prior_pseudo_n=prior_pseudo_n),
