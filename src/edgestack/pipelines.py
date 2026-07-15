@@ -183,11 +183,55 @@ def run_models_train(cfg: EdgeStackConfig) -> None:
 
 
 def run_signals_generate(cfg: EdgeStackConfig, *, as_of: date | None = None) -> None:
-    raise NotImplementedError("signal generation (milestone 9)")
+    from pathlib import Path
+
+    import pandas as pd
+
+    from edgestack.data.catalog import DataCatalog
+    from edgestack.discovery.edge_store import load_edges
+    from edgestack.exceptions import DataError
+    from edgestack.models.registry import load_models
+    from edgestack.reporting.signal_report import render_tables, save_report
+    from edgestack.scoring.signal_engine import generate_signal_report
+
+    catalog = DataCatalog(cfg)
+    features = load_feature_frame(cfg)
+    assert isinstance(features, pd.DataFrame)
+    panel = catalog.load_panel()
+    edges = load_edges(catalog)
+    if not edges:
+        raise DataError(
+            "no VALIDATED/ACTIVE edges in the store; run `edgestack edges "
+            "discover` and `edgestack edges validate` first"
+        )
+    try:
+        models = load_models(Path(cfg.paths.artifacts_dir) / "models",
+                             expected_config_hash=cfg.config_hash())
+    except DataError:
+        models = []
+        print("note: no trained models found — probabilities fall back to edge "
+              "posteriors and are flagged as uncalibrated")
+
+    report = generate_signal_report(cfg, features, panel, edges, models, as_of)
+    path = save_report(catalog, report)
+    catalog.audit("signals_generate", reason=str(report.as_of_date),
+                  longs=len(report.long_candidates), shorts=len(report.short_candidates),
+                  abstentions=len(report.abstentions))
+    print(render_tables(report))
+    print(f"\nfull machine-readable report: {path}")
 
 
 def run_signals_rank(cfg: EdgeStackConfig, *, top: int = 20, as_of: date | None = None) -> None:
-    raise NotImplementedError("signal ranking (milestone 9)")
+    from edgestack.data.catalog import DataCatalog
+    from edgestack.reporting.signal_report import load_report, render_tables
+
+    report = load_report(DataCatalog(cfg), as_of)
+    print(render_tables(report, top=top))
+    # Show the strongest explanation as a sample of the reasoning trail.
+    best = (report.long_candidates or report.short_candidates)
+    if best:
+        print("\n--- top candidate explanation ---")
+        print(best[0].explanation)
 
 
 def run_backtest(cfg: EdgeStackConfig, *, scenario: str | None = None) -> None:
