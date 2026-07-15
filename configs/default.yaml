@@ -61,6 +61,7 @@ discovery:
   min_support: 50                  # minimum observations per rule per fold
   max_rules_per_batch: 5000
   quantile_bins: [0.1, 0.25, 0.5, 0.75, 0.9]
+  horizons: [5, 10, 20]            # discovery searches these; models cover all
 
 costs:
   scenario: CONSERVATIVE           # OPTIMISTIC | BASE | CONSERVATIVE | STRESS

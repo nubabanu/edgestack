@@ -102,6 +102,9 @@ class DiscoveryConfig(_Section):
     min_support: int = Field(default=50, ge=10)
     max_rules_per_batch: int = Field(default=5000, ge=1)
     quantile_bins: tuple[float, ...] = (0.1, 0.25, 0.5, 0.75, 0.9)
+    # Horizons searched during rule discovery (a subset of signals.horizons
+    # keeps the trial count — and hence the FDR/DSR penalty — manageable).
+    horizons: tuple[int, ...] = (5, 10, 20)
 
     @field_validator("quantile_bins")
     @classmethod

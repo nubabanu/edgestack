@@ -95,12 +95,65 @@ def load_feature_frame(cfg: EdgeStackConfig) -> object:
     return pd.read_parquet(path)
 
 
+def _load_research_frames(cfg: EdgeStackConfig):
+    """Feature + label frames for research (guard-truncated panel)."""
+    import pandas as pd
+
+    from edgestack.data.catalog import DataCatalog
+    from edgestack.labels.forward_returns import forward_return_labels
+
+    catalog = DataCatalog(cfg)
+    features = load_feature_frame(cfg)
+    assert isinstance(features, pd.DataFrame)
+    panel = catalog.load_panel()
+    horizons = tuple(sorted(set(cfg.signals.horizons) | set(cfg.discovery.horizons)))
+    labels = forward_return_labels(
+        panel, horizons,
+        benchmark_symbol=cfg.universe.benchmark_symbol,
+        execution_delay=cfg.signals.execution_delay_sessions,
+    )
+    return catalog, features, labels
+
+
 def run_edges_discover(cfg: EdgeStackConfig) -> None:
-    raise NotImplementedError("edge discovery (milestone 7)")
+    from edgestack.discovery.candidate_generation import generate_candidates
+    from edgestack.discovery.edge_store import save_batch
+
+    catalog, features, labels = _load_research_frames(cfg)
+    experiment_id = catalog.record_experiment(
+        "discovery",
+        start_date=features["date"].min().date(),
+        end_date=features["date"].max().date(),
+    )
+    batch = generate_candidates(features, labels, cfg, experiment_id)
+    save_batch(catalog, batch)
+    promising = sum(1 for c in batch.candidates if c.in_sample_p_value < 0.05)
+    print(f"discovery batch {batch.batch_id}: {batch.trial_count} rules evaluated "
+          f"({promising} look promising in-sample — expect most to die out of sample)")
+    print(f"validate with: edgestack edges validate --batch {batch.batch_id}")
 
 
 def run_edges_validate(cfg: EdgeStackConfig, *, batch_id: str | None = None) -> None:
-    raise NotImplementedError("edge validation (milestone 7)")
+    from edgestack.discovery.edge_store import load_batch, save_edges
+    from edgestack.types import EdgeStatus
+    from edgestack.validation.walk_forward import validate_batch
+
+    catalog, features, labels = _load_research_frames(cfg)
+    batch = load_batch(catalog, batch_id)
+    print(f"validating batch {batch.batch_id}: {batch.trial_count} candidates "
+          f"(trial count for FDR/DSR = {batch.trial_count})")
+    edges = validate_batch(batch, features, labels, cfg)
+    save_edges(catalog, edges)
+
+    validated = [e for e in edges if e.lifecycle.status is EdgeStatus.VALIDATED]
+    print(f"result: {len(validated)} VALIDATED, {len(edges) - len(validated)} REJECTED")
+    for edge in sorted(validated, key=lambda e: -e.stats.net_mean_return)[:15]:
+        s = edge.stats
+        print(f"  {edge.identity.name}: net {s.net_mean_return:+.4f}/trade, "
+              f"n={s.sample_size} (eff {s.effective_sample_size:.0f}), "
+              f"q={s.q_value:.3f}, DSR={s.deflated_sharpe_ratio:.2f}")
+    if not validated:
+        print("no edges survived — that is a valid (and common) research outcome")
 
 
 def run_models_train(cfg: EdgeStackConfig) -> None:
