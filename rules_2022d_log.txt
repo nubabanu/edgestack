@@ -1,0 +1,18 @@
+
+C:\codes\spass mit Zuhalk\edgestack\.venv\Lib\site-packages\interpret\glassbox\_ebm\_ebm.py:871: UserWarning: Missing values detected. Our visualizations do not currently display missing values. To retain the glassbox nature of the model you need to either set the missing values to an extreme value like -1000 that will be visible on the graphs, or manually examine the missing value score in ebm.term_scores_[term_index][0]
+  warn(
+Traceback (most recent call last):
+  File "C:\codes\spass mit Zuhalk\edgestack\.venv\Lib\site-packages\joblib\externals\loky\backend\resource_tracker.py", line 326, in main
+    registry[rtype][name] -= 1
+    ~~~~~~~~~~~~~~~^^^^^^
+KeyError: 'C:\\Users\\7600XP~1\\AppData\\Local\\Temp\\joblib_memmapping_folder_7808_15a339a8c9444f038d643922baee986e_340a3b3e7acf4e5ba6b2c883b9315f99\\7808-2037478290976-0367fe03351e4a579bb9e32942fc13f3.pkl'
+Traceback (most recent call last):
+  File "C:\codes\spass mit Zuhalk\edgestack\.venv\Lib\site-packages\joblib\externals\loky\backend\resource_tracker.py", line 326, in main
+    registry[rtype][name] -= 1
+    ~~~~~~~~~~~~~~~^^^^^^
+KeyError: 'C:\\Users\\7600XP~1\\AppData\\Local\\Temp\\joblib_memmapping_folder_7808_15a339a8c9444f038d643922baee986e_340a3b3e7acf4e5ba6b2c883b9315f99\\7808-2037478290976-aab5a00b73a0439f9acf25881d5294a4.pkl'
+=== RULES DISCOVER 2022: 1,055,295 pre rows ===
+  [2022] EBM shortlist: 34/46 features (31s)
+  [2022] structural rules: 291, PASSING long: 0, trials counted: 7582 (262s)
+  frozen -> artifacts\rules_windows\freeze_2022.pkl (263s)
+

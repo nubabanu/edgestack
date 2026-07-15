@@ -1,0 +1,5 @@
+
+panel: 593 symbols, 1,795,869 bars
+rules frame: 1,376,398 eligible rows -> data\features\rules_merged.parquet (55s; roundtrip cost 0.0030)
+
+exit=0

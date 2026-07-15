@@ -104,7 +104,7 @@ def rule_signature(preds: list[Predicate], decile_of: dict[str, np.ndarray],
     parts = []
     for p in sorted(preds, key=lambda p: p.feature):
         edges = decile_of[p.feature]
-        bucket = int(np.searchsorted(edges, float(p.value)))
+        bucket = int(np.searchsorted(edges, float(p.value)))  # type: ignore[arg-type]
         direction = "<" if p.op in ("<", "<=") else ">"
         parts.append(f"{p.feature}{direction}d{bucket}")
     return "&".join(parts) + ("|+" if coef > 0 else "|-")
@@ -156,7 +156,7 @@ def discover_rules(
     for est in gbr.estimators_.ravel():
         raw_rules.extend(_tree_rules(est, cols, max_conditions))
     total_generated = len(raw_rules)
-    unique_rules = list(dict.fromkeys(raw_rules))[: 4 * max_rules]
+    unique_rules = list(dict.fromkeys(raw_rules))[: 2 * max_rules]
     if not unique_rules:
         return [], total_generated
 
@@ -221,7 +221,7 @@ def _fast_mask(frame: pd.DataFrame, preds: list[Predicate]) -> np.ndarray:
     mask = np.ones(len(frame), dtype=bool)
     for p in preds:
         col = frame[p.feature].to_numpy()
-        thr = float(p.value)
+        thr = float(p.value)  # type: ignore[arg-type]
         if p.op == "<":
             mask &= col < thr
         elif p.op == "<=":

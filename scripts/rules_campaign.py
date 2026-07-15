@@ -118,6 +118,7 @@ def _pipeline_on(pre: pd.DataFrame, cfg, seed: int, label: str) -> dict:
 
     rules, trials = stability_select(
         pre, shortlist, "excess_net_ret", seed=seed, mae_col="mae",
+        max_fit_rows=35_000,
     )
     # Tradeable rules: stable, long-directional, AND absolutely positive net
     # of costs (a rule can be a stable relative edge yet still lose money).
@@ -173,22 +174,35 @@ def _indicator_frame(frame: pd.DataFrame, rules: list[StableRule]) -> pd.DataFra
     return pd.DataFrame(out, index=frame.index)
 
 
-def stage_year(cfg, catalog, year: int) -> None:
+def stage_year(cfg, catalog, year: int, phase: str) -> None:
+    """phase 'discover': research + freeze (pickled); phase 'trade': apply."""
+    import pickle
+
     t0 = time.time()
-    panel = catalog.load_panel()
-    sessions = pd.DatetimeIndex(sorted(pd.to_datetime(panel["date"]).unique()))
     merged = pd.read_parquet(MERGED_PATH)
     cutoff, year_end = pd.Timestamp(f"{year}-01-01"), pd.Timestamp(f"{year}-12-31")
-    pre = merged.loc[(merged["date"] < cutoff)
-                     & merged["excess_net_ret"].notna()].reset_index(drop=True)
+    freeze_path = WINDOWS_DIR / f"freeze_{year}.pkl"
+    WINDOWS_DIR.mkdir(parents=True, exist_ok=True)
+
+    if phase == "discover":
+        pre = merged.loc[(merged["date"] < cutoff)
+                         & merged["excess_net_ret"].notna()].reset_index(drop=True)
+        print(f"=== RULES DISCOVER {year}: {len(pre):,} pre rows ===")
+        experiment_id = catalog.record_experiment(
+            "rules_outer", end_date=date(year, 12, 31),
+            notes=f"rules campaign outer={year}")
+        freeze = _pipeline_on(pre, cfg, cfg.project.random_seed, str(year))
+        catalog.update_trial_count(experiment_id, freeze["trials"])
+        freeze_path.write_bytes(pickle.dumps(freeze))
+        print(f"  frozen -> {freeze_path} ({time.time()-t0:.0f}s)")
+        return
+
+    freeze = pickle.loads(freeze_path.read_bytes())
+    panel = catalog.load_panel()
+    sessions = pd.DatetimeIndex(sorted(pd.to_datetime(panel["date"]).unique()))
     outer = merged.loc[(merged["date"] >= cutoff)
                        & (merged["date"] <= year_end)].reset_index(drop=True)
-    print(f"=== RULES OUTER {year}: {len(pre):,} pre rows, {len(outer):,} outer ===")
-    experiment_id = catalog.record_experiment("rules_outer", end_date=date(year, 12, 31),
-                                              notes=f"rules campaign outer={year}")
-
-    freeze = _pipeline_on(pre, cfg, cfg.project.random_seed, str(year))
-    catalog.update_trial_count(experiment_id, freeze["trials"])
+    print(f"=== RULES TRADE {year}: {len(outer):,} outer rows ===")
     row: dict = {"year": year, "trials": freeze["trials"],
                  "n_structural_rules": len(freeze["rules"]),
                  "n_passing": freeze["n_passing"],
@@ -264,7 +278,8 @@ def stage_report(cfg, catalog) -> None:
         if not t.empty:
             trades_list.append(t)
 
-    pooled = pd.concat([r for r in rets_list if len(r)]) if rets_list else pd.Series(dtype=float)
+    nonempty = [r for r in rets_list if len(r)]
+    pooled = pd.concat(nonempty) if nonempty else pd.Series(dtype=float)
     report: dict = {"windows": windows}
     if len(pooled) > 120:
         rng = np.random.default_rng(7)
@@ -384,6 +399,7 @@ def main() -> int:
     parser.add_argument("--stage", choices=["prep", "year", "report", "canary"],
                         required=True)
     parser.add_argument("--year", type=int, default=None)
+    parser.add_argument("--phase", choices=["discover", "trade"], default="discover")
     args = parser.parse_args()
     configure()
     if args.stage == "canary":
@@ -399,7 +415,7 @@ def main() -> int:
         if args.year is None:
             raise SystemExit("--year required")
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        stage_year(cfg, catalog, args.year)
+        stage_year(cfg, catalog, args.year, args.phase)
     else:
         stage_report(cfg, catalog)
     return 0

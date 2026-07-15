@@ -66,8 +66,10 @@ def _median_condition(occurrences: list[DiscoveredRule]) -> Condition:
         preds = (rule.condition,) if isinstance(rule.condition, Predicate) \
             else rule.condition.conditions
         for p in preds:
+            if not isinstance(p, Predicate):  # rules are flat conjunctions
+                continue
             direction = "<" if p.op in ("<", "<=") else ">"
-            thresholds[(p.feature, direction)].append(float(p.value))
+            thresholds[(p.feature, direction)].append(float(p.value))  # type: ignore[arg-type]
             ops[(p.feature, direction)] = p.op
     preds_out = tuple(
         Predicate(feature=f, op=ops[(f, d)],  # type: ignore[arg-type]
@@ -153,7 +155,8 @@ def stability_select(
             reasons.append(f"sign consistency {sign_consistency:.0%} < 90%")
 
         preds = (condition,) if isinstance(condition, Predicate) else condition.conditions
-        mask = _fast_mask(inner_feats, list(preds))
+        pred_list = [p for p in preds if isinstance(p, Predicate)]
+        mask = _fast_mask(inner_feats, pred_list)
         sel = inner_y[mask & np.isfinite(inner_y)]
         if len(sel) >= 2:
             abs_mean = float(sel.mean())

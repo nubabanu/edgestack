@@ -69,10 +69,10 @@ def distill_policy(
 
     # --- GOSDT ---------------------------------------------------------------
     try:
-        try:
-            from gosdt import GOSDTClassifier as _Gosdt
-        except ImportError:
-            from gosdt import GOSDT as _Gosdt  # older API
+        import gosdt as _gosdt_mod
+
+        _Gosdt = (getattr(_gosdt_mod, "GOSDTClassifier", None)
+                  or getattr(_gosdt_mod, "GOSDT"))  # noqa: B009 - older API name
         model = _Gosdt(regularization=0.01, depth_budget=4, time_limit=60)
         model.fit(x_frame, pd.Series(y))
         text = getattr(model, "tree_", None)
