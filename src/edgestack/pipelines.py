@@ -157,7 +157,29 @@ def run_edges_validate(cfg: EdgeStackConfig, *, batch_id: str | None = None) -> 
 
 
 def run_models_train(cfg: EdgeStackConfig) -> None:
-    raise NotImplementedError("model training (milestone 8)")
+    from pathlib import Path
+
+    from edgestack.models.registry import save_models
+    from edgestack.models.training import train_models
+
+    catalog, features, labels = _load_research_frames(cfg)
+    catalog.record_experiment(
+        "model_training",
+        start_date=features["date"].min().date(),
+        end_date=features["date"].max().date(),
+        feature_set=str(len(features.columns) - 2),
+    )
+    models = train_models(features, labels, cfg)
+    models_dir = Path(cfg.paths.artifacts_dir) / "models"
+    save_models(models_dir, models)
+    catalog.audit("models_train", reason=f"{len(models)} models")
+    print(f"trained {len(models)} models -> {models_dir}")
+    print(f"{'horizon':>7} {'side':>5} {'model':>18} {'OOF logloss':>12} "
+          f"{'Brier':>7} {'ECE':>6} {'n':>6}")
+    for m in models:
+        print(f"{m.horizon:>7} {m.side:>5} {m.name:>18} "
+              f"{m.metrics['oof_log_loss']:>12.4f} {m.metrics['oof_brier']:>7.4f} "
+              f"{m.metrics['oof_ece']:>6.3f} {int(m.metrics['oof_n']):>6}")
 
 
 def run_signals_generate(cfg: EdgeStackConfig, *, as_of: date | None = None) -> None:
