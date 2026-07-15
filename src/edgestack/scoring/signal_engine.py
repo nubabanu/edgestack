@@ -152,16 +152,20 @@ def _assess(
                           reasons=tuple(reasons))
 
     horizon = evidence.recommended_horizon
-    edge_posterior = float(np.mean([
-        e.stats.bayesian_posterior_probability for e in side_edges
+    # Per-trade probability implied by the historical edge evidence (hit rate
+    # of net returns) — comparable with the model's per-trade P(net > 0).
+    # The posterior-of-the-mean is a different quantity and must not be
+    # compared against per-trade probabilities.
+    edge_probability = float(np.mean([
+        e.stats.probability_of_positive_net_return for e in side_edges
     ]))
     model = model_lookup.get((horizon, side.value))
     if model is not None:
         probability = float(model.predict_probability(row.to_frame().T)[0])
         is_calibrated = model.is_calibrated
-        disagreement = abs(probability - edge_posterior)
+        disagreement = abs(probability - edge_probability)
     else:
-        probability = edge_posterior
+        probability = edge_probability
         is_calibrated = False
         disagreement = 0.0
 

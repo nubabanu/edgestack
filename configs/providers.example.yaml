@@ -1,0 +1,27 @@
+# Provider notes (informational — providers are selected via `universe.source`
+# in the main config; no API keys are required for any bundled provider).
+#
+# Bundled price providers:
+#
+#   synthetic  Deterministic synthetic market on the real XNYS calendar.
+#              Point-in-time safe by construction. Tests and offline demos.
+#
+#   local      CSV/Parquet files you supply under <data_dir>/raw/local/<SYMBOL>.csv
+#              Columns (case-insensitive): Date, Open, High, Low, Close, Volume,
+#              optional "Adj Close". Adjustment state is whatever YOUR files
+#              contain — EdgeStack marks it "unknown".
+#
+#   yahoo      Free unofficial Yahoo chart endpoint. OHLC is split-adjusted;
+#              adj_close is split+dividend adjusted. No delisted symbols
+#              (survivorship bias), throttling possible, may break anytime.
+#
+#   stooq      Free Stooq EOD CSV endpoint. Split-adjusted, NO dividend
+#              adjustment. Some networks receive a JavaScript anti-bot page —
+#              EdgeStack detects it and refuses to parse garbage.
+#
+# NOT bundled (interfaces exist in edgestack.data.providers.base, awaiting a
+# licensed data source): fundamentals, earnings timestamps, macro vintages,
+# short borrow/locate, options metrics, sentiment, news.
+# Short candidates therefore always carry SHORT_RESEARCH_CANDIDATE status.
+#
+# Never commit API keys. Use environment variables and `.env` (see .env.example).

@@ -49,18 +49,23 @@ def block_bootstrap_ci(
     n_boot: int = 2000,
     alpha: float = 0.05,
 ) -> tuple[float, float]:
-    """Circular block bootstrap CI, preserving serial dependence within blocks."""
+    """Circular block bootstrap CI, preserving serial dependence within blocks.
+
+    Fully vectorized: an index matrix of shape (n_boot, n) gathers all
+    resamples at once; blocks wrap circularly via modulo indexing.
+    """
     arr = _check(values)
     n = len(arr)
     block_length = max(1, min(block_length, n))
     n_blocks = int(np.ceil(n / block_length))
-    # Circular: blocks may wrap around the end of the series.
-    doubled = np.concatenate([arr, arr])
-    stats = np.empty(n_boot)
-    for b in range(n_boot):
-        starts = rng.integers(0, n, size=n_blocks)
-        sample = np.concatenate([doubled[s : s + block_length] for s in starts])[:n]
-        stats[b] = stat(sample)
+    starts = rng.integers(0, n, size=(n_boot, n_blocks))
+    offsets = np.arange(block_length)
+    idx = (starts[:, :, None] + offsets[None, None, :]) % n
+    samples = arr[idx.reshape(n_boot, -1)[:, :n]]
+    if stat is np.mean:
+        stats = samples.mean(axis=1)
+    else:
+        stats = np.apply_along_axis(stat, 1, samples)
     lo, hi = np.quantile(stats, [alpha / 2, 1 - alpha / 2])
     return float(lo), float(hi)
 

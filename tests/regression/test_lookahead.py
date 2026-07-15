@@ -102,6 +102,19 @@ def test_removing_future_rows_does_not_change_past(feature_cfg: EdgeStackConfig,
     pd.testing.assert_frame_equal(base_past, trunc_past, check_exact=False, rtol=1e-12)
 
 
+def test_labels_never_enter_features(feature_cfg: EdgeStackConfig,
+                                     panel: pd.DataFrame) -> None:
+    """Label columns must not appear in the feature dataset, and feature
+    engineering must not consume label frames at all."""
+    from edgestack.labels.forward_returns import LABEL_COLUMNS
+
+    feats = build_features(panel, feature_cfg)
+    forbidden = set(LABEL_COLUMNS) - {"symbol", "date"}
+    assert not forbidden.intersection(feats.columns)
+    # No registered feature may be named like a label output either.
+    assert not any(s.name in forbidden for s in all_specs())
+
+
 def test_pivot_confirmation_respects_availability_delay(feature_cfg: EdgeStackConfig,
                                                         panel: pd.DataFrame) -> None:
     """A confirmed pivot must not be visible before its confirming bars exist."""

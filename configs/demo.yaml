@@ -1,0 +1,98 @@
+# EdgeStack demonstration configuration: a small real-data watchlist via the
+# free Yahoo chart endpoint. Every free-data limitation (survivorship bias,
+# adjustment caveats) is surfaced in reports. Research output only.
+
+project:
+  name: EdgeStack-demo
+  timezone: America/New_York
+  random_seed: 42
+
+paths:
+  data_dir: data
+  artifacts_dir: artifacts
+
+universe:
+  source: yahoo
+  symbols: [SPY, AAPL, MSFT, NVDA, AMZN, GOOGL, META, JPM, XOM, JNJ]
+  benchmark_symbol: SPY
+  min_price: 5.0
+  min_median_dollar_volume: 5000000
+  min_history_sessions: 504
+  include_etfs: false
+  point_in_time: false
+
+data:
+  calendar: XNYS
+  cache_ttl_days: 3
+  request_timeout_seconds: 30
+  max_retries: 3
+
+signals:
+  execution_delay_sessions: 1
+  horizons: [1, 2, 3, 5, 10, 20, 40, 60]
+  min_effective_sample_size: 100
+  min_probability_of_profit: 0.52
+  min_expected_net_return: 0.001
+  min_conviction_score: 55
+  min_reward_to_risk: 1.0
+  abstain_on_missing_borrow: true
+  max_candidates_per_side: 10
+
+validation:
+  method: expanding_walk_forward
+  n_folds: 3
+  train_min_sessions: 756
+  test_sessions: 252
+  embargo_sessions: 60
+  final_test_start: "2024-01-01"   # untouched; guarded by TestPeriodGuard
+  fdr_alpha: 0.05
+  fdr_method: benjamini_hochberg
+  bootstrap_samples: 800
+  block_length_sessions: 20
+  min_subperiod_consistency: 0.6
+
+discovery:
+  max_condition_depth: 2
+  min_support: 50
+  max_rules_per_batch: 1500
+  quantile_bins: [0.1, 0.25, 0.5, 0.75, 0.9]
+  horizons: [5, 10]
+
+costs:
+  scenario: CONSERVATIVE
+  commission_bps: 0.0
+  half_spread_bps: 5.0
+  base_slippage_bps: 5.0
+  impact_coeff_bps: 10.0
+  short_borrow_annualized: 0.05
+  sec_fee_bps: 0.03
+
+scoring:
+  neutral_conviction: 50.0
+  logistic_slope: 6.0
+  family_cap: 0.4
+  within_family_lambda: 0.25
+  shrinkage_min_sample: 30
+
+risk:
+  max_position_weight: 0.05
+  max_sector_weight: 0.20
+  max_gross_exposure: 1.00
+  max_net_exposure: 0.60
+  max_positions: 20
+  target_annualized_volatility: 0.12
+  max_portfolio_drawdown: 0.15
+  atr_stop_multiple: 2.0
+  atr_target_multiples: [2.5, 4.0]
+  atr_window: 14
+
+monitoring:
+  rolling_window_signals: 60
+  degrade_posterior_threshold: 0.40
+  suspend_posterior_threshold: 0.25
+  retire_after_suspended_sessions: 126
+  calibration_ece_threshold: 0.10
+
+paper:
+  live_trading_enabled: false
+  initial_cash: 100000.0

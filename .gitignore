@@ -26,6 +26,10 @@ data/reports/
 data/cache/
 artifacts/
 
+# Local run outputs
+demo_output.txt
+
 # Editors
 .vscode/
 .idea/
+example_candidate.txt
