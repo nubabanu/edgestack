@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edgestack"
+version = "0.1.0"
+description = "Research platform for discovering, validating, scoring and monitoring statistical edges in daily US equities. Research and paper trading only."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "EdgeStack contributors" }]
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "pyarrow>=15.0",
+    "duckdb>=0.10",
+    "exchange-calendars>=4.5",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "typer>=0.12",
+    "scikit-learn>=1.4",
+    "scipy>=1.12",
+    "requests>=2.31",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+boosting = ["lightgbm>=4.3"]
+api = ["fastapi>=0.110", "uvicorn>=0.29"]
+dashboard = ["streamlit>=1.33"]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "hypothesis>=6.98",
+    "ruff>=0.4",
+    "mypy>=1.9",
+]
+
+[project.scripts]
+edgestack = "edgestack.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+    "SIM108", # ternary is not always clearer
+    "B905",   # zip without strict — explicit where it matters
+]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+packages = ["edgestack"]
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = false
+check_untyped_defs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "statistical: slower statistical acceptance tests on synthetic data",
+    "network: tests that require internet access (excluded by default in CI)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:exchange_calendars.*",
+]

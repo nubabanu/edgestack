@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Environment / secrets
+.env
+
+# Data and artifacts (regenerable, potentially large)
+data/raw/
+data/normalized/
+data/curated/
+data/features/
+data/labels/
+data/models/
+data/reports/
+data/cache/
+artifacts/
+
+# Editors
+.vscode/
+.idea/
