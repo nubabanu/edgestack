@@ -1,0 +1,12 @@
+
+pre-2021 validated: 86 | pre-2022 validated: 130 | stable across both (usable for 2023): 81
+inner threshold scores: {2: 0.18261442496423674, 3: 0.17245430156240832, 4: 0.04483372961575943, 5: -0.016008891095902866} -> F=2
+
+STABILITY-FILTERED combine-all, outer 2023:
+  edges=81, F=2, signals=107943, trades=1528, gross=0.84
+  return -0.3%, Sharpe 0.04
+  compare (from nested_run): unfiltered 112 edges -> +2.5%, Sharpe 0.26
+  benchmarks 2023: SPY +26.2%, exposure-matched +21.7%, EW-PIT +17.3%,
+  random-entry mean Sharpe 0.11
+
+exit=0

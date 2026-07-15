@@ -1,0 +1,151 @@
+
+full report -> artifacts/nested_run.json
+{
+  "windows": [
+    {
+      "year": 2021,
+      "candidates": 724,
+      "validated_long_edges": 86,
+      "families": [
+        "calendar",
+        "mean_reversion",
+        "momentum",
+        "sector",
+        "structure",
+        "trend",
+        "volatility",
+        "volume"
+      ],
+      "inner_scores": {
+        "2": 0.924378193321961,
+        "3": 0.9225181556028803,
+        "4": 0.8288032678843618,
+        "5": 1.3556014791513702
+      },
+      "chosen_F": 5,
+      "signals": 34513,
+      "trades": 1621,
+      "strategy_sharpe": 1.351846880869128,
+      "strategy_return": 0.1880631156519017,
+      "avg_gross_exposure": 0.8635471464942833,
+      "spy_return": 0.28728809700416,
+      "spy_sharpe": 2.0099960246206163,
+      "exposure_matched_spy_return": 0.24493581187629898,
+      "equal_weight_pit_return": 0.304339108536102,
+      "random_entry_sharpe_mean": 0.879582234791377,
+      "random_entry_sharpe_p90": 1.0293948417880792
+    },
+    {
+      "year": 2022,
+      "candidates": 724,
+      "validated_long_edges": 130,
+      "families": [
+        "calendar",
+        "mean_reversion",
+        "momentum",
+        "sector",
+        "structure",
+        "trend",
+        "volatility",
+        "volume"
+      ],
+      "inner_scores": {
+        "2": 0.8048935265498904,
+        "3": 0.8224226481819381,
+        "4": 0.8012254090748112,
+        "5": 0.751287059390682
+      },
+      "chosen_F": 3,
+      "signals": 105995,
+      "trades": 1613,
+      "strategy_sharpe": -0.8262994174621928,
+      "strategy_return": -0.18765613779374735,
+      "avg_gross_exposure": 0.8653009610413834,
+      "spy_return": -0.18175365641567776,
+      "spy_sharpe": -0.7095876310123553,
+      "exposure_matched_spy_return": -0.1564687409740827,
+      "equal_weight_pit_return": -0.0985405064447169,
+      "random_entry_sharpe_mean": -0.9911920337057165,
+      "random_entry_sharpe_p90": -0.8619923712413863
+    },
+    {
+      "year": 2023,
+      "candidates": 724,
+      "validated_long_edges": 112,
+      "families": [
+        "calendar",
+        "mean_reversion",
+        "momentum",
+        "sector",
+        "structure",
+        "trend",
+        "volatility",
+        "volume"
+      ],
+      "inner_scores": {
+        "2": 0.0804445272703394,
+        "3": 0.16674403962952833,
+        "4": 0.16283827945072687,
+        "5": 0.01141045728944623
+      },
+      "chosen_F": 3,
+      "signals": 83865,
+      "trades": 1529,
+      "strategy_sharpe": 0.2590531135871418,
+      "strategy_return": 0.02532665309892157,
+      "avg_gross_exposure": 0.8395271690855085,
+      "spy_return": 0.26175767301142283,
+      "spy_sharpe": 1.8582963390811,
+      "exposure_matched_spy_return": 0.21694660712549685,
+      "equal_weight_pit_return": 0.17345365345896657,
+      "random_entry_sharpe_mean": 0.1078490917558558,
+      "random_entry_sharpe_p90": 0.4279911914285248
+    }
+  ],
+  "pooled_strategy": {
+    "label": "strategy",
+    "n_days": 750,
+    "cum_return": -0.010441067528377923,
+    "cagr": -0.003520430551540943,
+    "ann_vol": 0.16843216004485903,
+    "sharpe": 0.06316633716951685,
+    "sharpe_ci_ann": [
+      -0.9049088270074267,
+      1.075326044033782
+    ],
+    "max_drawdown": -0.28351597558912345
+  },
+  "pooled_spy": {
+    "label": "SPY",
+    "n_days": 752,
+    "cum_return": 0.34737590515761063,
+    "cagr": 0.10507693784019545,
+    "ann_vol": 0.17596796704691736,
+    "sharpe": 0.6558591923813126,
+    "sharpe_ci_ann": [
+      -0.31690127286881864,
+      1.852910049160556
+    ],
+    "max_drawdown": -0.24496375155808958
+  },
+  "alpha_vs_spy": {
+    "beta": 0.8913779991854763,
+    "annualized_alpha": -0.0920360484984879,
+    "alpha_ci": [
+      -0.15043886502705814,
+      -0.03518426886131561
+    ],
+    "correlation": 0.9310048032670448
+  },
+  "concentration": {
+    "total_net_pnl": 28152.7309813174,
+    "n_unique_symbols": 231,
+    "best_symbol": "APA",
+    "best_symbol_share": 0.9952921076820168,
+    "pnl_excl_best_symbol": 132.5400259171911,
+    "best_month": "2023-11",
+    "pnl_excl_best_month": -36643.90625115035,
+    "pnl_excl_best_10_trades": -16363.55052317449
+  }
+}
+

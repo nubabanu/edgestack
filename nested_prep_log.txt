@@ -1,0 +1,8 @@
+
+panel: 593 symbols, 1,795,869 bars
+building features (restricted set) ...
+research frame: 1,789,346 rows (42s)
+eligible point-in-time rows: 1,376,398
+persisted -> data\features\nested_merged.parquet (52s)
+
+exit=0

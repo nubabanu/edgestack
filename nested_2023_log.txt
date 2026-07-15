@@ -1,0 +1,8 @@
+
+
+=== OUTER 2023: research on 1,260,657 pre rows, trade 115,741 outer rows ===
+  candidates: 724
+  validated long edges: 112 (54s elapsed)
+  F chosen=3 (inner scores {2: 0.0804445272703394, 3: 0.16674403962952833, 4: 0.16283827945072687, 5: 0.01141045728944623})
+  outer: 1529 trades, return +2.5% (SPY +26.2%, exposure-matched +21.7%, EW-PIT +17.3%), Sharpe 0.2590531135871418
+

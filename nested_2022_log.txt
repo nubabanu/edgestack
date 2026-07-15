@@ -1,0 +1,12 @@
+
+C:\codes\spass mit Zuhalk\edgestack\.venv\Lib\site-packages\numpy\_core\fromnumeric.py:54: RuntimeWarning: overflow encountered in accumulate
+  return bound(*args, **kwds)
+C:\codes\spass mit Zuhalk\edgestack\src\edgestack\validation\metrics.py:52: RuntimeWarning: invalid value encountered in divide
+  return float((equity / peak - 1.0).min())
+
+=== OUTER 2022: research on 1,141,410 pre rows, trade 119,247 outer rows ===
+  candidates: 724
+  validated long edges: 130 (56s elapsed)
+  F chosen=3 (inner scores {2: 0.8048935265498904, 3: 0.8224226481819381, 4: 0.8012254090748112, 5: 0.751287059390682})
+  outer: 1613 trades, return -18.8% (SPY -18.2%, exposure-matched -15.6%, EW-PIT -9.9%), Sharpe -0.8262994174621928
+

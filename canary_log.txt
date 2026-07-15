@@ -1,0 +1,147 @@
+
+{
+  "with_effect": true,
+  "trials": 9402,
+  "structural_rules": 1551,
+  "passing": 9,
+  "tom_rule_found": true,
+  "tom_best": {
+    "signature": "cal_turn_of_month<d7|-",
+    "direction": -1,
+    "freq": 0.889,
+    "sign_cons": 1.0,
+    "inner_n": 1915,
+    "inner_mean_excess": -0.00223,
+    "inner_abs_mean": 0.00567,
+    "inner_t": -6.35,
+    "inner_mean_mae": null,
+    "passes": true,
+    "fail_reasons": [],
+    "condition": "cal_turn_of_month <= 0.5"
+  },
+  "passing_rows": [
+    {
+      "signature": "close_vs_sma20<d0|+",
+      "direction": 1,
+      "freq": 0.889,
+      "sign_cons": 1.0,
+      "inner_n": 343,
+      "inner_mean_excess": 0.01509,
+      "inner_abs_mean": 0.02298,
+      "inner_t": 19.32,
+      "inner_mean_mae": null,
+      "passes": true,
+      "fail_reasons": [],
+      "condition": "close_vs_sma20 <= 0.0021191607520449907"
+    },
+    {
+      "signature": "cal_turn_of_month<d7|-",
+      "direction": -1,
+      "freq": 0.889,
+      "sign_cons": 1.0,
+      "inner_n": 1915,
+      "inner_mean_excess": -0.00223,
+      "inner_abs_mean": 0.00567,
+      "inner_t": -6.35,
+      "inner_mean_mae": null,
+      "passes": true,
+      "fail_reasons": [],
+      "condition": "cal_turn_of_month <= 0.5"
+    },
+    {
+      "signature": "natr_14<d0|+",
+      "direction": 1,
+      "freq": 0.889,
+      "sign_cons": 1.0,
+      "inner_n": 102,
+      "inner_mean_excess": 0.0098,
+      "inner_abs_mean": 0.0177,
+      "inner_t": 5.56,
+      "inner_mean_mae": null,
+      "passes": true,
+      "fail_reasons": [],
+      "condition": "natr_14 <= 0.005381532595492899"
+    },
+    {
+      "signature": "close_vs_sma20>d1&rsi_14_pctile<d1|-",
+      "direction": -1,
+      "freq": 0.778,
+      "sign_cons": 1.0,
+      "inner_n": 92,
+      "inner_mean_excess": -0.00751,
+      "inner_abs_mean": 0.00039,
+      "inner_t": -6.41,
+      "inner_mean_mae": null,
+      "passes": true,
+      "fail_reasons": [],
+      "condition": "close_vs_sma20 > 0.006860878551378846 AND rsi_14_pctile <= 0.2037608101963997"
+    },
+    {
+      "signature": "close_vs_sma20<d1|+",
+      "direction": 1,
+      "freq": 0.778,
+      "sign_cons": 1.0,
+      "inner_n": 548,
+      "inner_mean_excess": 0.01282,
+      "inner_abs_mean": 0.02072,
+      "inner_t": 19.1,
+      "inner_mean_mae": null,
+      "passes": true,
+      "fail_reasons": [],
+      "condition": "close_vs_sma20 <= 0.00644128886051476"
+    },
+    {
+      "signature": "cal_turn_of_month<d7&close_vs_sma20>d3&natr_14>d1|-",
+      "direction": -1,
+      "freq": 0.778,
+      "sign_cons": 1.0,
+      "inner_n": 1036,
+      "inner_mean_excess": -0.00838,
+      "inner_abs_mean": -0.00048,
+      "inner_t": -28.02,
+      "inner_mean_mae": null,
+      "passes": true,
+      "fail_reasons": [],
+      "condition": "cal_turn_of_month <= 0.5 AND close_vs_sma20 > 0.013234762474894524 AND natr_14 > 0.0056573336478322744"
+    },
+    {
+      "signature": "close_vs_sma20>d6|-",
+      "direction": -1,
+      "freq": 0.778,
+      "sign_cons": 1.0,
+      "inner_n": 746,
+      "inner_mean_excess": -0.00744,
+      "inner_abs_mean": 0.00046,
+      "inner_t": -21.93,
+      "inner_mean_mae": null,
+      "passes": true,
+      "fail_reasons": [],
+      "condition": "close_vs_sma20 > 0.024001643992960453"
+    },
+    {
+      "signature": "close_vs_sma20<d2&rsi_14_pctile>d1|+",
+      "direction": 1,
+      "freq": 0.778,
+      "sign_cons": 1.0,
+      "inner_n": 429,
+      "inner_mean_excess": 0.01068,
+      "inner_abs_mean": 0.01858,
+      "inner_t": 13.28,
+      "inner_mean_mae": null,
+      "passes": true,
+      "fail_reasons": [],
+      "condition": "close_vs_sma20 <= 0.010271753184497356 AND rsi_14_pctile > 0.1448412761092186"
+    }
+  ]
+}
+{
+  "with_effect": false,
+  "trials": 9312,
+  "structural_rules": 1471,
+  "passing": 0,
+  "tom_rule_found": false,
+  "tom_best": null,
+  "passing_rows": []
+}
+
+exit=0

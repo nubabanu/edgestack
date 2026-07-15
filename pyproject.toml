@@ -29,6 +29,10 @@ dependencies = [
 boosting = ["lightgbm>=4.3"]
 api = ["fastapi>=0.110", "uvicorn>=0.29"]
 dashboard = ["streamlit>=1.33"]
+rules = ["interpret>=0.6", "imodels>=2.0", "arch>=7.0"]
+# Exact sparse-tree distillers; platform wheels are not guaranteed everywhere
+# (corels needs GMP on Windows). The distiller falls back gracefully.
+rules-exact = ["gosdt>=1.0", "corels>=1.1"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",

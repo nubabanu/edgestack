@@ -1,0 +1,32 @@
+
+panel through 2026-07-15; building features ...
+eligible rows: 1,683,682 (39s)
+frozen (pre-2024) validated long edges: 48 (103s)
+
+CURRENT REGIME: market +8.3% vs 200dma -> UP; vol 12% -> MEDIUM
+
+=== TOP LONG TILTS for 2026-07-15 (frozen pre-2024 system, 324 symbols matched) ===
+symbol  close conviction E[net]_10d hit  n_edges  families   stop target
+   NRG 137.25         33     +0.65% 54%        9         5 126.14 151.14
+   FCX  60.73         33     +0.62% 54%        4         4  55.10  67.77
+   TEL 200.52         32     +0.62% 54%       11         5 186.88 217.57
+  NCLH  19.90         32     +0.62% 54%        3         2  18.10  22.15
+   MCD 266.99         32     +0.55% 54%       11         6 255.36 281.53
+   HAS  80.46         32     +0.62% 54%       11         5  75.98  86.05
+  ISRG 390.49         32     +0.52% 54%       16         6 362.76 425.15
+   STZ 132.24         32     +0.60% 54%        9         5 123.21 143.52
+   PEP 136.03         32     +0.58% 54%       10         5 128.88 144.97
+  ORCL 133.12         32     +0.53% 54%       20         5 116.04 154.49
+
+top candidate evidence: mom_60 < q0.1(train); trend_slope_60 < q0.1(train)
+
+=== HISTORICALLY WEAK COHORTS today (research-only short list; NO validated short edge exists, NO borrow data) ===
+symbol      close  overnight_gap  breakout_20  vol_ratio_5_60
+   ALL 239.490005      -0.036828          0.0        1.510686
+   ELV 390.350006      -0.079688          0.0        1.840153
+   PGR 206.740005      -0.081914          0.0        2.071987
+   PNR  64.235001      -0.233747          0.0        2.635982
+
+elapsed 104s � research output, not investment advice
+
+exit=0

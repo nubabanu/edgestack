@@ -46,6 +46,7 @@ def forward_return_labels(
     *,
     benchmark_symbol: str,
     execution_delay: int = 1,
+    roundtrip_cost: float | None = None,
 ) -> pd.DataFrame:
     """Build open-to-open forward-return labels for every (symbol, date, horizon).
 
@@ -92,6 +93,10 @@ def forward_return_labels(
 
     labels = pd.concat(frames, ignore_index=True)
     labels["excess_ret"] = labels["gross_ret"] - labels["bench_ret"]
+    if roundtrip_cost is not None:
+        # Primary learning target per the rules campaign: benchmark-adjusted
+        # return net of estimated round-trip costs (never a raw win/lose flag).
+        labels["excess_net_ret"] = labels["excess_ret"] - roundtrip_cost
     labels["entry_date"] = pd.to_datetime(labels["entry_date"])
     labels["label_end"] = pd.to_datetime(labels["label_end"])
     labels["vol_scale"] = np.nan  # filled by callers that need vol-adjusted targets
