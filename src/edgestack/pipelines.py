@@ -58,7 +58,41 @@ def run_data_validate(cfg: EdgeStackConfig) -> None:
 
 
 def run_features_build(cfg: EdgeStackConfig) -> None:
-    raise NotImplementedError("feature build (milestone 4)")
+    import io
+
+    from edgestack.data.catalog import DataCatalog, atomic_write_bytes
+    from edgestack.features.registry import all_specs, build_features, featureset_id
+
+    catalog = DataCatalog(cfg)
+    panel = catalog.load_panel()  # guard-truncated: features never see the test period
+    specs = all_specs()
+    print(f"building {len(specs)} features over {panel['symbol'].nunique()} symbols, "
+          f"{len(panel)} bars (featureset {featureset_id(specs)})")
+    feats = build_features(panel, cfg, specs)
+
+    out_path = catalog.data_dir / "features" / "features.parquet"
+    buf = io.BytesIO()
+    feats.to_parquet(buf, index=False)
+    atomic_write_bytes(out_path, buf.getvalue())
+    catalog.audit("features_build", reason=featureset_id(specs),
+                  rows=len(feats), columns=len(feats.columns) - 2)
+    non_null = feats.drop(columns=["symbol", "date"]).notna().mean().mean()
+    print(f"wrote {len(feats)} rows x {len(feats.columns) - 2} features to {out_path}")
+    print(f"average feature coverage: {non_null:.1%}")
+
+
+def load_feature_frame(cfg: EdgeStackConfig) -> object:
+    """Load the feature dataset written by ``run_features_build``."""
+    from pathlib import Path
+
+    import pandas as pd
+
+    from edgestack.exceptions import DataError
+
+    path = Path(cfg.paths.data_dir) / "features" / "features.parquet"
+    if not path.exists():
+        raise DataError("no feature dataset found; run `edgestack features build` first")
+    return pd.read_parquet(path)
 
 
 def run_edges_discover(cfg: EdgeStackConfig) -> None:
