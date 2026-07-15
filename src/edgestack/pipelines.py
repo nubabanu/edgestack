@@ -326,8 +326,22 @@ def run_report_backtest(cfg: EdgeStackConfig, *, run_id: str | None = None) -> N
 
 
 def run_paper_session(cfg: EdgeStackConfig, *, as_of: date | None = None) -> None:
-    raise NotImplementedError("paper trading (milestone 12)")
+    from edgestack.paper.session import run_session
+
+    run_session(cfg, as_of)
 
 
 def run_api_serve(cfg: EdgeStackConfig, *, host: str, port: int) -> None:
-    raise NotImplementedError("API server (milestone 12)")
+    from edgestack.api.app import create_app
+    from edgestack.exceptions import DataError
+
+    app = create_app(cfg)
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise DataError(
+            "uvicorn is not installed; install the api extra: pip install edgestack[api]"
+        ) from exc
+    print(f"serving read-only EdgeStack API on http://{host}:{port} "
+          "(research output only)")
+    uvicorn.run(app, host=host, port=port)

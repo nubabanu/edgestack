@@ -32,12 +32,13 @@ monitor_app = typer.Typer(help="Monitor edge health and lifecycle.", no_args_is_
 report_app = typer.Typer(help="Produce reports.", no_args_is_help=True)
 paper_app = typer.Typer(help="Paper-trading session management.", no_args_is_help=True)
 api_app = typer.Typer(help="Serve the read-only API.", no_args_is_help=True)
+dashboard_app = typer.Typer(help="Serve the research dashboard.", no_args_is_help=True)
 
 for name, sub in [
     ("data", data_app), ("features", features_app), ("edges", edges_app),
     ("models", models_app), ("signals", signals_app), ("backtest", backtest_app),
     ("monitor", monitor_app), ("report", report_app), ("paper", paper_app),
-    ("api", api_app),
+    ("api", api_app), ("dashboard", dashboard_app),
 ]:
     app.add_typer(sub, name=name)
 
@@ -225,6 +226,24 @@ def api_serve(
     from edgestack.pipelines import run_api_serve
 
     _run(run_api_serve, cfg, host=host, port=port)
+
+
+@dashboard_app.command("serve")
+def dashboard_serve(config: Path | None = _CONFIG_OPT) -> None:
+    """Serve the Streamlit dashboard (requires the [dashboard] extra)."""
+    _setup(config)
+    import importlib.util
+    import subprocess
+
+    if importlib.util.find_spec("streamlit") is None:
+        typer.secho("streamlit is not installed; install with: "
+                    "pip install edgestack[dashboard]", fg=typer.colors.YELLOW, err=True)
+        raise typer.Exit(2)
+    from edgestack import dashboard as dashboard_pkg
+
+    script = Path(dashboard_pkg.__file__).parent / "app.py"
+    raise typer.Exit(subprocess.call([sys.executable, "-m", "streamlit", "run",
+                                      str(script)]))
 
 
 if __name__ == "__main__":
