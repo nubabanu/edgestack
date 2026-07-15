@@ -117,6 +117,35 @@ def test_position_and_exposure_limits_respected() -> None:
     assert len(ledger.trades_frame()) == 1
 
 
+def test_many_same_day_signals_respect_gross_and_position_caps() -> None:
+    """Pending next-open entries must count against the caps: a burst of
+    signals in one session cannot lever the book past max_gross_exposure."""
+    n_symbols, n_sessions = 40, 12
+    dates = pd.bdate_range("2020-01-01", periods=n_sessions)
+    frames = []
+    for i in range(n_symbols):
+        opens = np.full(n_sessions, 50.0 + i)
+        frames.append(pd.DataFrame({
+            "symbol": f"S{i:02d}", "date": dates, "open": opens,
+            "high": opens * 1.01, "low": opens * 0.99, "close": opens,
+            "volume": 1e9, "adj_close": opens,
+        }))
+    panel = pd.concat(frames, ignore_index=True)
+    cfg = _cfg(max_position_weight=0.10, max_positions=30,
+               max_gross_exposure=0.5, max_net_exposure=0.5)
+    engine = BacktestEngine(panel, cfg, CostScenario.BASE)
+    intents = [
+        TradeIntent(symbol=f"S{i:02d}", signal_session=dates[1], side=Side.LONG,
+                    horizon=8, stop_price=1.0, target_price=1e6)
+        for i in range(n_symbols)
+    ]
+    ledger = engine.run(intents, initial_cash=100_000)
+    eq = ledger.equity_frame()
+    assert (eq["gross_exposure"] <= 0.5 * eq["equity"] + 1e-6).all()
+    # 0.5 gross / 0.10 per position -> at most 5 concurrent positions.
+    assert eq["n_positions"].max() <= 5
+
+
 def test_property_worse_cost_scenarios_never_finish_richer() -> None:
     rng = np.random.default_rng(3)
     opens = list(100 * np.exp(np.cumsum(rng.normal(0, 0.01, 60))))

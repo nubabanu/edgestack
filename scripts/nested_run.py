@@ -101,16 +101,15 @@ def run_window(panel: pd.DataFrame, intents: list[TradeIntent], cfg,
     return rets, ledger.trades_frame(), gross
 
 
-def main() -> int:
-    configure()
-    t0 = time.time()
-    cfg = load_config("configs/broad.yaml")
-    catalog = DataCatalog(cfg)
-    universe = PitSP500Universe(Path("data/cache/universe"), earliest=date(2011, 1, 1))
+MERGED_PATH = Path("data/features/nested_merged.parquet")
+WINDOWS_DIR = Path("artifacts/nested_windows")
 
-    print("loading panel ...")
+
+def stage_prep(cfg, catalog) -> None:
+    """Build the eligible point-in-time research frame once and persist it."""
+    t0 = time.time()
+    universe = PitSP500Universe(Path("data/cache/universe"), earliest=date(2011, 1, 1))
     panel = catalog.load_panel()  # guard-truncated before 2024
-    sessions = pd.DatetimeIndex(sorted(pd.to_datetime(panel["date"]).unique()))
     print(f"panel: {panel['symbol'].nunique()} symbols, {len(panel):,} bars")
 
     print("building features (restricted set) ...")
@@ -127,23 +126,28 @@ def main() -> int:
     ).merge(panel[["symbol", "date", "close"]], on=["symbol", "date"]).reset_index(drop=True)
     print(f"research frame: {len(merged):,} rows ({time.time()-t0:.0f}s)")
 
-    print("applying point-in-time membership mask ...")
     member = universe.membership_mask(merged["symbol"], merged["date"])
-    keep = eligible(merged, member)
-    merged = merged.loc[keep].reset_index(drop=True)
+    merged = merged.loc[eligible(merged, member).to_numpy()].reset_index(drop=True)
     print(f"eligible point-in-time rows: {len(merged):,}")
+    MERGED_PATH.parent.mkdir(parents=True, exist_ok=True)
+    merged.to_parquet(MERGED_PATH, index=False)
+    print(f"persisted -> {MERGED_PATH} ({time.time()-t0:.0f}s)")
 
+
+def stage_year(cfg, catalog, only_year: int) -> None:
+    universe = PitSP500Universe(Path("data/cache/universe"), earliest=date(2011, 1, 1))
+    panel = catalog.load_panel()
+    sessions = pd.DatetimeIndex(sorted(pd.to_datetime(panel["date"]).unique()))
+    merged = pd.read_parquet(MERGED_PATH)
     spy = daily_total_returns(panel, "SPY")
     pm = universe.membership_mask(panel["symbol"], panel["date"])
     ew = equal_weight_pit_returns(panel, pm & (panel["close"] >= 5.0))
-
     binnable = tuple(c for c in (*CONTINUOUS_RULE_FEATURES, "bench_trend_200",
                                  "bench_vol_20") if c in merged.columns)
-    results = []
-    outer_rets: list[pd.Series] = []
-    all_trades: list[pd.DataFrame] = []
+    WINDOWS_DIR.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
 
-    for year in OUTER_YEARS:
+    for year in (only_year,):
         cutoff = pd.Timestamp(f"{year}-01-01")
         year_end = pd.Timestamp(f"{year}-12-31")
         pre = merged.loc[merged["date"] < cutoff].reset_index(drop=True)
@@ -159,17 +163,20 @@ def main() -> int:
         # discovery/validation expect a pure feature frame; they merge labels
         # themselves, so the label columns must not ride along.
         features_pre = pre.drop(columns=["label_end", "gross_ret", "close"])
-        batch = generate_candidates(features_pre, labels, cfg, experiment_id)
+        labels_frame = merged[["symbol", "date", "label_end", "gross_ret"]].assign(
+            horizon=HORIZON)
+        batch = generate_candidates(features_pre, labels_frame, cfg, experiment_id)
         print(f"  candidates: {batch.trial_count}")
-        edges = validate_batch(batch, features_pre, labels, cfg)
+        edges = validate_batch(batch, features_pre, labels_frame, cfg)
         validated = [e for e in edges
                      if e.lifecycle.status is EdgeStatus.VALIDATED
                      and e.identity.direction is Side.LONG]
         print(f"  validated long edges: {len(validated)} "
               f"({time.time()-t0:.0f}s elapsed)")
         if not validated:
-            results.append({"year": year, "validated": 0, "note": "abstained all year"})
-            outer_rets.append(pd.Series(dtype=float))
+            _persist_window(year, {"year": year, "validated_long_edges": 0,
+                                   "note": "no validated edges: abstained all year"},
+                            pd.Series(dtype=float), pd.DataFrame())
             continue
 
         families = sorted({e.identity.family for e in validated})
@@ -211,9 +218,6 @@ def main() -> int:
         chosen_rows = outer.loc[votes >= best_f]
         intents = make_intents(chosen_rows, cfg)
         rets, trades, gross = run_window(panel, intents, cfg, cutoff, year_end, sessions)
-        outer_rets.append(rets)
-        if not trades.empty:
-            all_trades.append(trades)
 
         # --- benchmarks for the same year
         spy_y = spy.loc[(spy.index >= cutoff) & (spy.index <= year_end)]
@@ -249,7 +253,7 @@ def main() -> int:
             "random_entry_sharpe_mean": float(np.mean(rand_sharpes)),
             "random_entry_sharpe_p90": float(np.quantile(rand_sharpes, 0.9)),
         }
-        results.append(row)
+        _persist_window(year, row, rets, trades)
         print(f"  F chosen={best_f} (inner scores {mean_scores})")
         print(f"  outer: {len(trades)} trades, return "
               f"{row['strategy_return']:+.1%} (SPY {row['spy_return']:+.1%}, "
@@ -257,9 +261,36 @@ def main() -> int:
               f"EW-PIT {row['equal_weight_pit_return']:+.1%}), "
               f"Sharpe {row['strategy_sharpe']}")
 
-    # --- pooled outer evidence ------------------------------------------------
-    pooled = pd.concat([r for r in outer_rets if len(r)]) if outer_rets else pd.Series(dtype=float)
-    report: dict = {"windows": results}
+
+def _persist_window(year: int, row: dict, rets: pd.Series,
+                    trades: pd.DataFrame) -> None:
+    WINDOWS_DIR.mkdir(parents=True, exist_ok=True)
+    atomic_write_bytes(WINDOWS_DIR / f"{year}.json",
+                       json.dumps(row, indent=2, default=str).encode())
+    pd.DataFrame({"date": rets.index, "ret": rets.to_numpy()}).to_parquet(
+        WINDOWS_DIR / f"returns_{year}.parquet", index=False)
+    trades.to_parquet(WINDOWS_DIR / f"trades_{year}.parquet", index=False)
+
+
+def stage_report(cfg, catalog) -> None:
+    panel = catalog.load_panel()
+    spy = daily_total_returns(panel, "SPY")
+    windows, rets_list, trades_list = [], [], []
+    for year in OUTER_YEARS:
+        path = WINDOWS_DIR / f"{year}.json"
+        if not path.exists():
+            print(f"missing window {year}; run --stage year --year {year}")
+            continue
+        windows.append(json.loads(path.read_text()))
+        r = pd.read_parquet(WINDOWS_DIR / f"returns_{year}.parquet")
+        rets_list.append(pd.Series(r["ret"].to_numpy(),
+                                   index=pd.to_datetime(r["date"])))
+        t = pd.read_parquet(WINDOWS_DIR / f"trades_{year}.parquet")
+        if not t.empty:
+            trades_list.append(t)
+
+    pooled = pd.concat([r for r in rets_list if len(r)]) if rets_list else pd.Series(dtype=float)
+    report: dict = {"windows": windows}
     if len(pooled) > 60:
         rng2 = np.random.default_rng(7)
         report["pooled_strategy"] = summarize_returns(pooled, rng=rng2, label="strategy")
@@ -270,16 +301,36 @@ def main() -> int:
             "beta": alpha.beta, "annualized_alpha": alpha.annualized_alpha,
             "alpha_ci": list(alpha.alpha_ci), "correlation": alpha.correlation,
         }
-    if all_trades:
-        trades_all = pd.concat(all_trades, ignore_index=True)
-        report["concentration"] = concentration_diagnostics(trades_all)
+    if trades_list:
+        report["concentration"] = concentration_diagnostics(
+            pd.concat(trades_list, ignore_index=True))
 
     atomic_write_bytes(Path(cfg.paths.artifacts_dir) / "nested_run.json",
                        json.dumps(report, indent=2, default=str).encode())
-    catalog.audit("nested_run", reason="phases 3-4", windows=len(results))
-    print(f"\nfull report -> artifacts/nested_run.json ({time.time()-t0:.0f}s total)")
-    print(json.dumps({k: v for k, v in report.items() if k != "windows"},
-                     indent=2, default=str))
+    catalog.audit("nested_run", reason="phases 3-4", windows=len(windows))
+    print("full report -> artifacts/nested_run.json")
+    print(json.dumps(report, indent=2, default=str))
+
+
+def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--stage", choices=["prep", "year", "report"], required=True)
+    parser.add_argument("--year", type=int, default=None)
+    args = parser.parse_args()
+
+    configure()
+    cfg = load_config("configs/broad.yaml")
+    catalog = DataCatalog(cfg)
+    if args.stage == "prep":
+        stage_prep(cfg, catalog)
+    elif args.stage == "year":
+        if args.year is None:
+            raise SystemExit("--year required for stage year")
+        stage_year(cfg, catalog, args.year)
+    else:
+        stage_report(cfg, catalog)
     return 0
 
 

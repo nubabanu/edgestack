@@ -108,7 +108,7 @@ class BacktestEngine:
             # 5. tonight's signals become tomorrow's market-on-open entries.
             for intent in intents_by_session.get(session, []):
                 order = self._entry_order(intent, session, equity, last_prices,
-                                          portfolio, open_trades)
+                                          portfolio, open_trades, pending_entries)
                 if order is not None:
                     ledger.record_order(order, session)
                     pending_entries.append((order, intent))
@@ -206,10 +206,15 @@ class BacktestEngine:
     def _entry_order(self, intent: TradeIntent, session: pd.Timestamp,
                      equity: float, last_prices: dict[str, float],
                      portfolio: PortfolioState,
-                     open_trades: dict[str, _OpenTrade]) -> Order | None:
-        if intent.symbol in open_trades:
+                     open_trades: dict[str, _OpenTrade],
+                     pending: list[tuple[Order, TradeIntent]]) -> Order | None:
+        # Pending (accepted, not yet filled) entries count against every
+        # limit: with many signals per session the open-position view alone
+        # would let the book blow straight through the caps.
+        pending_symbols = {o.symbol for o, _ in pending}
+        if intent.symbol in open_trades or intent.symbol in pending_symbols:
             return None
-        if len(open_trades) >= self.cfg.risk.max_positions:
+        if len(open_trades) + len(pending) >= self.cfg.risk.max_positions:
             return None
         ref_price = last_prices.get(intent.symbol)
         if not ref_price or ref_price <= 0:
@@ -218,7 +223,10 @@ class BacktestEngine:
         qty = math.floor(weight_cap / ref_price)
         if qty < 1:
             return None
-        gross = portfolio.gross_exposure(last_prices)
+        reserved = sum(
+            abs(o.quantity) * last_prices.get(o.symbol, 0.0) for o, _ in pending
+        )
+        gross = portfolio.gross_exposure(last_prices) + reserved
         if gross + qty * ref_price > self.cfg.risk.max_gross_exposure * equity:
             return None
         signed = qty if intent.side is Side.LONG else -qty
