@@ -235,7 +235,51 @@ def run_signals_rank(cfg: EdgeStackConfig, *, top: int = 20, as_of: date | None 
 
 
 def run_backtest(cfg: EdgeStackConfig, *, scenario: str | None = None) -> None:
-    raise NotImplementedError("backtest (milestone 10)")
+    import numpy as np
+    import pandas as pd
+
+    from edgestack.backtest.engine import BacktestEngine
+    from edgestack.backtest.intents import build_trade_intents
+    from edgestack.backtest.reports import compute_metrics, save_backtest_report
+    from edgestack.data.catalog import DataCatalog
+    from edgestack.discovery.edge_store import load_edges
+    from edgestack.exceptions import DataError
+    from edgestack.types import CostScenario
+
+    catalog = DataCatalog(cfg)
+    features = load_feature_frame(cfg)
+    assert isinstance(features, pd.DataFrame)
+    panel = catalog.load_panel()
+    edges = load_edges(catalog)
+    if not edges:
+        raise DataError("no VALIDATED/ACTIVE edges to backtest; run discovery/validation")
+
+    chosen = CostScenario(scenario.upper()) if scenario else cfg.costs.scenario
+    intents = build_trade_intents(features, panel, edges, cfg)
+    print(f"replaying {len(intents)} out-of-sample intents from {len(edges)} edges "
+          f"under {chosen.value} costs")
+    if not intents:
+        print("no out-of-sample signals — nothing to backtest")
+        return
+
+    engine = BacktestEngine(panel, cfg, chosen)
+    ledger = engine.run(intents, initial_cash=cfg.paper.initial_cash)
+    rng = np.random.default_rng(cfg.project.random_seed)
+    metrics = compute_metrics(ledger, rng=rng)
+    run_id, out_dir = save_backtest_report(catalog, ledger, metrics, chosen)
+    catalog.audit("backtest_run", reason=run_id, scenario=chosen.value,
+                  trades=metrics.get("n_trades", 0))
+
+    print(f"backtest run {run_id} -> {out_dir}")
+    for key in ("cumulative_return", "cagr", "sharpe", "sortino", "max_drawdown",
+                "hit_rate", "profit_factor", "expectancy", "n_trades"):
+        if key in metrics and metrics[key] is not None:
+            print(f"  {key}: {metrics[key]:.4f}" if isinstance(metrics[key], float)
+                  else f"  {key}: {metrics[key]}")
+    if "daily_sharpe_ci" in metrics:
+        lo, hi = metrics["daily_sharpe_ci"]
+        print(f"  daily sharpe 95% CI: [{lo:.3f}, {hi:.3f}] (block bootstrap)")
+    print("  NOTE: research backtest; survivorship-biased universe; not advice")
 
 
 def run_monitor(cfg: EdgeStackConfig) -> None:
@@ -243,7 +287,31 @@ def run_monitor(cfg: EdgeStackConfig) -> None:
 
 
 def run_report_backtest(cfg: EdgeStackConfig, *, run_id: str | None = None) -> None:
-    raise NotImplementedError("backtest report (milestone 10)")
+    import json
+
+    from edgestack.data.catalog import DataCatalog
+    from edgestack.exceptions import DataError
+
+    catalog = DataCatalog(cfg)
+    with catalog.connect() as con:
+        if run_id is None:
+            row = con.execute(
+                "SELECT run_id, payload FROM backtests ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        else:
+            row = con.execute(
+                "SELECT run_id, payload FROM backtests WHERE run_id = ?", [run_id]
+            ).fetchone()
+    if row is None:
+        raise DataError("no backtest runs stored; run `edgestack backtest run` first")
+    run_id, payload = row[0], json.loads(row[1])
+    out_dir = catalog.data_dir / "reports" / "backtests" / run_id
+    print(f"backtest {run_id} (scenario {payload['cost_scenario']})")
+    print(f"  json: {out_dir / 'report.json'}")
+    print(f"  html: {out_dir / 'report.html'}")
+    for key, value in payload["metrics"].items():
+        print(f"  {key}: {value}")
+    print(f"  {payload['disclaimer']}")
 
 
 def run_paper_session(cfg: EdgeStackConfig, *, as_of: date | None = None) -> None:
