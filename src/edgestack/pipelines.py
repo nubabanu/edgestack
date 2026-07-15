@@ -283,7 +283,18 @@ def run_backtest(cfg: EdgeStackConfig, *, scenario: str | None = None) -> None:
 
 
 def run_monitor(cfg: EdgeStackConfig) -> None:
-    raise NotImplementedError("monitoring (milestone 11)")
+    from edgestack.monitoring.lifecycle import run_monitoring
+
+    catalog, features, labels = _load_research_frames(cfg)
+    transitions = run_monitoring(catalog, features, labels, cfg)
+    catalog.audit("monitor_run", reason=f"{len(transitions)} transitions")
+    if not transitions:
+        print("monitoring: no lifecycle transitions (edges healthy or too few "
+              "recent signals to judge)")
+        return
+    print(f"monitoring: {len(transitions)} lifecycle transitions")
+    for edge_id, old, new, rule in transitions:
+        print(f"  {edge_id}: {old.value} -> {new.value} ({rule})")
 
 
 def run_report_backtest(cfg: EdgeStackConfig, *, run_id: str | None = None) -> None:

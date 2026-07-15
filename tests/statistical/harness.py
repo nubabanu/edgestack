@@ -56,14 +56,15 @@ def stat_cfg() -> EdgeStackConfig:
     )
 
 
-def run_research(
+def build_frames(
     effects: tuple[Effect, ...],
     *,
     seed: int = 42,
     sigma: float = 0.05,
-) -> tuple[EdgeStackConfig, DiscoveryBatch, list[Edge]]:
-    """Generate market -> features -> labels -> discovery -> validation."""
-    cfg = stat_cfg()
+    cfg: EdgeStackConfig | None = None,
+):
+    """Synthetic market -> (cfg, features, labels) with the restricted feature set."""
+    cfg = cfg or stat_cfg()
     market = SyntheticMarket(seed=seed, base=GBM(mu=0.0, sigma=sigma), effects=effects)
     panel = market.generate(SYMBOLS, START, END)
     specs = tuple(get_spec(name) for name in FEATURES)
@@ -72,6 +73,17 @@ def run_research(
         panel, (1, 5), benchmark_symbol="AAA",
         execution_delay=cfg.signals.execution_delay_sessions,
     )
+    return cfg, features, labels
+
+
+def run_research(
+    effects: tuple[Effect, ...],
+    *,
+    seed: int = 42,
+    sigma: float = 0.05,
+) -> tuple[EdgeStackConfig, DiscoveryBatch, list[Edge]]:
+    """Generate market -> features -> labels -> discovery -> validation."""
+    cfg, features, labels = build_frames(effects, seed=seed, sigma=sigma)
     batch = generate_candidates(
         features, labels, cfg, experiment_id="stat-test", conditions=CONDITIONS
     )
