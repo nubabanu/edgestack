@@ -30,6 +30,8 @@ class ProviderError(DataError):
 class TestPeriodLockedError(EdgeStackError):
     """Attempted access to the final untouched test period without an unlock key."""
 
+    __test__ = False  # keep pytest from collecting this as a test class
+
 
 class LeakageError(EdgeStackError):
     """A computation would use information not available at the prediction time."""

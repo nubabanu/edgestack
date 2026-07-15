@@ -26,7 +26,7 @@ def get_price_provider(name: str, cfg: EdgeStackConfig) -> PriceDataProvider:
     # without import cycles.
     import importlib
 
-    for module in ("synthetic", "local_files", "stooq"):
+    for module in ("synthetic", "local_files", "stooq", "yahoo"):
         try:
             importlib.import_module(f"edgestack.data.providers.{module}")
         except ImportError:  # provider module not built yet / optional deps missing

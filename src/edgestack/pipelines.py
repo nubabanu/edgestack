@@ -15,11 +15,46 @@ from edgestack.config import EdgeStackConfig
 def run_data_download(cfg: EdgeStackConfig, start: date, end: date, *,
                       provider: str | None = None,
                       symbols: tuple[str, ...] | None = None) -> None:
-    raise NotImplementedError("data download (milestone 3)")
+    from edgestack.data.catalog import DataCatalog
+    from edgestack.data.providers.registry import get_price_provider
+    from edgestack.data.universe import static_universe
+
+    provider_name = provider or cfg.universe.source
+    price_provider = get_price_provider(provider_name, cfg)
+    universe = static_universe(cfg, end)
+    wanted = symbols or universe.symbols
+    print(f"downloading {len(wanted)} symbols {start}..{end} from {provider_name}")
+    for limitation in price_provider.metadata.limitations:
+        print(f"  provider limitation: {limitation}")
+    for limitation in universe.limitations:
+        print(f"  universe limitation: {limitation}")
+
+    bars = price_provider.fetch_daily_bars(tuple(wanted), start, end)
+    catalog = DataCatalog(cfg)
+    written = catalog.write_bars(bars, provider=provider_name)
+    catalog.audit("data_download", reason=provider_name,
+                  symbols=len(written), rows=len(bars))
+    got = set(written)
+    for symbol in wanted:
+        status = f"{written[symbol]} rows" if symbol in got else "NO DATA"
+        print(f"  {symbol}: {status}")
+    print(f"catalog now holds {len(catalog.list_symbols())} symbols")
 
 
 def run_data_validate(cfg: EdgeStackConfig) -> None:
-    raise NotImplementedError("data validation (milestone 3)")
+    from edgestack.data.calendar import TradingCalendar
+    from edgestack.data.catalog import DataCatalog
+    from edgestack.data.quality import assess_panel
+
+    catalog = DataCatalog(cfg)
+    # Quality assessment may inspect the full history including the guarded
+    # test period: it validates data plumbing, not trading hypotheses.
+    with catalog.guard.unlock(reason="data quality validation") as key:
+        panel = catalog.load_panel(unlock_key=key)
+    report = assess_panel(panel, TradingCalendar(cfg.data.calendar))
+    print(report.summary())
+    if report.quarantined:
+        print("some symbols failed quality gates; fix or exclude them before research")
 
 
 def run_features_build(cfg: EdgeStackConfig) -> None:

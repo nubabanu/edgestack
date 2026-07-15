@@ -36,7 +36,7 @@ class PathsConfig(_Section):
 
 
 class UniverseConfig(_Section):
-    source: Literal["local", "stooq", "synthetic"] = "local"
+    source: Literal["local", "stooq", "yahoo", "synthetic"] = "local"
     symbols: tuple[str, ...] = ()
     benchmark_symbol: str = "SPY"
     min_price: float = Field(default=5.0, gt=0)

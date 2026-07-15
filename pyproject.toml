@@ -68,7 +68,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -m \"not network\""
 markers = [
     "statistical: slower statistical acceptance tests on synthetic data",
     "network: tests that require internet access (excluded by default in CI)",
