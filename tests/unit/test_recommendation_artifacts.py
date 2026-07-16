@@ -17,6 +17,7 @@ from edgestack.recommendation.manifests import (
     OuterFoldV2,
     TrialKind,
     TrialRecordV2,
+    TrialStatus,
 )
 from edgestack.recommendation.policy import load_baseline_policy
 from edgestack.recommendation.registry import RecommendationRegistry
@@ -124,3 +125,53 @@ def test_risk_contract_bounds_and_state_consistency() -> None:
     assert RiskStateV2.initial(100_000).current_drawdown == 0
     with pytest.raises(ValueError, match="current_drawdown"):
         RiskStateV2(peak_equity=100_000, current_equity=90_000, current_drawdown=0.05)
+
+
+def test_failed_cached_and_compound_trials_remain_in_complete_family(tmp_path: Path) -> None:
+    cfg = EdgeStackConfig.model_validate(
+        {"paths": {"data_dir": tmp_path / "data", "artifacts_dir": tmp_path / "artifacts"}}
+    )
+    registry = RecommendationRegistry(DataCatalog(cfg))
+    trials = (
+        TrialRecordV2(
+            trial_id="failed",
+            experiment_id="complete-family",
+            kind=TrialKind.STANDALONE,
+            family="momentum",
+            horizon_sessions=5,
+        ),
+        TrialRecordV2(
+            trial_id="cached",
+            experiment_id="complete-family",
+            kind=TrialKind.EXECUTION_VARIANT,
+            family="momentum",
+            horizon_sessions=5,
+        ),
+        TrialRecordV2(
+            trial_id="compound",
+            experiment_id="complete-family",
+            kind=TrialKind.INTERACTION,
+            family="momentum_x_liquidity",
+            horizon_sessions=5,
+            parent_trial_ids=("failed", "cached"),
+        ),
+    )
+    for trial in trials:
+        registry.register_trial(trial)
+    registry.update_trial(
+        trials[0].model_copy(update={"status": TrialStatus.FAILED, "failure_reason": "fit error"})
+    )
+    registry.update_trial(
+        trials[1].model_copy(
+            update={"status": TrialStatus.CACHED, "cached_from_trial_id": "failed"}
+        )
+    )
+    registry.update_trial(trials[2].model_copy(update={"status": TrialStatus.REJECTED}))
+
+    recorded = registry.trials("complete-family")
+    assert {trial.trial_id for trial in recorded} == {"failed", "cached", "compound"}
+    assert {trial.status for trial in recorded} == {
+        TrialStatus.FAILED,
+        TrialStatus.CACHED,
+        TrialStatus.REJECTED,
+    }

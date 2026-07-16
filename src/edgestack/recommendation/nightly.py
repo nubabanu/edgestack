@@ -25,7 +25,7 @@ from edgestack.paper.canonical import (
     queue_recommendation_target,
 )
 from edgestack.recommendation.financing import FundingRateObservation, fetch_dgs3mo
-from edgestack.recommendation.hashing import stable_hash
+from edgestack.recommendation.hashing import code_revision, stable_hash
 from edgestack.recommendation.manifests import PublicationRecordV2
 from edgestack.recommendation.policy import load_baseline_policy
 from edgestack.recommendation.portfolio import AssetMetadata, build_base_recommendation
@@ -114,6 +114,7 @@ def build_and_publish_canonical_baseline(
     artifact_version = stable_hash(
         {
             "kind": "baseline_only",
+            "code_revision": code_revision(),
             "policy": policy.model_dump(mode="json"),
             "promoted_sleeves": [],
         }
