@@ -1,4 +1,4 @@
-"""Validated composite strategies distilled from the research campaigns."""
+"""Archived legacy composites; excluded from V2 scoring, promotion, and execution."""
 
 from edgestack.strategies.composite import (
     ENSEMBLE_FAMILIES,

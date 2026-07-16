@@ -1,4 +1,6 @@
-"""Cross-sectional ranked portfolios — the architecture the timing campaigns
+"""Historical cross-sectional research; previously accessed and non-promotable in V2.
+
+Ranked portfolios — the architecture the timing campaigns
 never tested. Literature-standard, parameter-free specifications (no tuning
 on our data):
 
@@ -14,7 +16,7 @@ Signals at close t -> positions earn returns from t+1 (no same-close fills).
 Costs: 15 bps one-way x two-sided turnover per rebalance (conservative).
 Long-short top-minus-bottom is reported HYPOTHETICAL (no borrow data).
 
-Periods: 2012-2023 (research era) and 2024->present (UNTOUCHED holdout —
+Periods: 2012-2023 (research era) and 2024->present (previously accessed —
 never consumed by any prior experiment in this project).
 """
 

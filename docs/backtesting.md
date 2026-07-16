@@ -1,5 +1,7 @@
 # Backtesting
 
+> Historical `VALIDATED` edge replays are research diagnostics and are not V2-promoted sleeves. The 2024–2026 period is previously accessed. Canonical paper execution uses target weights and actual fills as described in [Recommendation Engine V2](recommendation-engine-v2.md).
+
 ## What gets replayed
 
 `edgestack backtest run` replays validated edges **out of sample only**:

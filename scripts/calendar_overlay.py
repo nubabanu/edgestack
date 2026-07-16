@@ -1,4 +1,6 @@
-"""Calendar-conditioned leverage overlay on SPY/QQQ — the combination test.
+"""Archived, non-actionable calendar overlay; excluded from V2 actions.
+
+Historical calendar-conditioned leverage overlay on SPY/QQQ.
 
 Pre-registered rules (all documented in decades-old literature — Halloween
 effect, September weakness, turn-of-month, trend filter — NOT tuned here):
@@ -17,7 +19,7 @@ Costs: 2 bps per unit of exposure traded; borrowing on (L-1)+ at 13-week
 T-bill + 150 bps (IBKR-like); idle cash (1-L)+ earns the T-bill rate.
 
 Splits: full history, pre-2016 "development era", 2016-2023 OOS,
-2024-2026 untouched holdout. Benchmark: unlevered buy-and-hold.
+2024-2026 previously accessed historical partition. Benchmark: unlevered buy-and-hold.
 """
 
 from __future__ import annotations

@@ -1,5 +1,7 @@
 # Data model
 
+> `EdgeStatus.VALIDATED` is a retained legacy lifecycle/database value, not authorization for V2 portfolio weight. V2 promotion is represented separately by immutable `PromotionDecisionV2` records.
+
 ## Canonical daily bar (`edgestack.data.schemas`)
 
 One row per (symbol, session): `symbol, date, open, high, low, close, volume,

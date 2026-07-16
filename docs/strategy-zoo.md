@@ -1,11 +1,13 @@
-# Strategy Zoo — every daily-testable family from the retail catalogue
+# Strategy Zoo — historical, non-promotable research
+
+> V2 claim withdrawal: every result, including 2024–2026, has been previously accessed. Validation/holdout labels below describe historical experiment partitions only; they do not satisfy V2 promotion and none receives portfolio weight.
 
 > Research output only. Not investment advice. 462 (rule, instrument) trials;
 > at |t|>2 ~12 false positives are expected by chance. The survivor bar is
 > stricter (Sharpe >= buy-and-hold in all three splits AND pooled NW alpha
 > t >= 2), and the headline rule survives on three instruments independently.
 > Caveat: survivor selection saw all three splits, so the 2024-26 holdout is
-> no longer "untouched" for these specific rules; the rules themselves are
+> previously accessed for these specific rules; the rules themselves are
 > textbook definitions with no parameters tuned on our data.
 
 Data: SPY, QQQ + 11 SPDR sector ETFs, daily bars 1999->2026. Signals at close
@@ -129,7 +131,7 @@ realistic next-open fills. Grid of 9 (split x vol-target) combos selected
 on dev(2005-15)+val(2016-23) ONLY; holdout reported after selection.
 
 SELECTED: **60% core / 40% satellite, 8% vol target** —
-holdout (untouched): Sharpe 1.70 vs SPY 1.31, CAGR +15.3%, maxDD **-5.9%**
+historical 2024–2026 result (previously accessed): Sharpe 1.70 vs SPY 1.31, CAGR +15.3%, maxDD **-5.9%**
 vs SPY -18.8%; pooled alpha +5.9%/yr (t=4.88) at beta 0.29.
 
 Robust: all 9 combos land holdout Sharpe 1.64-1.74 — the choice is not

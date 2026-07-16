@@ -1,166 +1,96 @@
-# EdgeStack
+# EdgeStack Recommendation Engine V2
 
-EdgeStack is a research platform that automatically **discovers, validates,
-scores, monitors and ranks statistical trading advantages ("edges") in daily
-US equities** — and explicitly abstains when the evidence is insufficient.
+EdgeStack is a research and paper-trading system. It does not place live orders and its output is not investment advice. Leverage can cause losses greater than invested capital.
 
-> **Research / paper trading only.** EdgeStack produces research output, not
-> investment advice. No signal it emits is guaranteed, certain or risk-free.
-> The bundled free data sources carry survivorship bias and other limitations
-> that are flagged in every report. **There is no live-trading implementation
-> in this repository**, and the configuration refuses `live_trading_enabled: true`.
+The authoritative output is one immutable `CanonicalRecommendationBundleV2`. The API, Android app, dashboard, paper simulator, monitoring view, and one-release compatibility endpoints read or transform that bundle. Legacy `VALIDATED` records and the previously accessed 2024–2026 period are not V2 promotion evidence.
 
-## What EdgeStack does
+## Initial behavior
 
-- searches historical data for conditional patterns (calendar effects,
-  momentum/mean-reversion states, breakouts, candlestick and structure
-  events, volatility regimes, cross-sectional ranks, and conjunctions of
-  these) — nothing is hardcoded as true; everything is tested;
-- validates every candidate **out of sample** with purged walk-forward splits,
-  Benjamini-Hochberg FDR control over the full trial count, deflated Sharpe
-  ratios, cost-scenario survival and fold-stability gates;
-- prices trades realistically: next-open execution, spread/slippage/impact/
-  borrow costs under four scenarios (conservative by default), stops that gap
-  through at the open;
-- emits ranked long and short candidates with calibrated probabilities, a
-  0–100 conviction score, entry zones, stops/targets, holding horizons,
-  contributing evidence and plain-English explanations — or an explicit
-  NO-TRADE with every failed gate recorded;
-- monitors validated edges for decay and drift and retires them through an
-  event-sourced lifecycle (`VALIDATED → ACTIVE → DEGRADED → SUSPENDED → RETIRED`).
+Until a sleeve passes every V2 promotion gate, the actionable unlevered portfolio is the tracked `baseline-diversified-v1` policy:
 
-## What EdgeStack does NOT do
+- SPY 25%
+- TLT 25%
+- SHY 25%
+- GLD 25%
+- quarterly next-open rebalance, or earlier at five-percentage-point drift
+- adjusted-open total-return research, explicit dividends/splits, 5 bps one-way baseline costs, and participation impact
 
-- predict the future or guarantee returns;
-- trade real money (no broker integration exists; paper trading only);
-- provide point-in-time universes, earnings timestamps, borrow data or
-  fundamentals — the free providers cannot; the gaps are labeled, not hidden;
-- treat an indicator, a candlestick or a calendar day as truth without
-  out-of-sample statistical evidence.
+Old stock ideas are zero-weight watchlist records. A stock sleeve additionally needs 252 frozen prospective sessions and effective sample size of at least 100 before it can receive portfolio weight.
 
-## Installation
+## Install and verify
+
+Requires Python 3.12 and, for Android, JDK 17.
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate                 # Windows (source .venv/bin/activate on unix)
-pip install -e .[dev,api]              # dashboard extra: .[dashboard]
+.venv/Scripts/python -m pip install -e ".[dev,api,research]"
+.venv/Scripts/python -m ruff check src tests scripts
+.venv/Scripts/python -m ruff format --check src tests scripts
+.venv/Scripts/python -m mypy src/edgestack
+.venv/Scripts/python -m pytest
+.venv/Scripts/python -m build
+.venv/Scripts/python -m twine check dist/*
 ```
 
-Requires Python 3.12+. Copy `.env.example` to `.env` if you want environment
-overrides; no API keys are needed for any bundled provider.
-
-## Quick start
-
-Offline (synthetic market, fully reproducible):
+Android:
 
 ```bash
-python scripts/demo.py --offline
+cd android
+./gradlew testDebugUnitTest assembleDebug
 ```
 
-Real data (free Yahoo endpoint, ~10 symbols, a few minutes):
+On Windows, point `JAVA_HOME` to a JDK 17 installation before invoking `gradlew.bat`.
+
+## Run the nightly publication
 
 ```bash
-python scripts/demo.py
+.venv/Scripts/python scripts/nightly.py --config configs/live.yaml
 ```
 
-Or step by step with the CLI:
+For a data-prepared offline check:
 
 ```bash
-edgestack data download --start 2012-01-01 --config configs/demo.yaml
-edgestack data validate --config configs/demo.yaml
-edgestack features build --config configs/demo.yaml
-edgestack edges discover --config configs/demo.yaml
-edgestack edges validate --config configs/demo.yaml
-edgestack models train --config configs/demo.yaml
-edgestack signals generate --config configs/demo.yaml
-edgestack signals rank --top 10 --config configs/demo.yaml
-edgestack backtest run --config configs/demo.yaml
-edgestack report backtest --config configs/demo.yaml
-edgestack monitor run --config configs/demo.yaml
-edgestack paper run --config configs/demo.yaml
-edgestack api serve --config configs/demo.yaml        # read-only FastAPI
-edgestack dashboard serve --config configs/demo.yaml  # Streamlit ([dashboard] extra)
+.venv/Scripts/python scripts/nightly.py --config configs/live.yaml --skip-data-update --skip-features
 ```
 
-## Architecture (short version)
+The orchestrator fails on data-quality, artifact, schema, or checksum errors. It writes all outputs to a temporary directory, renames the completed run to `artifacts/recommendations/runs/<content-hash>`, and then atomically replaces `artifacts/recommendations/current.json`. Failure before the pointer swap leaves the prior publication current.
 
+## Public interface
+
+- `GET /recommendations/latest` returns the verified canonical bundle.
+- `POST /recommendations/preview` accepts `RiskProfileV2`, optional `RiskStateV2`/equity override, and an optional reset request. It only recalculates sizing and stress; it cannot research, promote, select, or persist.
+- `/board`, `/picks`, `/master`, `/signals/*`, and `/candidates/*` are deprecated compatibility projections. Board rows and picks are empty; master contains canonical weights only.
+
+Run the API with:
+
+```bash
+edgestack api serve --config configs/live.yaml
 ```
-data providers (synthetic | local | yahoo | stooq)
-  -> DataCatalog (Parquet + DuckDB, TestPeriodGuard, audit log)
-  -> feature registry (~60 features, structural point-in-time safety)
-  -> labels (open-to-open forward returns, triple barrier; explicit label_end)
-  -> discovery (rule enumeration; EVERY evaluated rule counts as a trial)
-  -> walk-forward validation (purge+embargo, FDR, deflated Sharpe, cost gates)
-  -> Edge store (event-sourced lifecycle)
-  -> models (base-rate -> logistic -> boosting; isotonic calibration on OOF)
-  -> signal engine (family-capped evidence, conviction, abstention, plans)
-  -> backtester (session loop, realistic fills) / paper trading / API / dashboard
+
+## User risk sizing
+
+Alpha selection is profile-independent. The user can set target volatility, maximum drawdown, maximum gross leverage from 0–5×, funding spread, per-stock cap, and sector cap. Effective leverage is the minimum of independent volatility, one-day loss, path drawdown, liquidity, concentration, freshness, funding, drawdown-state, user, and system limits.
+
+Exposure increases by no more than 0.25× per distinct session and reductions are immediate. Market staleness cannot introduce or enlarge a position. DGS3MO older than five US business days disables increases above 1×. At the drawdown limit the system targets cash and latches until 20 sessions, recovery, fresh compatible data, acceptable stress, healthy monitoring, and an explicit reset.
+
+```bash
+edgestack risk reset-latch --config configs/live.yaml
 ```
 
-Full details: [docs/architecture.md](docs/architecture.md),
-[docs/data-model.md](docs/data-model.md),
-[docs/statistical-validation.md](docs/statistical-validation.md),
-[docs/confidence-score.md](docs/confidence-score.md),
-[docs/backtesting.md](docs/backtesting.md),
-[docs/paper-trading.md](docs/paper-trading.md), and the extension guides
-([feature](docs/adding-a-feature.md), [provider](docs/adding-a-provider.md),
-[model](docs/adding-a-model.md)).
+## Research promotion
 
-## Execution assumptions
+Promotion uses expanding annual outer folds with inner-only selection, cross-fitted calibration, session-aggregated returns, 20-session stationary blocks, 2,000 deterministic bootstrap replications, complete-family SPA, and StepM. At least five valid outer folds are required.
 
-- Daily bars. A signal is computed from information available at session T's
-  close and is executable **no earlier than session T+1's open** — same-close
-  execution is structurally blocked in labels, the signal engine, the
-  backtester and paper trading.
-- Fills always lie within the session's [low, high]; stops gapped through
-  fill at the open; limits never fill unless touched; one order may take at
-  most 10% of a session's volume.
-- Costs default to the CONSERVATIVE scenario (1.5× spread/slippage/impact,
-  scenario-scaled short borrow). An edge that only survives OPTIMISTIC costs
-  is rejected.
+A sleeve must have positive fully costed compounded return in at least 70% of valid folds, SPA-consistent `p ≤ 0.05`, StepM inclusion, positive one-sided 95% paired block-bootstrap Sharpe lower bounds versus training-risk-matched SPY and the diversified baseline, and survival under conservative/stress execution, delayed fills, liquidity, participation, and 200/400/800 bps financing scenarios.
 
-## The two numbers on every signal
+Different horizons have separate labels, artifacts, calibrators, statistics, and sleeve identities. They meet only as realized daily exposures in the portfolio covariance and optimizer.
 
-1. **Calibrated probability** — `P(net return > 0)` from a model calibrated
-   with isotonic regression on out-of-fold predictions (Brier/log-loss/ECE
-   reported). When no model applies, the shrinkage posterior is used and the
-   signal is explicitly flagged as *not independently calibrated*.
-2. **Conviction score (0–100)** — *not* a probability. It compounds economic
-   edge, statistical reliability, regime applicability and tradability, then
-   subtracts uncertainty/tail/disagreement penalties and shrinks toward the
-   neutral 50 for small samples. See
-   [docs/confidence-score.md](docs/confidence-score.md) for the exact formula.
+## Documentation
 
-## Interpreting backtests
+- [V2 architecture and operations](docs/recommendation-engine-v2.md)
+- [Migration and claim withdrawal](docs/v2-migration.md)
+- [Statistical validation](docs/statistical-validation.md)
+- [Backtesting and execution](docs/backtesting.md)
+- [Data model](docs/data-model.md)
 
-Backtests replay validated edges **only inside walk-forward test windows**
-(thresholds fitted on each fold's training window), under conservative costs,
-with block-bootstrap confidence intervals on the headline metrics. Even so:
-the universe is survivor-biased, the sample is one historical path, and a
-positive backtest is *evidence*, never proof. See
-[docs/backtesting.md](docs/backtesting.md).
-
-## Known limitations
-
-- No point-in-time index membership → survivorship bias (warned everywhere).
-- Yahoo/Stooq are unofficial feeds: throttling, gaps and restatements happen.
-- No earnings timestamps, borrow data, fundamentals, options or sentiment —
-  the provider interfaces exist, implementations await licensed data.
-- Deterministic regimes only (fixed thresholds); learned regimes (HMM/GMM)
-  are on the roadmap.
-- Parameter-robustness scoring uses a subperiod-consistency proxy rather than
-  full parameter perturbation.
-- The DSR uses a documented 1/n approximation for cross-trial SR variance.
-
-## Roadmap
-
-Chart-pattern detectors (13.8), fuller candlestick library, earnings/macro/
-short/options/sentiment providers, learned regime models, stacking ensembles,
-intraday frequencies, task-queued research API, Docker packaging.
-
-## Risk disclaimer
-
-EdgeStack is educational research software. Markets involve substantial risk
-of loss. Historical patterns — even rigorously validated ones — can and do
-stop working. Nothing produced by this software is investment advice, and it
-must not be used to place real orders.
+Historical campaign reports are retained as research provenance. Their 2024–2026 results are previously accessed, their manual search histories may be incomplete, and none can promote a V2 sleeve without a new frozen manifest and prospective evidence.

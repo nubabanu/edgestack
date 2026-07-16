@@ -1,4 +1,4 @@
-"""Execution-model sensitivity for the validated strategies.
+"""Historical execution sensitivity for legacy-status strategies; non-promotable in V2.
 
 Our zoo convention ("decide at close t-1, earn session t") implicitly fills
 AT the very close that produced the signal — impossible live, since MOC

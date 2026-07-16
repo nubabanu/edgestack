@@ -11,7 +11,7 @@ Protocol inside ONE training period (no outer data ever enters):
 3. Per structural rule: selection frequency, sign consistency, and a
    median-threshold representative condition.
 4. Survivors (frequency >= min_freq, sign consistency >= 0.9) are then scored
-   on the untouched inner-validation region: direction-consistent mean excess
+   on the held-aside inner-validation region: direction-consistent mean excess
    return with a Chordia-Goyal-Saretto t-hurdle, minimum trade count, and
    mean adverse excursion.
 

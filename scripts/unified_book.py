@@ -1,4 +1,6 @@
-"""Unified book: permanent-portfolio core + ensemble4-on-QQQ satellite as ONE
+"""Historical unified-book research; previously accessed and non-promotable in V2.
+
+Permanent-portfolio core + legacy ensemble4-on-QQQ satellite as one
 vol-targeted portfolio, constructed jointly.
 
 Execution realism per execution_sensitivity.py: the satellite uses NEXT-OPEN
@@ -121,7 +123,7 @@ def main() -> int:
     print(f"\nSELECTED on dev+val only: {chosen}")
     c = grid[chosen]
     print(
-        f"holdout (untouched by selection): Sharpe {c['hold']['sharpe']}, "
+        f"historical 2024+ partition (previously accessed): Sharpe {c['hold']['sharpe']}, "
         f"CAGR {c['hold']['cagr']:+.1%}, maxDD {c['hold']['maxdd']:.1%}  |  "
         f"pooled alpha {c['alpha_ann']:+.1%}/yr t={c['alpha_t']}"
     )

@@ -2,7 +2,7 @@
 
 All modeling-facing data access flows through :meth:`DataCatalog.load_panel`,
 which silently truncates everything at the final-test boundary. The only way
-to see the untouched test period is an explicit, audited unlock:
+to see the configured guarded test period is an explicit, audited unlock:
 
     with catalog.guard.unlock(reason="final evaluation v1.0") as key:
         panel = catalog.load_panel(..., unlock_key=key)
@@ -174,7 +174,7 @@ def safe_child_path(root: Path, name: str) -> Path:
 
 
 class TestPeriodGuard:
-    """Enforces the final untouched test period.
+    """Enforces the configured guarded test period.
 
     Frames served through the guard are truncated to dates strictly before
     ``test_start`` unless a live single-use unlock key is presented; unlocking

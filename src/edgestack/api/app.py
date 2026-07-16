@@ -1,8 +1,7 @@
-"""Read-only API over the research catalog.
+"""Verified canonical recommendation API and non-actionable research metadata.
 
-Strictly read-only in v1: no endpoint mutates state, exposes secrets or takes
-filesystem paths. Research/backtest POST operations are a later, task-queued
-extension.
+The preview POST is stateless sizing/stress computation. It cannot research,
+promote, persist, or mutate the atomically published bundle.
 """
 
 from __future__ import annotations

@@ -1,4 +1,6 @@
-"""Cross-market replication: does ensemble4 (trained ONLY on US data) survive
+"""Historical cross-market replication; not V2 promotion evidence.
+
+Does the legacy ensemble4 (trained only on US data) survive
 on international country ETFs it has never seen?
 
 Also checks the two headline calendar effects per market: turn-of-month and

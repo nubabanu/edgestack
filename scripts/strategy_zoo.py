@@ -1,4 +1,6 @@
-"""Strategy zoo: test every daily-bar-testable strategy family from the
+"""Historical, non-actionable strategy zoo; no result is V2 promotion evidence.
+
+Test every daily-bar-testable strategy family from the
 canonical retail catalogue, on SPY/QQQ + 11 sector ETFs, 1999->present.
 
 Families covered here (time-series, long/flat, signal at close t -> earns
@@ -11,8 +13,9 @@ session t+1, 2 bps per unit exposure change):
   position management (trailing/chandelier stop, fixed stop + reentry)
   composites (trend+dip, trend+ToM, dual momentum)
 
-Splits: DEV 1999-2015, VAL 2016-2023, HOLDOUT 2024+ (untouched by design
-decisions). Survivor bar: Sharpe >= buy-and-hold in ALL THREE splits AND
+Splits: DEV 1999-2015, VAL 2016-2023, HISTORICAL 2024+ (previously accessed;
+not used for V2 promotion decisions). Historical survivor bar: Sharpe >=
+buy-and-hold in all three splits AND
 pooled Newey-West alpha t >= 2 vs the same instrument's buy-and-hold.
 Every (rule, instrument) run is counted as a trial for the multiplicity note.
 """

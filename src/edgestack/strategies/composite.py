@@ -1,4 +1,6 @@
-"""The validated 4-family ensemble ("ensemble4") and the optional seasonal
+"""Archived legacy ensemble and seasonal research, excluded from V2 actions.
+
+The historical 4-family ensemble ("ensemble4") and the optional seasonal
 multiplier — the distillation of every edge that survived this project's
 campaigns (see docs/strategy-zoo.md and artifacts/strategy_zoo.json).
 

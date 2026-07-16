@@ -1,4 +1,6 @@
-"""Allocation zoo: monthly/yearly strategy families on a multi-asset ETF
+"""Historical, non-actionable allocation zoo; not V2 promotion evidence.
+
+Monthly/yearly strategy families on a multi-asset ETF
 universe, 2003->present (limited by ETF inception dates).
 
 Families: passive allocations (60/40, permanent, all-weather, equal-weight),
