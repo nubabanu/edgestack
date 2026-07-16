@@ -167,6 +167,7 @@ class RiskStateV2(V2Model):
     cash_latched: bool = False
     reset_eligible: bool = False
     sessions_since_latch: int = Field(default=0, ge=0)
+    last_session: date | None = None
     previous_target_weights: tuple[WeightV2, ...] = ()
 
     @model_validator(mode="after")
@@ -174,8 +175,13 @@ class RiskStateV2(V2Model):
         expected = max(0.0, 1.0 - self.current_equity / self.peak_equity)
         if abs(expected - self.current_drawdown) > 1e-6:
             raise ValueError("current_drawdown must match peak and current equity")
-        if self.drawdown_state is DrawdownState.CASH_LATCHED and not self.cash_latched:
-            raise ValueError("CASH_LATCHED state requires cash_latched=true")
+        if (
+            self.drawdown_state in {DrawdownState.CASH_LATCHED, DrawdownState.RESET_ELIGIBLE}
+            and not self.cash_latched
+        ):
+            raise ValueError("latched drawdown states require cash_latched=true")
+        if self.reset_eligible != (self.drawdown_state is DrawdownState.RESET_ELIGIBLE):
+            raise ValueError("reset_eligible must match RESET_ELIGIBLE state")
         return self
 
     @classmethod
