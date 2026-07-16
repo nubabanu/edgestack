@@ -61,3 +61,45 @@ strategies incl. 0DTE (no options chain history); FX/futures/crypto sessions
 (no data); earnings/analyst/M&A event-driven (no event feed); market internals
 (TICK/TRIN/breadth); pairs/stat-arb at institutional latency; market making;
 anything in the prohibited/manipulative list (would not test regardless).
+
+---
+
+# Allocation Zoo — monthly/yearly families (2008-2026, multi-asset ETFs)
+
+Universe: SPY QQQ IWM EFA EEM TLT IEF SHY LQD HYG GLD DBC VNQ + 9 sectors.
+Monthly signals, 5 bps costs. Survivor bar: Sharpe >= max(SPY, 60/40) in all
+three splits (dev 08-15, val 16-23, holdout 24+) AND pooled NW alpha t >= 2.
+
+## Result: ZERO survivors of 23 trials. Diversification wins, timing loses.
+
+| Rank | Strategy | alpha/yr (t) | beta | Where it failed |
+|---|---|---|---|---|
+| 1 | Permanent portfolio (25% SPY/TLT/SHY/GLD) | +3.6% (2.20) | 0.25 | val Sharpe 0.77 vs 0.85 |
+| 2 | Asset-class momentum top-3 + trend gate | +5.1% (2.15) | 0.35 | val 0.54 — momentum's lost decade |
+| 3 | 60/40 with 5% rebal bands | +1.5% (2.00) | 0.59 | ties benchmark (it nearly IS it) |
+| 4 | Faber GTAA-5 (10m SMA, 5 assets) | +2.5% (1.93) | 0.25 | val |
+| — | Risk parity (SPY/TLT/GLD/DBC inv-vol) | +3.2% (1.79) | 0.36 | dev; best HOLDOUT Sharpe of all (2.09) |
+| — | Dual momentum (GEM) | +0.5% (0.18) | 0.70 | everywhere post-publication |
+| — | Halloween / Sell-in-May | +0.4% (0.18) | 0.49 | val 0.37 — effectively dead at monthly scale |
+| — | SPY 10-month SMA (Faber timing) | +3.0% (1.30) | 0.47 | val — whipsaws 2016-2023 |
+| — | Sector rotation (12-1 or 6m, top 3) | <= +0.7% (<=0.4) | ~0.85 | no edge after costs |
+| — | Vol-target SPY 10% | negative alpha | 0.67 | drag in calm bull years |
+
+## Family verdicts (monthly/yearly)
+
+- Passive diversification (60/40, permanent, risk parity): the only positive-
+  alpha family vs SPY — that's the diversification premium, earned at low
+  beta, not timing skill. Permanent portfolio is the best all-era package.
+- Rebalancing: threshold bands ~= monthly ~= annual (t 2.00 vs 1.84);
+  never-rebalancing is worst risk-adjusted. Frequency barely matters; doing
+  it at all matters.
+- Trend/TAA (10m SMA, GTAA, TSMOM): real drawdown protection, but underper-
+  formed 2016-2023; no timing family passed all eras.
+- Dual momentum (GEM): t=0.18 since 2008 — post-publication decay in full.
+- Seasonality at monthly granularity (Halloween, January barometer): dead or
+  marginal; the intramonth effects (ToM, single days) from the daily scans
+  remain the live ones.
+- Untestable here (no data, marked honestly): fundamental value/quality/
+  growth/income screens (no PIT fundamentals history), carry (FX/rates),
+  options income/hedging, credit/duration beyond ETF proxies, crypto,
+  tax strategies, event-driven (PEAD, M&A, spin-offs).
