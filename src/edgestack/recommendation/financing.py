@@ -85,6 +85,9 @@ def fetch_dgs3mo(
         if cached is not None:
             return cached
         raise ProviderError(f"could not fetch DGS3MO: {exc}") from exc
+    # FRED renamed the CSV date column from DATE to observation_date in 2025.
+    if "observation_date" in frame.columns and "DATE" not in frame.columns:
+        frame = frame.rename(columns={"observation_date": "DATE"})
     if not {"DATE", "DGS3MO"}.issubset(frame.columns):
         raise ProviderError("DGS3MO response is missing DATE or DGS3MO")
     frame["DATE"] = pd.to_datetime(frame["DATE"], errors="coerce")

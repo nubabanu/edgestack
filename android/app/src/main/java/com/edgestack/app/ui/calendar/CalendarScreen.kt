@@ -93,7 +93,15 @@ fun CalendarScreen(vm: CalendarViewModel) {
                     "${month.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${month.year}",
                     style = MaterialTheme.typography.titleMedium,
                 )
-                TextButton(onClick = { vm.month = month.plusMonths(1) }) { Text("▶") }
+                Row {
+                    if (month != YearMonth.now()) {
+                        TextButton(onClick = {
+                            vm.month = YearMonth.now()
+                            vm.selected = today
+                        }) { Text("Today") }
+                    }
+                    TextButton(onClick = { vm.month = month.plusMonths(1) }) { Text("▶") }
+                }
             }
         }
         item {

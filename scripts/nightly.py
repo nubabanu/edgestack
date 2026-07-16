@@ -6,10 +6,13 @@ import argparse
 from datetime import date, timedelta
 
 from edgestack.config import EdgeStackConfig, load_config
+from edgestack.data.calendar import TradingCalendar
 from edgestack.data.catalog import DataCatalog
 from edgestack.data.providers.registry import get_price_provider
+from edgestack.data.quality import assess_panel
+from edgestack.exceptions import DataError
 from edgestack.logging import configure
-from edgestack.pipelines import run_data_validate, run_features_build
+from edgestack.pipelines import run_features_build
 from edgestack.recommendation.nightly import build_and_publish_canonical_baseline
 from edgestack.recommendation.policy import load_baseline_policy
 
@@ -17,9 +20,8 @@ from edgestack.recommendation.policy import load_baseline_policy
 def update_data(cfg: EdgeStackConfig, run_date: date) -> None:
     catalog = DataCatalog(cfg)
     policy_symbols = {weight.symbol for weight in load_baseline_policy().weights}
-    symbols = tuple(
-        sorted(set(catalog.list_symbols()) | set(cfg.universe.symbols) | policy_symbols)
-    )
+    required = set(cfg.universe.symbols) | policy_symbols
+    symbols = tuple(sorted(set(catalog.list_symbols()) | required))
     if not symbols:
         raise RuntimeError("nightly data update has no configured or catalog symbols")
     provider = get_price_provider(cfg.universe.source, cfg)
@@ -32,8 +34,34 @@ def update_data(cfg: EdgeStackConfig, run_date: date) -> None:
         if actions is not None:
             catalog.write_corporate_actions(actions, provider=cfg.universe.source)
         missing = sorted(set(batch) - set(written))
+        # Fail-fast only on symbols the canonical policy/universe needs today.
+        # Historical PIT catalog members can be delisted (empty series) without
+        # invalidating the publication.
+        missing_required = sorted(set(missing) & required)
+        if missing_required:
+            raise RuntimeError(f"nightly provider returned no rows for {missing_required}")
         if missing:
-            raise RuntimeError(f"nightly provider returned no rows for {missing}")
+            print(f"nightly skipped {len(missing)} inactive catalog symbols: {missing}")
+
+
+def validate_required(cfg: EdgeStackConfig) -> None:
+    """Quality-gate only the symbols tonight's publication consumes.
+
+    The full research catalog contains delisted PIT members whose stale
+    histories fail gates without affecting the baseline; those are still
+    covered by the on-demand `edgestack data validate`. The publication
+    itself re-checks its own panel fail-fast in
+    build_and_publish_canonical_baseline.
+    """
+    catalog = DataCatalog(cfg)
+    policy_symbols = {weight.symbol for weight in load_baseline_policy().weights}
+    required = tuple(sorted(policy_symbols | set(cfg.universe.symbols)))
+    with catalog.guard.unlock(reason="nightly required-symbol validation") as key:
+        panel = catalog.load_panel(symbols=required, unlock_key=key)
+    report = assess_panel(panel, TradingCalendar(cfg.data.calendar))
+    print(report.summary())
+    if report.quarantined:
+        raise DataError("required symbols failed quality gates; publication blocked")
 
 
 def run_nightly(
@@ -45,7 +73,7 @@ def run_nightly(
 ) -> str:
     if update_prices:
         update_data(cfg, run_date)
-    run_data_validate(cfg)
+    validate_required(cfg)
     if build_features:
         run_features_build(cfg)
     publication = build_and_publish_canonical_baseline(cfg, run_date=run_date)

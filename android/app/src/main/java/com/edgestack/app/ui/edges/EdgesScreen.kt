@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,6 +44,8 @@ class EdgesViewModel(
     var backtests by mutableStateOf<List<BacktestRunV2>>(emptyList()); private set
     var message by mutableStateOf(""); private set
     var loading by mutableStateOf(false); private set
+    var query by mutableStateOf("")
+    var statusFilter by mutableStateOf<String?>(null)
 
     fun refresh() {
         loading = true
@@ -60,12 +66,33 @@ class EdgesViewModel(
         }
     }
 
+    /** Distinct statuses in catalog order of frequency, for the filter chips. */
+    val statuses: List<String>
+        get() = edges.groupingBy { it.status.uppercase() }.eachCount()
+            .entries.sortedByDescending { it.value }.map { it.key }
+
     /** Deployed first, then by deflated Sharpe so the strongest evidence leads. */
     val ranked: List<EdgeSummaryV2>
-        get() = edges.sortedWith(
-            compareByDescending<EdgeSummaryV2> { it.status.equals("deployed", true) }
-                .thenByDescending { it.deflatedSharpe ?: Double.NEGATIVE_INFINITY },
-        )
+        get() = edges
+            .asSequence()
+            .filter { statusFilter == null || it.status.equals(statusFilter, true) }
+            .filter {
+                query.isBlank() ||
+                    it.name.contains(query, true) ||
+                    it.family.contains(query, true) ||
+                    it.direction.contains(query, true) ||
+                    it.edgeId.contains(query, true)
+            }
+            .sortedWith(
+                compareByDescending<EdgeSummaryV2> { it.status.equals("deployed", true) }
+                    .thenByDescending { it.deflatedSharpe ?: Double.NEGATIVE_INFINITY },
+            )
+            .toList()
+
+    companion object {
+        /** Cards rendered at once; filters narrow the rest. */
+        const val MAX_SHOWN = 200
+    }
 }
 
 @Composable
@@ -96,8 +123,52 @@ fun EdgesScreen(vm: EdgesViewModel) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+        } else {
+            item {
+                OutlinedTextField(
+                    value = vm.query,
+                    onValueChange = { vm.query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Search name, family, direction") },
+                    singleLine = true,
+                )
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    FilterChip(
+                        selected = vm.statusFilter == null,
+                        onClick = { vm.statusFilter = null },
+                        label = { Text("ALL (${vm.edges.size})") },
+                    )
+                    vm.statuses.forEach { status ->
+                        FilterChip(
+                            selected = vm.statusFilter == status,
+                            onClick = {
+                                vm.statusFilter = if (vm.statusFilter == status) null else status
+                            },
+                            label = { Text(status) },
+                        )
+                    }
+                }
+            }
         }
-        items(vm.ranked) { edge -> EdgeCard(edge) }
+        val shown = vm.ranked
+        if (vm.edges.isNotEmpty()) {
+            item {
+                Text(
+                    if (shown.size > EdgesViewModel.MAX_SHOWN) {
+                        "Showing top ${EdgesViewModel.MAX_SHOWN} of ${shown.size} matches — " +
+                            "narrow with search or a status filter."
+                    } else {
+                        "${shown.size} of ${vm.edges.size} edges match."
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                )
+            }
+        }
+        items(shown.take(EdgesViewModel.MAX_SHOWN)) { edge -> EdgeCard(edge) }
         vm.monitoring?.let { payload ->
             item { Text("Monitoring", style = MaterialTheme.typography.titleMedium) }
             item { MonitoringCard(payload) }

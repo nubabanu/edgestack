@@ -22,9 +22,33 @@ import com.edgestack.app.domain.model.SniperPlanV2
 import com.edgestack.app.domain.model.SniperPreviewRequestV2
 import com.edgestack.app.domain.model.TrackedPosition
 import com.edgestack.app.domain.model.TrackedPositions
+import com.edgestack.app.core.AppJson
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
+import retrofit2.HttpException
 import java.time.LocalDate
+
+/** Prefer the FastAPI error `detail` over bare "HTTP 404" messages. */
+internal fun readableApiError(e: Throwable): Throwable {
+    if (e is HttpException) {
+        val detail = runCatching {
+            e.response()?.errorBody()?.string()?.let { body ->
+                AppJson.parseToJsonElement(body).jsonObject["detail"]?.jsonPrimitive?.content
+            }
+        }.getOrNull()
+        if (!detail.isNullOrBlank()) return IllegalStateException(detail, e)
+    }
+    return e
+}
+
+/** runCatching variant that rewrites HTTP failures into readable messages. */
+internal inline fun <T> apiCatching(block: () -> T): Result<T> =
+    runCatching(block).fold(
+        onSuccess = { Result.success(it) },
+        onFailure = { Result.failure(readableApiError(it)) },
+    )
 
 /** Offline reads show the last server result (or canonical seed) without recomputation. */
 class RecommendationRepository(
@@ -134,18 +158,18 @@ class SyncRepository(
         return EdgeStackApi.create(url, http)
     }
 
-    suspend fun paper(): Result<PaperResponse> = runCatching {
+    suspend fun paper(): Result<PaperResponse> = apiCatching {
         (api() ?: error("no server URL configured")).paper()
     }
 
-    suspend fun testConnection(): Result<String> = runCatching {
+    suspend fun testConnection(): Result<String> = apiCatching {
         val api = api() ?: error("no server URL configured")
         api.health()
         val version = api.version()
         "EdgeStack API ${version.version} (${version.configHash.take(8)})"
     }
 
-    suspend fun preview(): Result<PortfolioRecommendationV2> = runCatching {
+    suspend fun preview(): Result<PortfolioRecommendationV2> = apiCatching {
         val api = api() ?: error("no server URL configured")
         val settings = settingsStore.current()
         val bundle = recommendationRepo.loadBundle()
@@ -169,7 +193,7 @@ class SyncRepository(
         symbol: String,
         intendedEntryAt: String? = null,
         roundTripCostBps: Double = 10.0,
-    ): Result<InstrumentAnalysisV2> = runCatching {
+    ): Result<InstrumentAnalysisV2> = apiCatching {
         val api = api() ?: error("no server URL configured")
         val request = InstrumentAnalysisRequestV2(
             symbol = symbol.trim().uppercase(),
@@ -182,7 +206,7 @@ class SyncRepository(
         result
     }
 
-    suspend fun recheckInstrument(): Result<InstrumentRecheckV2> = runCatching {
+    suspend fun recheckInstrument(): Result<InstrumentRecheckV2> = apiCatching {
         val api = api() ?: error("no server URL configured")
         val previous = instrumentRepo.loadLast() ?: error("no cached instrument analysis")
         val request = instrumentRepo.loadRequest() ?: error("no cached instrument request")
@@ -197,7 +221,7 @@ class SyncRepository(
         symbols: List<String>,
         resolution: String = "DAY",
         horizon: String = "WEEK",
-    ): Result<PatternLeaderBoardV2> = runCatching {
+    ): Result<PatternLeaderBoardV2> = apiCatching {
         val api = api() ?: error("no server URL configured")
         api.patternLeaders(
             PatternLeaderRequestV2(
@@ -208,22 +232,22 @@ class SyncRepository(
         )
     }
 
-    suspend fun edges(): Result<List<EdgeSummaryV2>> = runCatching {
+    suspend fun edges(): Result<List<EdgeSummaryV2>> = apiCatching {
         val api = api() ?: error("no server URL configured")
         api.edges().also(edgesRepo::saveCatalog)
     }
 
-    suspend fun monitoringEdges(): Result<JsonObject> = runCatching {
+    suspend fun monitoringEdges(): Result<JsonObject> = apiCatching {
         val api = api() ?: error("no server URL configured")
         api.monitoringEdges().also(edgesRepo::saveMonitoring)
     }
 
-    suspend fun backtests(): Result<List<BacktestRunV2>> = runCatching {
+    suspend fun backtests(): Result<List<BacktestRunV2>> = apiCatching {
         val api = api() ?: error("no server URL configured")
         api.backtests()
     }
 
-    suspend fun latestSniper(): Result<SniperPlanV2> = runCatching {
+    suspend fun latestSniper(): Result<SniperPlanV2> = apiCatching {
         val api = api() ?: error("no server URL configured")
         val plan = api.latestSniper()
         sniperRepo.save(plan)
@@ -234,7 +258,7 @@ class SyncRepository(
         accountEquity: Double,
         maxTolerableLoss: Double,
         vehicle: String,
-    ): Result<SniperPlanV2> = runCatching {
+    ): Result<SniperPlanV2> = apiCatching {
         require(accountEquity > 0) { "account equity must be positive" }
         require(maxTolerableLoss > 0 && maxTolerableLoss <= accountEquity) {
             "max tolerable loss must be positive and no greater than equity"
@@ -251,7 +275,7 @@ class SyncRepository(
         plan
     }
 
-    suspend fun syncAll(): Result<String> = runCatching {
+    suspend fun syncAll(): Result<String> = apiCatching {
         val api = api() ?: error("no server URL configured")
         val bundle = api.latestRecommendation()
         recommendationRepo.saveBundle(bundle)

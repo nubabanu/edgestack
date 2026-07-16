@@ -3,7 +3,6 @@ package com.edgestack.app.ui.board
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -64,12 +64,18 @@ fun BoardScreen(vm: BoardViewModel) {
         Row(
             Modifier.fillMaxWidth().padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Portfolio ${bundle.session}", style = MaterialTheme.typography.titleMedium)
-            AssistChip(onClick = {}, label = { Text(base.status) })
-            Spacer(Modifier.weight(1f))
-            Button(onClick = vm::sync, enabled = !vm.refreshing) { Text("Sync") }
+            Text(
+                "Portfolio ${bundle.session}",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Button(onClick = vm::sync, enabled = !vm.refreshing) {
+                Text(if (vm.refreshing) "Syncing…" else "Sync", maxLines = 1)
+            }
         }
+        AssistChip(onClick = {}, label = { Text(base.status) })
         if (vm.status.isNotBlank()) {
             Text(vm.status, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
         }

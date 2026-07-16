@@ -1,5 +1,6 @@
 package com.edgestack.app.ui.instrument
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -143,8 +145,11 @@ fun InstrumentScreen(vm: InstrumentViewModel) {
                 singleLine = true,
             )
             Text("Quick instruments", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                InstrumentViewModel.QUICK_SYMBOLS.take(4).forEach { quick ->
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                InstrumentViewModel.QUICK_SYMBOLS.forEach { quick ->
                     AssistChip(onClick = { vm.symbol = quick }, label = { Text(quick) })
                 }
             }
