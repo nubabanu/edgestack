@@ -59,6 +59,10 @@ class Family(enum.StrEnum):
     EVENT = "event"
     REGIME = "regime"
     SECTOR = "sector"
+    BREADTH = "breadth"
+    CROSS_ASSET = "cross_asset"
+    LIQUIDITY = "liquidity"
+    DEFENSIVE = "defensive"
 
 
 class EntryMethod(enum.StrEnum):
