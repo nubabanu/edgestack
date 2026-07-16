@@ -12,6 +12,7 @@ import pandas as pd
 from edgestack.config import EdgeStackConfig
 from edgestack.data.calendar import TradingCalendar
 from edgestack.data.catalog import DataCatalog
+from edgestack.paper.canonical import load_paper_state
 from edgestack.recommendation.financing import FundingRateObservation
 from edgestack.recommendation.nightly import (
     build_and_publish_canonical_baseline,
@@ -36,7 +37,8 @@ def test_nightly_publishes_fixed_baseline_from_adjusted_opens(tmp_path: Path) ->
         }
     )
     session = date(2026, 7, 16)
-    sessions = TradingCalendar().sessions(date(2024, 1, 1), session)[-320:]
+    next_session = date(2026, 7, 17)
+    sessions = TradingCalendar().sessions(date(2024, 1, 1), next_session)[-321:]
     frames = []
     for offset, symbol in enumerate(("SPY", "TLT", "SHY", "GLD")):
         rng = np.random.default_rng(offset + 10)
@@ -88,6 +90,33 @@ def test_nightly_publishes_fixed_baseline_from_adjusted_opens(tmp_path: Path) ->
     assert bundle.base_recommendation.promoted_sleeves == ()
     assert bundle.default_recommendation.effective_leverage == 0.25
     assert bundle.default_recommendation.binding_constraints == ("session_increase",)
+
+    next_funding = FundingRateObservation(
+        series_id="DGS3MO",
+        as_of=next_session,
+        annualized_rate=0.04,
+        fetched_at=datetime(2026, 7, 17, 21, tzinfo=UTC),
+    )
+    build_and_publish_canonical_baseline(
+        cfg,
+        run_date=next_session,
+        now=datetime(2026, 7, 17, 21, tzinfo=UTC),
+        funding_observation=next_funding,
+        bootstrap_replications=100,
+    )
+    next_bundle = repository.latest()
+    paper = load_paper_state(
+        repository,
+        initial_equity=cfg.paper.initial_cash,
+        risk_state=next_bundle.default_recommendation.output_risk_state,
+    )
+
+    assert paper.last_session == next_session
+    assert len(paper.fills) == 4
+    assert len(paper.positions) == 4
+    assert paper.realized_returns[-1].session == next_session
+    assert paper.pending_target is not None
+    assert next_bundle.default_risk_profile.account_equity == paper.current_equity
 
 
 def test_legacy_board_is_imported_only_as_insufficient_zero_weight_watchlist(

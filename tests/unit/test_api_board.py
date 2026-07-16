@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from edgestack.api.app import create_app
 from edgestack.config import EdgeStackConfig
+from edgestack.paper.canonical import CanonicalPaperStateV2, queue_recommendation_target
 from edgestack.recommendation.policy import load_baseline_policy
 from edgestack.recommendation.publication import AtomicRecommendationPublisher
 from edgestack.recommendation.risk import RiskInputsV2, size_recommendation
@@ -99,7 +100,10 @@ def _publish_fixture(cfg: EdgeStackConfig) -> CanonicalRecommendationBundleV2:
     AtomicRecommendationPublisher(cfg.paths.artifacts_dir).publish(
         bundle=bundle,
         risk_inputs=inputs,
-        paper_state={"status": "fixture"},
+        paper_state=queue_recommendation_target(
+            CanonicalPaperStateV2.initial(profile.account_equity, recommendation.output_risk_state),
+            recommendation,
+        ).model_dump(mode="json"),
         monitoring={"healthy": True},
     )
     return bundle
@@ -128,7 +132,7 @@ def test_canonical_and_compatibility_endpoints_fail_closed_before_publication(
 def test_paper_missing_is_404(client: TestClient) -> None:
     response = client.get("/paper")
     assert response.status_code == 404
-    assert "no paper state" in response.json()["detail"]
+    assert "no canonical paper state" in response.json()["detail"]
 
 
 def test_latest_returns_one_verified_atomic_bundle(
@@ -141,6 +145,18 @@ def test_latest_returns_one_verified_atomic_bundle(
     assert response.json()["data_version"] == expected.data_version
     assert response.json()["base_recommendation"]["status"] == "WATCHLIST_ONLY"
     assert response.json()["default_recommendation"]["effective_leverage"] == 0.25
+
+
+def test_paper_reads_the_state_from_the_same_atomic_run(
+    canonical_client: tuple[TestClient, CanonicalRecommendationBundleV2],
+) -> None:
+    client, _bundle = canonical_client
+    response = client.get("/paper")
+
+    assert response.status_code == 200
+    assert response.json()["state"]["schema_version"] == 2
+    assert response.json()["state"]["pending_target"] is not None
+    assert response.json()["equity_history"] == []
 
 
 def test_legacy_board_and_picks_are_empty_watchlist_only_projections(

@@ -37,6 +37,9 @@ def run_data_download(
     bars = price_provider.fetch_daily_bars(tuple(wanted), start, end)
     catalog = DataCatalog(cfg)
     written = catalog.write_bars(bars, provider=provider_name)
+    actions = getattr(price_provider, "last_corporate_actions", None)
+    if actions is not None:
+        catalog.write_corporate_actions(actions, provider=provider_name)
     catalog.audit("data_download", reason=provider_name, symbols=len(written), rows=len(bars))
     got = set(written)
     for symbol in wanted:

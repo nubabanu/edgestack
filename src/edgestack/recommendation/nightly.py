@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, date, datetime, time
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -14,6 +15,15 @@ from edgestack.data.calendar import TradingCalendar
 from edgestack.data.catalog import DataCatalog
 from edgestack.data.quality import assess_panel
 from edgestack.exceptions import DataError
+from edgestack.execution.fills import Bar
+from edgestack.paper.broker import get_broker
+from edgestack.paper.canonical import (
+    CanonicalPaperStateV2,
+    corporate_action_inputs,
+    execute_paper_session,
+    load_paper_state,
+    queue_recommendation_target,
+)
 from edgestack.recommendation.financing import FundingRateObservation, fetch_dgs3mo
 from edgestack.recommendation.hashing import stable_hash
 from edgestack.recommendation.manifests import PublicationRecordV2
@@ -133,7 +143,62 @@ def build_and_publish_canonical_baseline(
     if base.status is RecommendationStatus.NO_ALLOCATION:
         raise DataError("baseline assembly produced NO_ALLOCATION; prior pointer was retained")
 
-    profile = RiskProfileV2(account_equity=cfg.paper.initial_cash)
+    repository = CanonicalBundleRepository(catalog.artifacts_dir)
+    if repository.pointer_path.exists():
+        previous_bundle = repository.latest()
+        previous_risk_inputs = repository.risk_inputs()
+        paper = load_paper_state(
+            repository,
+            initial_equity=cfg.paper.initial_cash,
+            risk_state=previous_bundle.default_recommendation.output_risk_state,
+        )
+        if paper.last_session is None or paper.last_session < expected_session:
+            paper_symbols = {position.symbol for position in paper.positions}
+            if paper.pending_target is not None:
+                paper_symbols.update(
+                    weight.symbol
+                    for weight in paper.pending_target.weights
+                    if weight.asset_kind is not AssetKind.CASH
+                )
+            bars: dict[str, Bar] = {}
+            if paper_symbols:
+                paper_panel = catalog.load_panel(
+                    symbols=tuple(sorted(paper_symbols)), end=expected_session
+                )
+                paper_day = paper_panel.loc[
+                    pd.to_datetime(paper_panel["date"]).dt.date == expected_session
+                ]
+                for raw_row in paper_day.itertuples(index=False):
+                    row = cast(Any, raw_row)
+                    bars[str(row.symbol)] = Bar(
+                        session=pd.Timestamp(expected_session),
+                        open=float(row.open),
+                        high=float(row.high),
+                        low=float(row.low),
+                        close=float(row.close),
+                        volume=float(row.volume),
+                    )
+            actions = catalog.load_corporate_actions(
+                tuple(sorted(paper_symbols)),
+                start=paper.last_session,
+                end=expected_session,
+            )
+            paper = execute_paper_session(
+                paper,
+                session=expected_session,
+                bars=bars,
+                corporate_actions=corporate_action_inputs(actions),
+                broker=get_broker(cfg),
+                base_funding_rate=previous_risk_inputs.funding_rate,
+                funding_spread_bps=previous_bundle.default_risk_profile.funding_spread_bps,
+            )
+    else:
+        previous_bundle = None
+        previous_risk_inputs = None
+        initial_risk_state = RiskStateV2.initial(cfg.paper.initial_cash)
+        paper = CanonicalPaperStateV2.initial(cfg.paper.initial_cash, initial_risk_state)
+
+    profile = RiskProfileV2(account_equity=paper.current_equity)
     portfolio_returns = returns.loc[:, list(symbols)].to_numpy() @ np.array(
         [weight.weight for weight in policy.weights]
     )
@@ -152,15 +217,10 @@ def build_and_publish_canonical_baseline(
         n_boot=bootstrap_replications,
         seed=cfg.project.random_seed,
     )
-    repository = CanonicalBundleRepository(catalog.artifacts_dir)
-    if repository.pointer_path.exists():
-        state = repository.latest().default_recommendation.output_risk_state
-    else:
-        state = RiskStateV2.initial(profile.account_equity)
     recommendation = size_recommendation(
         base=base,
         profile=profile,
-        state=state,
+        state=paper.risk_state,
         inputs=risk_inputs,
     )
     bundle = CanonicalRecommendationBundleV2(
@@ -176,16 +236,7 @@ def build_and_publish_canonical_baseline(
         base_recommendation=base,
         default_recommendation=recommendation,
     )
-    paper_state = {
-        "schema_version": 2,
-        "status": "INITIALIZED",
-        "cash": profile.account_equity,
-        "positions": [],
-        "target_weights": [
-            weight.model_dump(mode="json") for weight in recommendation.personalized_target_weights
-        ],
-        "risk_state": recommendation.output_risk_state.model_dump(mode="json"),
-    }
+    paper = queue_recommendation_target(paper, recommendation)
     monitoring = {
         "schema_version": 2,
         "healthy": True,
@@ -196,7 +247,7 @@ def build_and_publish_canonical_baseline(
     publication = AtomicRecommendationPublisher(catalog.artifacts_dir).publish(
         bundle=bundle,
         risk_inputs=risk_inputs,
-        paper_state=paper_state,
+        paper_state=paper.model_dump(mode="json"),
         monitoring=monitoring,
     )
     RecommendationRegistry(catalog).save_publication(publication)

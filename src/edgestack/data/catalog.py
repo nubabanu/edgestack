@@ -27,7 +27,12 @@ import duckdb
 import pandas as pd
 
 from edgestack.config import EdgeStackConfig
-from edgestack.data.schemas import BAR_COLUMNS, validate_bars
+from edgestack.data.schemas import (
+    BAR_COLUMNS,
+    CORPORATE_ACTION_COLUMNS,
+    validate_bars,
+    validate_corporate_actions,
+)
 from edgestack.exceptions import DataError, TestPeriodLockedError
 from edgestack.logging import get_logger, log_event
 
@@ -210,6 +215,7 @@ class DataCatalog:
         self.data_dir = Path(cfg.paths.data_dir)
         self.artifacts_dir = Path(cfg.paths.artifacts_dir)
         self.prices_dir = self.data_dir / "curated" / "prices"
+        self.corporate_actions_dir = self.data_dir / "curated" / "corporate_actions"
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.artifacts_dir / "edgestack.duckdb"
         self._ensure_schema()
@@ -265,6 +271,54 @@ class DataCatalog:
             return ()
         return tuple(sorted(p.stem for p in self.prices_dir.glob("*.parquet")))
 
+    def write_corporate_actions(self, df: pd.DataFrame, *, provider: str) -> dict[str, int]:
+        if df.empty:
+            return {}
+        actions = validate_corporate_actions(df, context=f"corporate_actions[{provider}]")
+        written: dict[str, int] = {}
+        for symbol, group in actions.groupby("symbol", sort=True):
+            path = safe_child_path(self.corporate_actions_dir, f"{symbol}.parquet")
+            merged = group
+            if path.exists():
+                merged = (
+                    pd.concat([pd.read_parquet(path), group], ignore_index=True)
+                    .drop_duplicates(["symbol", "date", "action_type"], keep="last")
+                    .sort_values(["date", "action_type"])
+                    .reset_index(drop=True)
+                )
+            import io
+
+            buffer = io.BytesIO()
+            merged.loc[:, list(CORPORATE_ACTION_COLUMNS)].to_parquet(buffer, index=False)
+            atomic_write_bytes(path, buffer.getvalue())
+            written[str(symbol)] = len(group)
+        return written
+
+    def load_corporate_actions(
+        self,
+        symbols: tuple[str, ...] | None = None,
+        *,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> pd.DataFrame:
+        available = tuple(
+            sorted(path.stem for path in self.corporate_actions_dir.glob("*.parquet"))
+        )
+        wanted = symbols or available
+        frames = [
+            pd.read_parquet(safe_child_path(self.corporate_actions_dir, f"{symbol}.parquet"))
+            for symbol in wanted
+            if safe_child_path(self.corporate_actions_dir, f"{symbol}.parquet").exists()
+        ]
+        if not frames:
+            return pd.DataFrame(columns=CORPORATE_ACTION_COLUMNS)
+        output = pd.concat(frames, ignore_index=True)
+        if start is not None:
+            output = output.loc[pd.to_datetime(output["date"]) >= pd.Timestamp(start)]
+        if end is not None:
+            output = output.loc[pd.to_datetime(output["date"]) <= pd.Timestamp(end)]
+        return output.sort_values(["date", "symbol", "action_type"]).reset_index(drop=True)
+
     def load_panel(
         self,
         symbols: tuple[str, ...] | None = None,
@@ -304,9 +358,14 @@ class DataCatalog:
         import hashlib
 
         h = hashlib.sha256()
-        if self.prices_dir.exists():
-            for path in sorted(self.prices_dir.glob("*.parquet")):
-                h.update(path.name.encode())
+        for kind, directory in (
+            ("prices", self.prices_dir),
+            ("corporate_actions", self.corporate_actions_dir),
+        ):
+            if not directory.exists():
+                continue
+            for path in sorted(directory.glob("*.parquet")):
+                h.update(f"{kind}/{path.name}".encode())
                 with path.open("rb") as handle:
                     for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                         h.update(chunk)

@@ -28,6 +28,9 @@ def update_data(cfg: EdgeStackConfig, run_date: date) -> None:
         batch = symbols[offset : offset + 25]
         bars = provider.fetch_daily_bars(batch, start, run_date)
         written = catalog.write_bars(bars, provider=cfg.universe.source)
+        actions = getattr(provider, "last_corporate_actions", None)
+        if actions is not None:
+            catalog.write_corporate_actions(actions, provider=cfg.universe.source)
         missing = sorted(set(batch) - set(written))
         if missing:
             raise RuntimeError(f"nightly provider returned no rows for {missing}")

@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from edgestack.data.providers.yahoo import parse_chart_payload
+from edgestack.data.providers.yahoo import parse_chart_payload, parse_corporate_actions
 from edgestack.exceptions import ProviderError
 
 FIXTURE = {
@@ -28,6 +28,17 @@ FIXTURE = {
                     ],
                     "adjclose": [{"adjclose": [183.20, 180.87, 180.15]}],
                 },
+                "events": {
+                    "dividends": {"1704292200": {"date": 1704292200, "amount": 0.24}},
+                    "splits": {
+                        "1704378600": {
+                            "date": 1704378600,
+                            "numerator": 4.0,
+                            "denominator": 1.0,
+                            "splitRatio": "4:1",
+                        }
+                    },
+                },
             }
         ],
     }
@@ -48,6 +59,16 @@ def test_parse_rejects_error_and_empty() -> None:
         parse_chart_payload("x", {"chart": {"error": {"code": "Not Found"}}})
     with pytest.raises(ProviderError, match="no data"):
         parse_chart_payload("x", {"chart": {"result": []}})
+
+
+def test_parse_corporate_actions_preserves_dividends_and_split_ratios() -> None:
+    actions = parse_corporate_actions("aapl", FIXTURE)
+
+    assert actions[["action_type", "value"]].to_dict(orient="records") == [
+        {"action_type": "dividend", "value": 0.24},
+        {"action_type": "split", "value": 4.0},
+    ]
+    assert actions["symbol"].tolist() == ["AAPL", "AAPL"]
 
 
 @pytest.mark.network

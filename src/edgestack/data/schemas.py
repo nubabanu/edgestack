@@ -44,6 +44,8 @@ BAR_SCHEMA = pa.schema(
     ]
 )
 
+CORPORATE_ACTION_COLUMNS: tuple[str, ...] = ("symbol", "date", "action_type", "value")
+
 
 def validate_bars(df: pd.DataFrame, *, context: str = "bars") -> pd.DataFrame:
     """Structurally validate and normalize a daily-bar frame.
@@ -106,3 +108,26 @@ def validate_bars(df: pd.DataFrame, *, context: str = "bars") -> pd.DataFrame:
 def to_arrow(df: pd.DataFrame) -> pa.Table:
     """Convert a validated bar frame to an Arrow table with the canonical schema."""
     return pa.Table.from_pandas(df[list(BAR_COLUMNS)], schema=BAR_SCHEMA, preserve_index=False)
+
+
+def validate_corporate_actions(
+    df: pd.DataFrame, *, context: str = "corporate_actions"
+) -> pd.DataFrame:
+    missing = [column for column in CORPORATE_ACTION_COLUMNS if column not in df.columns]
+    if missing:
+        raise SchemaError(f"{context}: missing required columns {missing}")
+    output = df.loc[:, list(CORPORATE_ACTION_COLUMNS)].copy()
+    output["symbol"] = output["symbol"].astype(str).str.upper()
+    output["date"] = pd.to_datetime(output["date"]).dt.normalize()
+    output["action_type"] = output["action_type"].astype(str).str.lower()
+    output["value"] = pd.to_numeric(output["value"], errors="coerce")
+    problems: list[str] = []
+    if (~output["action_type"].isin({"dividend", "split"})).any():
+        problems.append("action_type must be dividend or split")
+    if output["value"].isna().any() or (output["value"] <= 0).any():
+        problems.append("action values must be finite and positive")
+    if output.duplicated(["symbol", "date", "action_type"]).any():
+        problems.append("duplicate (symbol, date, action_type) rows")
+    if problems:
+        raise SchemaError(f"{context}: " + "; ".join(problems))
+    return output.sort_values(["symbol", "date", "action_type"]).reset_index(drop=True)

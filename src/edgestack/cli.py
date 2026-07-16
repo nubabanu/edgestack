@@ -34,6 +34,7 @@ backtest_app = typer.Typer(help="Run backtests.", no_args_is_help=True)
 monitor_app = typer.Typer(help="Monitor edge health and lifecycle.", no_args_is_help=True)
 report_app = typer.Typer(help="Produce reports.", no_args_is_help=True)
 paper_app = typer.Typer(help="Paper-trading session management.", no_args_is_help=True)
+risk_app = typer.Typer(help="Canonical risk-state management.", no_args_is_help=True)
 api_app = typer.Typer(help="Serve the read-only API.", no_args_is_help=True)
 dashboard_app = typer.Typer(help="Serve the research dashboard.", no_args_is_help=True)
 
@@ -47,6 +48,7 @@ for name, sub in [
     ("monitor", monitor_app),
     ("report", report_app),
     ("paper", paper_app),
+    ("risk", risk_app),
     ("api", api_app),
     ("dashboard", dashboard_app),
 ]:
@@ -234,6 +236,16 @@ def paper_run(
     from edgestack.pipelines import run_paper_session
 
     _run(run_paper_session, cfg, as_of=date.fromisoformat(as_of) if as_of else None)
+
+
+@risk_app.command("reset-latch")
+def risk_reset_latch(config: Path | None = _CONFIG_OPT) -> None:
+    """Reset the persisted cash latch only after all eligibility gates pass."""
+    cfg = _setup(config)
+    from edgestack.recommendation.reset import reset_persisted_risk_state
+
+    publication = reset_persisted_risk_state(cfg)
+    typer.echo(f"risk latch reset in canonical run {publication.run_id}")
 
 
 @api_app.command("serve")

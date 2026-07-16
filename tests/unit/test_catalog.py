@@ -85,3 +85,23 @@ def test_atomic_write_and_path_safety(tmp_path) -> None:
     assert not leftovers
     with pytest.raises(DataError, match="unsafe path"):
         safe_child_path(tmp_path, "..\\..\\evil.parquet")
+
+
+def test_corporate_actions_round_trip_and_change_data_version(catalog: DataCatalog) -> None:
+    before = catalog.data_manifest_hash()
+    actions = pd.DataFrame(
+        {
+            "symbol": ["AAA", "AAA"],
+            "date": ["2019-06-03", "2019-09-03"],
+            "action_type": ["dividend", "split"],
+            "value": [0.25, 2.0],
+        }
+    )
+    catalog.write_corporate_actions(actions, provider="fixture")
+
+    loaded = catalog.load_corporate_actions(("AAA",))
+    assert loaded[["action_type", "value"]].to_dict(orient="records") == [
+        {"action_type": "dividend", "value": 0.25},
+        {"action_type": "split", "value": 2.0},
+    ]
+    assert catalog.data_manifest_hash() != before

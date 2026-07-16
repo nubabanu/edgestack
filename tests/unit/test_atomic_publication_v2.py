@@ -8,12 +8,20 @@ from pathlib import Path
 
 import pytest
 
+from edgestack.config import EdgeStackConfig
+from edgestack.paper.canonical import (
+    CanonicalPaperStateV2,
+    load_paper_state,
+    queue_recommendation_target,
+)
 from edgestack.recommendation.policy import load_baseline_policy
 from edgestack.recommendation.publication import AtomicRecommendationPublisher
+from edgestack.recommendation.reset import reset_persisted_risk_state
 from edgestack.recommendation.risk import RiskInputsV2, size_recommendation
 from edgestack.recommendation.schemas import (
     BaseRecommendationV2,
     CanonicalRecommendationBundleV2,
+    DrawdownState,
     FreshnessV2,
     RecommendationStatus,
     RiskProfileV2,
@@ -169,3 +177,54 @@ def test_semantically_identical_publication_is_idempotent_across_generation_time
     assert first.bundle_hash == second.bundle_hash
     assert first_record == second_record
     assert len(list((tmp_path / "recommendations" / "runs").iterdir())) == 1
+
+
+def test_explicit_reset_updates_default_and_paper_risk_state_atomically(tmp_path: Path) -> None:
+    bundle, inputs = _bundle(date(2026, 7, 16), data_version="data-v1")
+    eligible = RiskStateV2(
+        state_version=20,
+        previous_effective_leverage=0,
+        peak_equity=100_000,
+        current_equity=100_000,
+        current_drawdown=0,
+        drawdown_state=DrawdownState.RESET_ELIGIBLE,
+        cash_latched=True,
+        reset_eligible=True,
+        sessions_since_latch=20,
+        last_session=bundle.session,
+    )
+    latched_recommendation = size_recommendation(
+        base=bundle.base_recommendation,
+        profile=bundle.default_risk_profile,
+        state=eligible,
+        inputs=inputs,
+    )
+    latched_bundle = CanonicalRecommendationBundleV2.model_validate(
+        {**bundle.model_dump(), "default_recommendation": latched_recommendation}
+    )
+    paper = queue_recommendation_target(
+        CanonicalPaperStateV2.initial(100_000, latched_recommendation.output_risk_state),
+        latched_recommendation,
+    )
+    AtomicRecommendationPublisher(tmp_path).publish(
+        bundle=latched_bundle,
+        risk_inputs=inputs,
+        paper_state=paper.model_dump(mode="json"),
+        monitoring={"healthy": True},
+    )
+    cfg = EdgeStackConfig.model_validate(
+        {"paths": {"data_dir": tmp_path / "data", "artifacts_dir": tmp_path}}
+    )
+
+    reset_persisted_risk_state(cfg)
+
+    repository = CanonicalBundleRepository(tmp_path)
+    latest = repository.latest()
+    updated_paper = load_paper_state(
+        repository,
+        initial_equity=100_000,
+        risk_state=latest.default_recommendation.output_risk_state,
+    )
+    assert latest.default_recommendation.output_risk_state.drawdown_state is DrawdownState.NORMAL
+    assert not latest.default_recommendation.output_risk_state.cash_latched
+    assert updated_paper.risk_state == latest.default_recommendation.output_risk_state

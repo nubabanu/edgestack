@@ -127,22 +127,29 @@ def create_app(cfg: EdgeStackConfig):
 
     @app.get("/paper")
     def paper() -> dict:
-        state_path = catalog.artifacts_dir / "paper" / "state.json"
-        if not state_path.exists():
+        repository = recommendations.repository
+        if not repository.pointer_path.exists():
             raise HTTPException(
                 status_code=404,
-                detail="no paper state; run `edgestack paper run` first",
+                detail="no canonical paper state; publish a recommendation first",
             )
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-        history = []
         try:
-            rows = catalog.audit_events("paper_session")
-            for _, row in rows.iterrows():
-                detail = json.loads(row["detail"]) if row["detail"] else {}
-                if "equity" in detail:
-                    history.append({"date": str(row["reason"]), "equity": detail["equity"]})
-        except Exception:  # audit table is best-effort for the app
-            pass
+            pointer = repository.pointer()
+            repository.latest()
+            wrapper = json.loads(
+                (repository.run_dir(pointer) / "paper_state.json").read_text(encoding="utf-8")
+            )
+            state = wrapper["payload"]
+        except (DataError, OSError, ValueError, KeyError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        history = [
+            {
+                "date": item["session"],
+                "equity": item["ending_equity"],
+                "actual_fill_return": item["actual_fill_return"],
+            }
+            for item in state.get("realized_returns", [])
+        ]
         return {"state": state, "equity_history": history, "disclaimer": DISCLAIMER}
 
     @app.get("/picks", deprecated=True)
@@ -178,8 +185,13 @@ def create_app(cfg: EdgeStackConfig):
         return _deprecated([])
 
     @app.get("/monitoring/edges")
-    def monitoring_edges() -> list[dict]:
-        return current_statuses(catalog).to_dict(orient="records")
+    def monitoring_edges() -> dict:
+        from edgestack.paper.canonical import load_monitoring_payload
+
+        try:
+            return load_monitoring_payload(recommendations.repository)
+        except DataError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/backtests")
     def backtests() -> list[dict]:
