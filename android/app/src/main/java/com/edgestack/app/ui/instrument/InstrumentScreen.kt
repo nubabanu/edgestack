@@ -15,11 +15,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -27,7 +29,9 @@ import com.edgestack.app.data.repo.InstrumentAnalysisRepository
 import com.edgestack.app.data.repo.SyncRepository
 import com.edgestack.app.domain.model.EdgeEffectV2
 import com.edgestack.app.domain.model.InstrumentAnalysisV2
+import com.edgestack.app.domain.model.PatternLeaderBoardV2
 import com.edgestack.app.domain.model.TimingWindowV2
+import com.edgestack.app.work.WorkScheduler
 import kotlinx.coroutines.launch
 
 class InstrumentViewModel(
@@ -37,6 +41,7 @@ class InstrumentViewModel(
     var symbol by mutableStateOf("")
     var intendedEntry by mutableStateOf("")
     var analysis by mutableStateOf<InstrumentAnalysisV2?>(repository.loadLast()); private set
+    var leaders by mutableStateOf<PatternLeaderBoardV2?>(null); private set
     var message by mutableStateOf(""); private set
     var loading by mutableStateOf(false); private set
 
@@ -62,11 +67,53 @@ class InstrumentViewModel(
             loading = false
         }
     }
+
+    fun recheck() {
+        loading = true
+        viewModelScope.launch {
+            syncRepository.recheckInstrument().fold(
+                onSuccess = {
+                    analysis = it.analysis
+                    message = if (it.recommendationStillHolds) {
+                        "Server recheck: selected timing still holds."
+                    } else {
+                        "Server recheck changed: ${it.changes.joinToString()}"
+                    }
+                },
+                onFailure = { message = "Recheck unavailable: ${it.message}" },
+            )
+            loading = false
+        }
+    }
+
+    fun scanLeaders() {
+        loading = true
+        viewModelScope.launch {
+            syncRepository.patternLeaders(QUICK_SYMBOLS).fold(
+                onSuccess = {
+                    leaders = it
+                    message = "Scanned ${it.searchedSymbols.size} symbols; research-only."
+                },
+                onFailure = { message = "Pattern scan unavailable: ${it.message}" },
+            )
+            loading = false
+        }
+    }
+
+    companion object {
+        val QUICK_SYMBOLS = listOf(
+            "SPY", "QQQ", "GLD", "USO", "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA",
+        )
+    }
 }
 
 @Composable
 fun InstrumentScreen(vm: InstrumentViewModel) {
     val analysis = vm.analysis
+    val context = LocalContext.current
+    LaunchedEffect(analysis?.analysisId) {
+        WorkScheduler.scheduleInstrumentRecheck(context, analysis?.recheckPlan?.nextCheckAt)
+    }
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -90,11 +137,27 @@ fun InstrumentScreen(vm: InstrumentViewModel) {
                 onValueChange = { vm.intendedEntry = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Optional intended entry with offset") },
-                supportingText = { Text("Example: 2026-07-20T09:30:00-04:00") },
+                supportingText = {
+                    Text("Date only: 2026-07-20; or hour: 2026-07-20T09:30:00-04:00")
+                },
                 singleLine = true,
             )
+            Text("Quick instruments", style = MaterialTheme.typography.labelMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                InstrumentViewModel.QUICK_SYMBOLS.take(4).forEach { quick ->
+                    AssistChip(onClick = { vm.symbol = quick }, label = { Text(quick) })
+                }
+            }
             Button(onClick = vm::analyze, enabled = !vm.loading) {
                 Text(if (vm.loading) "Analyzing…" else "Analyze")
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = vm::recheck, enabled = !vm.loading && analysis != null) {
+                    Text("Recheck now")
+                }
+                Button(onClick = vm::scanLeaders, enabled = !vm.loading) {
+                    Text("Pattern leaders")
+                }
             }
             if (vm.message.isNotBlank()) {
                 Text(vm.message, style = MaterialTheme.typography.labelSmall)
@@ -102,6 +165,46 @@ fun InstrumentScreen(vm: InstrumentViewModel) {
         }
         if (analysis != null) {
             item { AnalysisSummary(analysis) }
+            if (analysis.chosenTimeRatings.isNotEmpty()) {
+                item { Text("Your chosen time", style = MaterialTheme.typography.titleMedium) }
+                items(analysis.chosenTimeRatings) { rating ->
+                    Card {
+                        Column(Modifier.padding(10.dp)) {
+                            Text("${rating.resolution} • ${rating.horizon} • ${rating.rating}")
+                            Text(
+                                "Matched ${rating.matchedSlot ?: "none"} • win score " +
+                                    (rating.score?.let { "%.1f".format(it.winScore) } ?: "n/a") +
+                                    " • rank ${rating.score?.rank ?: 0}/${rating.score?.candidatesRanked ?: 0}",
+                            )
+                            Text(rating.recommendation, style = MaterialTheme.typography.bodySmall)
+                            rating.betterAlternative?.let {
+                                Text(
+                                    "Better historical slot: ${it.entryWindow} • " +
+                                        "score ${"%.1f".format(it.score.winScore)}",
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (analysis.exitPlans.isNotEmpty()) {
+                item { Text("Conditional exit map", style = MaterialTheme.typography.titleMedium) }
+                items(analysis.exitPlans) { exit ->
+                    Card {
+                        Column(Modifier.padding(10.dp)) {
+                            Text("${exit.horizon}: enter ${exit.entrySlot}")
+                            Text("Preferred exit: ${exit.preferredExit ?: "unavailable"}")
+                            Text(
+                                "Win score ${exit.score?.let { "%.1f".format(it.winScore) } ?: "n/a"} • " +
+                                    "${if (exit.actionable) "PROMOTED" else "RESEARCH"}",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                            Text(exit.rationale, style = MaterialTheme.typography.bodySmall)
+                            exit.warning?.let { Text("⚠ $it") }
+                        }
+                    }
+                }
+            }
             items(analysis.horizonAnalyses) { horizon ->
                 Card {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -159,9 +262,50 @@ fun InstrumentScreen(vm: InstrumentViewModel) {
                         analysis.warnings.forEach {
                             Text("⚠ $it", style = MaterialTheme.typography.bodySmall)
                         }
+                        Text("Automatic recheck", style = MaterialTheme.typography.titleMedium)
+                        Text(analysis.recheckPlan.reason)
+                        Text(
+                            "Next: ${analysis.recheckPlan.nextCheckAt ?: "disabled"} • " +
+                                "resolution ${analysis.recheckPlan.requiredResolution ?: "n/a"}",
+                        )
                     }
                 }
             }
+            analysis.tailwindCalendars.forEach { calendar ->
+                item {
+                    Text(
+                        "${calendar.resolution} tailwind calendar • ${calendar.horizon}",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+                items(calendar.cells.take(12)) { cell ->
+                    Card {
+                        Row(
+                            Modifier.fillMaxWidth().padding(8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text("#${cell.score.rank} ${cell.displayLabel}")
+                            Text("win score ${"%.1f".format(cell.score.winScore)}")
+                        }
+                    }
+                }
+                item { Text(calendar.warning, style = MaterialTheme.typography.bodySmall) }
+            }
+        }
+        vm.leaders?.let { board ->
+            item { Text("Pattern leaders — research only", style = MaterialTheme.typography.titleMedium) }
+            items(board.leaders) { leader ->
+                Card {
+                    Column(Modifier.padding(10.dp)) {
+                        Text("#${leader.rank} ${leader.symbol}")
+                        Text(
+                            "${leader.strongestSlot.entryWindow} • win score " +
+                                "${"%.1f".format(leader.strongestSlot.score.winScore)}",
+                        )
+                    }
+                }
+            }
+            item { Text(board.warning, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }

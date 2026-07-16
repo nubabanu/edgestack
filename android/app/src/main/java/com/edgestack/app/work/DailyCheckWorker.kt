@@ -9,6 +9,7 @@ import androidx.work.WorkerParameters
 import com.edgestack.app.EdgeStackApp
 import java.time.Duration
 import java.time.LocalTime
+import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -82,6 +83,45 @@ class DailyCheckWorker(
     }
 }
 
+/** Rechecks the cached server-owned instrument plan at the cadence returned by the API. */
+class InstrumentRecheckWorker(
+    context: Context,
+    params: WorkerParameters,
+) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val container = (applicationContext as EdgeStackApp).container
+        return container.syncRepo.recheckInstrument().fold(
+            onSuccess = { result ->
+                if (!result.recommendationStillHolds || result.betterAlternativeEmerged) {
+                    AlertNotifier.notify(
+                        applicationContext,
+                        AlertNotifier.CHANNEL_CANONICAL,
+                        120,
+                        if (result.betterAlternativeEmerged) {
+                            "Better timing alternative found"
+                        } else {
+                            "Instrument timing changed"
+                        },
+                        result.changes.joinToString().ifBlank {
+                            "Open Analyze for the server-owned updated rating and exits."
+                        },
+                    )
+                }
+                WorkScheduler.scheduleInstrumentRecheck(
+                    applicationContext,
+                    result.analysis.recheckPlan.nextCheckAt,
+                )
+                Result.success()
+            },
+            onFailure = { Result.retry() },
+        )
+    }
+
+    companion object {
+        const val UNIQUE_NAME = "instrument-plan-recheck"
+    }
+}
+
 object WorkScheduler {
     /** Enqueue a daily refresh on the next exchange session. */
     fun scheduleNext(context: Context, calendar: com.edgestack.app.domain.TradingCalendar) {
@@ -101,6 +141,26 @@ object WorkScheduler {
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             DailyCheckWorker.UNIQUE_NAME,
+            ExistingWorkPolicy.REPLACE,
+            request,
+        )
+    }
+
+    fun scheduleInstrumentRecheck(context: Context, nextCheckAt: String?) {
+        if (nextCheckAt.isNullOrBlank()) {
+            WorkManager.getInstance(context).cancelUniqueWork(InstrumentRecheckWorker.UNIQUE_NAME)
+            return
+        }
+        val target = runCatching { OffsetDateTime.parse(nextCheckAt).toInstant() }.getOrNull()
+            ?: return
+        val delay = Duration.between(java.time.Instant.now(), target).let {
+            if (it.isNegative) Duration.ofMinutes(1) else it
+        }
+        val request = OneTimeWorkRequestBuilder<InstrumentRecheckWorker>()
+            .setInitialDelay(delay)
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            InstrumentRecheckWorker.UNIQUE_NAME,
             ExistingWorkPolicy.REPLACE,
             request,
         )

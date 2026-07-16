@@ -8,6 +8,10 @@ import com.edgestack.app.domain.TradingCalendar
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
 import com.edgestack.app.domain.model.InstrumentAnalysisRequestV2
 import com.edgestack.app.domain.model.InstrumentAnalysisV2
+import com.edgestack.app.domain.model.InstrumentRecheckRequestV2
+import com.edgestack.app.domain.model.InstrumentRecheckV2
+import com.edgestack.app.domain.model.PatternLeaderBoardV2
+import com.edgestack.app.domain.model.PatternLeaderRequestV2
 import com.edgestack.app.domain.model.PaperResponse
 import com.edgestack.app.domain.model.PortfolioRecommendationV2
 import com.edgestack.app.domain.model.RecommendationPreviewRequestV2
@@ -67,12 +71,23 @@ class InstrumentAnalysisRepository(private val store: JsonFileStore) {
     fun loadLast(): InstrumentAnalysisV2? =
         store.read("instrument_analysis.json", InstrumentAnalysisV2.serializer())
 
-    fun save(analysis: InstrumentAnalysisV2) =
+    fun loadRequest(): InstrumentAnalysisRequestV2? =
+        store.read("instrument_request.json", InstrumentAnalysisRequestV2.serializer())
+
+    fun save(analysis: InstrumentAnalysisV2, request: InstrumentAnalysisRequestV2? = null) {
         store.write(
             "instrument_analysis.json",
             InstrumentAnalysisV2.serializer(),
             analysis,
         )
+        if (request != null) {
+            store.write(
+                "instrument_request.json",
+                InstrumentAnalysisRequestV2.serializer(),
+                request,
+            )
+        }
+    }
 }
 
 class SyncRepository(
@@ -124,15 +139,41 @@ class SyncRepository(
         roundTripCostBps: Double = 10.0,
     ): Result<InstrumentAnalysisV2> = runCatching {
         val api = api() ?: error("no server URL configured")
-        val result = api.analyzeInstrument(
-            InstrumentAnalysisRequestV2(
-                symbol = symbol.trim().uppercase(),
-                intendedEntryAt = intendedEntryAt,
-                roundTripCostBps = roundTripCostBps,
+        val request = InstrumentAnalysisRequestV2(
+            symbol = symbol.trim().uppercase(),
+            intendedEntryAt = intendedEntryAt?.takeUnless { it.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) },
+            intendedEntryDate = intendedEntryAt?.takeIf { it.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) },
+            roundTripCostBps = roundTripCostBps,
+        )
+        val result = api.analyzeInstrument(request)
+        instrumentRepo.save(result, request)
+        result
+    }
+
+    suspend fun recheckInstrument(): Result<InstrumentRecheckV2> = runCatching {
+        val api = api() ?: error("no server URL configured")
+        val previous = instrumentRepo.loadLast() ?: error("no cached instrument analysis")
+        val request = instrumentRepo.loadRequest() ?: error("no cached instrument request")
+        val result = api.recheckInstrument(
+            InstrumentRecheckRequestV2(previousAnalysis = previous, request = request),
+        )
+        instrumentRepo.save(result.analysis, request)
+        result
+    }
+
+    suspend fun patternLeaders(
+        symbols: List<String>,
+        resolution: String = "DAY",
+        horizon: String = "WEEK",
+    ): Result<PatternLeaderBoardV2> = runCatching {
+        val api = api() ?: error("no server URL configured")
+        api.patternLeaders(
+            PatternLeaderRequestV2(
+                symbols = symbols,
+                resolution = resolution,
+                horizon = horizon,
             ),
         )
-        instrumentRepo.save(result)
-        result
     }
 
     suspend fun syncAll(): Result<String> = runCatching {

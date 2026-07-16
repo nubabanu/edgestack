@@ -4,6 +4,10 @@ import com.edgestack.app.core.AppJson
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
 import com.edgestack.app.domain.model.InstrumentAnalysisRequestV2
 import com.edgestack.app.domain.model.InstrumentAnalysisV2
+import com.edgestack.app.domain.model.InstrumentRecheckRequestV2
+import com.edgestack.app.domain.model.InstrumentRecheckV2
+import com.edgestack.app.domain.model.PatternLeaderBoardV2
+import com.edgestack.app.domain.model.PatternLeaderRequestV2
 import com.edgestack.app.domain.model.PaperResponse
 import com.edgestack.app.domain.model.PortfolioRecommendationV2
 import com.edgestack.app.domain.model.RecommendationPreviewRequestV2
@@ -39,6 +43,14 @@ interface EdgeStackApi {
     suspend fun analyzeInstrument(
         @Body request: InstrumentAnalysisRequestV2,
     ): InstrumentAnalysisV2
+    @POST("instruments/recheck")
+    suspend fun recheckInstrument(
+        @Body request: InstrumentRecheckRequestV2,
+    ): InstrumentRecheckV2
+    @POST("instruments/pattern-leaders")
+    suspend fun patternLeaders(
+        @Body request: PatternLeaderRequestV2,
+    ): PatternLeaderBoardV2
 
     companion object {
         fun create(baseUrl: String, http: OkHttpClient): EdgeStackApi =

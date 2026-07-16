@@ -68,6 +68,50 @@ class CanonicalContractTest {
                 "explanation": "No promoted timing rule."
               },
               "horizon_analyses": [],
+              "chosen_time_ratings": [{
+                "resolution": "MINUTE_15",
+                "horizon": "DAY",
+                "requested_time": "2026-07-20T09:30:00-04:00",
+                "matched_slot": "09:30",
+                "rating": "ABOVE_AVERAGE",
+                "score": {
+                  "net_win_rate": 0.56,
+                  "shrunk_win_rate": 0.55,
+                  "win_score": 53.2,
+                  "expected_net_return": 0.001,
+                  "lower_95": -0.002,
+                  "observations": 42,
+                  "effective_sample_size": 31.0,
+                  "rank": 2,
+                  "candidates_ranked": 26,
+                  "multiple_testing_adjusted_pvalue": 0.8,
+                  "evidence_grade": "INSUFFICIENT"
+                },
+                "recommendation": "Research only."
+              }],
+              "exit_plans": [{
+                "horizon": "DAY",
+                "entry_slot": "09:30",
+                "preferred_exit": "15:45 New York",
+                "holding_sessions": 0,
+                "data_resolution": "MINUTE_15",
+                "rationale": "Historical conditional exit."
+              }],
+              "tailwind_calendars": [{
+                "resolution": "MINUTE_15",
+                "timezone": "America/New_York",
+                "horizon": "DAY",
+                "cells": [],
+                "warning": "Research only."
+              }],
+              "recheck_plan": {
+                "enabled": true,
+                "intended_entry_at": "2026-07-20T09:30:00-04:00",
+                "next_check_at": "2026-07-16T21:00:00Z",
+                "cadence_minutes": 60,
+                "required_resolution": "HOUR",
+                "reason": "Recheck hourly."
+              },
               "disclaimer": "Research and paper-trading output only."
             }
         """.trimIndent()
@@ -78,5 +122,8 @@ class CanonicalContractTest {
         assertEquals("physical gold", analysis.resolution.proxyFor)
         assertEquals("NOT_RATED", analysis.overallRating)
         assertTrue(!analysis.alignment.alignedTrade)
+        assertEquals(53.2, analysis.chosenTimeRatings.single().score!!.winScore, 1e-12)
+        assertEquals("15:45 New York", analysis.exitPlans.single().preferredExit)
+        assertEquals(60, analysis.recheckPlan.cadenceMinutes)
     }
 }

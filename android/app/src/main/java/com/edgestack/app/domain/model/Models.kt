@@ -286,6 +286,85 @@ data class TimingWindowV2(
 )
 
 @Serializable
+data class WinScoreV2(
+    @SerialName("net_win_rate") val netWinRate: Double,
+    @SerialName("shrunk_win_rate") val shrunkWinRate: Double,
+    @SerialName("win_score") val winScore: Double,
+    @SerialName("expected_net_return") val expectedNetReturn: Double,
+    @SerialName("lower_95") val lower95: Double,
+    val observations: Int,
+    @SerialName("effective_sample_size") val effectiveSampleSize: Double,
+    val rank: Int,
+    @SerialName("candidates_ranked") val candidatesRanked: Int,
+    @SerialName("multiple_testing_adjusted_pvalue")
+    val multipleTestingAdjustedPvalue: Double,
+    @SerialName("evidence_grade") val evidenceGrade: String,
+    val actionable: Boolean = false,
+    val explanation: String = "",
+)
+
+@Serializable
+data class TailwindCalendarCellV2(
+    @SerialName("slot_key") val slotKey: String,
+    @SerialName("display_label") val displayLabel: String,
+    @SerialName("entry_window") val entryWindow: String,
+    @SerialName("exit_window") val exitWindow: String,
+    val horizon: String,
+    val score: WinScoreV2,
+    @SerialName("rank_percentile") val rankPercentile: Double,
+)
+
+@Serializable
+data class TailwindCalendarV2(
+    val resolution: String,
+    val timezone: String,
+    val horizon: String,
+    @SerialName("data_start") val dataStart: String? = null,
+    @SerialName("data_end") val dataEnd: String? = null,
+    val cells: List<TailwindCalendarCellV2> = emptyList(),
+    val warning: String,
+)
+
+@Serializable
+data class ChosenTimeRatingV2(
+    val resolution: String,
+    val horizon: String,
+    @SerialName("requested_time") val requestedTime: String,
+    @SerialName("matched_slot") val matchedSlot: String? = null,
+    val rating: String,
+    val score: WinScoreV2? = null,
+    @SerialName("better_alternative") val betterAlternative: TailwindCalendarCellV2? = null,
+    @SerialName("score_improvement") val scoreImprovement: Double? = null,
+    val recommendation: String,
+    val actionable: Boolean = false,
+)
+
+@Serializable
+data class ExitPlanV2(
+    val horizon: String,
+    @SerialName("entry_slot") val entrySlot: String,
+    @SerialName("preferred_exit") val preferredExit: String? = null,
+    @SerialName("holding_sessions") val holdingSessions: Int,
+    @SerialName("data_resolution") val dataResolution: String,
+    val score: WinScoreV2? = null,
+    val alternatives: List<TailwindCalendarCellV2> = emptyList(),
+    val actionable: Boolean = false,
+    val rationale: String,
+    val warning: String? = null,
+)
+
+@Serializable
+data class RecheckPlanV2(
+    val enabled: Boolean,
+    @SerialName("intended_entry_at") val intendedEntryAt: String? = null,
+    @SerialName("next_check_at") val nextCheckAt: String? = null,
+    @SerialName("cadence_minutes") val cadenceMinutes: Int? = null,
+    @SerialName("required_resolution") val requiredResolution: String? = null,
+    @SerialName("automatic_recheck_supported") val automaticRecheckSupported: Boolean = true,
+    val reason: String,
+)
+
+@Serializable
 data class HorizonTimingAnalysisV2(
     val horizon: String,
     @SerialName("data_resolution") val dataResolution: String,
@@ -343,6 +422,14 @@ data class InstrumentAnalysisV2(
     @SerialName("canonical_portfolio_weight") val canonicalPortfolioWeight: Double = 0.0,
     val alignment: AlignmentSummaryV2,
     @SerialName("horizon_analyses") val horizonAnalyses: List<HorizonTimingAnalysisV2>,
+    @SerialName("chosen_time_ratings") val chosenTimeRatings: List<ChosenTimeRatingV2> = emptyList(),
+    @SerialName("exit_plans") val exitPlans: List<ExitPlanV2> = emptyList(),
+    @SerialName("tailwind_calendars") val tailwindCalendars: List<TailwindCalendarV2> = emptyList(),
+    @SerialName("recheck_plan")
+    val recheckPlan: RecheckPlanV2 = RecheckPlanV2(
+        enabled = false,
+        reason = "No intended entry time was supplied.",
+    ),
     val tailwinds: List<EdgeEffectV2> = emptyList(),
     val headwinds: List<EdgeEffectV2> = emptyList(),
     @SerialName("mixed_effects") val mixedEffects: List<EdgeEffectV2> = emptyList(),
@@ -358,6 +445,52 @@ data class InstrumentAnalysisRequestV2(
     val symbol: String,
     @SerialName("instrument_kind") val instrumentKind: String? = null,
     @SerialName("intended_entry_at") val intendedEntryAt: String? = null,
+    @SerialName("intended_entry_date") val intendedEntryDate: String? = null,
     @SerialName("round_trip_cost_bps") val roundTripCostBps: Double = 10.0,
     @SerialName("include_news") val includeNews: Boolean = true,
+)
+
+@Serializable
+data class InstrumentRecheckRequestV2(
+    @SerialName("previous_analysis") val previousAnalysis: InstrumentAnalysisV2,
+    val request: InstrumentAnalysisRequestV2,
+)
+
+@Serializable
+data class InstrumentRecheckV2(
+    @SerialName("previous_analysis_id") val previousAnalysisId: String,
+    val analysis: InstrumentAnalysisV2,
+    @SerialName("recommendation_still_holds") val recommendationStillHolds: Boolean,
+    @SerialName("better_alternative_emerged") val betterAlternativeEmerged: Boolean,
+    val changes: List<String> = emptyList(),
+)
+
+@Serializable
+data class PatternLeaderRequestV2(
+    val symbols: List<String>,
+    val resolution: String = "DAY",
+    val horizon: String = "WEEK",
+    val limit: Int = 10,
+)
+
+@Serializable
+data class PatternLeaderV2(
+    val rank: Int,
+    val symbol: String,
+    val resolution: String,
+    val horizon: String,
+    @SerialName("strongest_slot") val strongestSlot: TailwindCalendarCellV2,
+    val actionable: Boolean = false,
+)
+
+@Serializable
+data class PatternLeaderBoardV2(
+    @SerialName("as_of") val asOf: String,
+    val resolution: String,
+    val horizon: String,
+    @SerialName("searched_symbols") val searchedSymbols: List<String>,
+    @SerialName("skipped_symbols") val skippedSymbols: List<String> = emptyList(),
+    @SerialName("searched_cells") val searchedCells: Int,
+    val leaders: List<PatternLeaderV2>,
+    val warning: String,
 )
