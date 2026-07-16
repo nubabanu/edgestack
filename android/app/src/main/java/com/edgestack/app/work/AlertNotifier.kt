@@ -15,20 +15,20 @@ import com.edgestack.app.MainActivity
 
 object AlertNotifier {
 
-    const val CHANNEL_CALENDAR = "calendar_alerts"
+    const val CHANNEL_CANONICAL = "canonical_recommendations"
     const val CHANNEL_RISK = "risk_alerts"
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_CALENDAR, "Calendar alerts",
+            NotificationChannel(CHANNEL_CANONICAL, "Canonical recommendations",
                 NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Turn-of-month, September de-risk, Feb-1 sniper, buy-at-close"
+                description = "Canonical status, target, and freshness changes"
             })
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_RISK, "Risk alerts",
                 NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "200-DMA breach and volatility gate transitions"
+                description = "Canonical drawdown and latch-state changes"
             })
     }
 

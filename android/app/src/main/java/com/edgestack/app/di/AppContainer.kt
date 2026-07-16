@@ -5,12 +5,8 @@ import com.edgestack.app.core.AppJson
 import com.edgestack.app.data.local.JsonFileStore
 import com.edgestack.app.data.local.SeedAssets
 import com.edgestack.app.data.local.SettingsStore
-import com.edgestack.app.data.remote.YahooChartClient
-import com.edgestack.app.data.repo.BoardRepository
 import com.edgestack.app.data.repo.CalendarRepository
-import com.edgestack.app.data.repo.EdgesRepository
-import com.edgestack.app.data.repo.OverlayRepository
-import com.edgestack.app.data.repo.PositionsRepository
+import com.edgestack.app.data.repo.RecommendationRepository
 import com.edgestack.app.data.repo.SyncRepository
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -26,12 +22,8 @@ class AppContainer(context: Context) {
     val settings = SettingsStore(context)
     private val seed = SeedAssets(context)
     private val fileStore = JsonFileStore(context, AppJson)
-    val yahoo = YahooChartClient(http)
 
-    val boardRepo = BoardRepository(seed, fileStore, yahoo)
-    val edgesRepo = EdgesRepository(seed, fileStore)
+    val recommendationRepo = RecommendationRepository(seed, fileStore)
     val calendarRepo = CalendarRepository(seed)
-    val overlayRepo = OverlayRepository(yahoo, calendarRepo.calendar)
-    val positionsRepo = PositionsRepository(fileStore)
-    val syncRepo = SyncRepository(settings, boardRepo, edgesRepo, http)
+    val syncRepo = SyncRepository(settings, recommendationRepo, http)
 }

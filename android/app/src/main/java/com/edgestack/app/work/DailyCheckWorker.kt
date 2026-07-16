@@ -7,135 +7,92 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.edgestack.app.EdgeStackApp
-import com.edgestack.app.domain.AlertPlanner
-import com.edgestack.app.domain.AlertSettings
-import com.edgestack.app.domain.AlertType
 import java.time.Duration
-import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
 import java.time.ZonedDateTime
 
-/**
- * Runs near 15:45 America/New_York on trading days:
- *  1. refresh SPY -> recompute overlay
- *  2. notify RISK channel on gate TRANSITIONS (200-DMA cross, vol gate flip)
- *  3. post today's calendar alerts from AlertPlanner
- *  4. re-enqueue itself for the next session (self-rechaining)
- */
+/** Syncs server-owned recommendations; the device never computes a signal or overlay. */
 class DailyCheckWorker(
     context: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val app = applicationContext as EdgeStackApp
-        val c = app.container
-        val settings = c.settings.current()
-        val calendar = c.calendarRepo.calendar
-        val today = LocalDate.now(AlertPlanner.MARKET_ZONE)
-
-        if (calendar.isSession(today)) {
-            // risk transitions from fresh SPY data (best effort)
-            runCatching {
-                val state = c.overlayRepo.state(settings.baseLeverage, forceRefresh = true)
-                if (state?.sma200 != null) {
-                    val above = state.spyClose >= state.sma200
-                    val volOn = (state.vol20 ?: 0.0) > 0.20
-                    val prevAbove = settings.lastAbove200Dma
-                    val prevVol = settings.lastVolGateOn
-                    if (prevAbove != null && prevAbove != above) {
-                        AlertNotifier.notify(
-                            applicationContext, AlertNotifier.CHANNEL_RISK, 100,
-                            if (above) "SPY back above 200-DMA" else "SPY BROKE its 200-DMA",
-                            if (above) "Overlay gate released; normal exposure allowed."
-                            else "Overlay caps exposure at 0.5x. Best drawdown gate in 14y of data.",
-                        )
-                    }
-                    if (prevVol != null && prevVol != volOn) {
-                        AlertNotifier.notify(
-                            applicationContext, AlertNotifier.CHANNEL_RISK, 101,
-                            if (volOn) "Volatility gate ON (>20%)" else "Volatility gate off",
-                            if (volOn) "20d realized vol above 20%: no leverage; suspend dip-buying."
-                            else "20d realized vol back under 20%.",
-                        )
-                    }
-                    // red-close sniper: SPY down today, in calm uptrend
-                    // (t=5.41 finding: buy the close, sell at tomorrow's open;
-                    // price at 15:45 ET approximates the close)
-                    if ((state.lastReturn ?: 0.0) < 0.0 && above && !volOn) {
-                        AlertNotifier.notify(
-                            applicationContext, AlertNotifier.CHANNEL_CALENDAR, 210,
-                            "Sniper: red close in calm uptrend",
-                            "SPY is down today inside an uptrend. Historically the " +
-                                "gentlest trade: buy near the close, sell at " +
-                                "tomorrow's open (60% hit, typical bad case -0.8%).",
-                        )
-                    }
-                    c.settings.setRiskState(above, volOn)
-                }
-            }
-
-            val alertSettings = AlertSettings(
-                buyAtClose = settings.alertsBuyAtClose,
-                turnOfMonth = settings.alertsTurnOfMonth,
-                septemberDerisk = settings.alertsSeptember,
-                febSniper = settings.alertsFebSniper,
-                novWorstDay = settings.alertsNovWorstDay,
-            )
-            AlertPlanner.alertsFor(calendar, today, alertSettings).forEach { alert ->
+        val container = (applicationContext as EdgeStackApp).container
+        val before = container.settings.current()
+        val beforeRisk = container.settings.decodedRiskState(before)
+        container.syncRepo.syncAll().onSuccess {
+            val after = container.settings.current()
+            val afterRisk = container.settings.decodedRiskState(after)
+            if (before.lastCanonicalStatus.isNotBlank() &&
+                before.lastCanonicalStatus != after.lastCanonicalStatus
+            ) {
                 AlertNotifier.notify(
-                    applicationContext, AlertNotifier.CHANNEL_CALENDAR,
-                    200 + alert.type.ordinal, alert.title, alert.message)
+                    applicationContext,
+                    AlertNotifier.CHANNEL_CANONICAL,
+                    100,
+                    "Canonical status changed",
+                    "${before.lastCanonicalStatus} → ${after.lastCanonicalStatus}",
+                )
             }
-
-            // tracked-position checks: stop breach + time-exit due
-            runCatching {
-                val positions = c.positionsRepo.load()
-                if (positions.isNotEmpty()) {
-                    val quotes = c.yahoo.latestQuotes(
-                        positions.map { it.symbol }.distinct())
-                    positions.forEachIndexed { i, p ->
-                        val last = quotes[p.symbol] ?: return@forEachIndexed
-                        if (p.stop != null && last <= p.stop) {
-                            AlertNotifier.notify(
-                                applicationContext, AlertNotifier.CHANNEL_RISK,
-                                300 + i, "STOP BREACHED: ${p.symbol}",
-                                "Last %.2f <= stop %.2f. Exit at/near the close — "
-                                    .format(last, p.stop) +
-                                    "no averaging down.")
-                        }
-                        val held = calendar.sessionsBetween(
-                            java.time.LocalDate.parse(p.entryDate), today)
-                        if (held >= p.horizonSessions) {
-                            AlertNotifier.notify(
-                                applicationContext, AlertNotifier.CHANNEL_CALENDAR,
-                                340 + i, "Time exit due: ${p.symbol}",
-                                "Held $held sessions (plan: ${p.horizonSessions}). " +
-                                    "The edge was measured to here — exit at the close.")
-                        }
-                    }
-                }
+            if (before.lastCanonicalFingerprint.isNotBlank() &&
+                before.lastCanonicalFingerprint != after.lastCanonicalFingerprint
+            ) {
+                val recommendation = container.recommendationRepo.displayedRecommendation()
+                AlertNotifier.notify(
+                    applicationContext,
+                    AlertNotifier.CHANNEL_CANONICAL,
+                    101,
+                    "Canonical targets changed",
+                    "Effective leverage ${"%.2f".format(recommendation.effectiveLeverage)}x; " +
+                        "open the app for target weights and binding constraints.",
+                )
+            }
+            if (before.lastFresh != null && before.lastFresh != after.lastFresh) {
+                AlertNotifier.notify(
+                    applicationContext,
+                    AlertNotifier.CHANNEL_CANONICAL,
+                    102,
+                    "Recommendation freshness changed",
+                    if (after.lastFresh == true) "Canonical inputs are fresh again."
+                    else "Canonical inputs are stale; position increases are disabled.",
+                )
+            }
+            if (beforeRisk != null && afterRisk != null &&
+                beforeRisk.drawdownState != afterRisk.drawdownState
+            ) {
+                AlertNotifier.notify(
+                    applicationContext,
+                    AlertNotifier.CHANNEL_RISK,
+                    103,
+                    "Risk state ${afterRisk.drawdownState}",
+                    "Drawdown ${"%.2f".format(afterRisk.currentDrawdown * 100)}%; " +
+                        "cash latch ${afterRisk.cashLatched}; reset eligible ${afterRisk.resetEligible}.",
+                )
             }
         }
 
-        WorkScheduler.scheduleNext(applicationContext, calendar)
+        WorkScheduler.scheduleNext(applicationContext, container.calendarRepo.calendar)
         return Result.success()
     }
 
     companion object {
-        const val UNIQUE_NAME = "daily-alert-check"
+        const val UNIQUE_NAME = "daily-canonical-check"
     }
 }
 
 object WorkScheduler {
-
-    /** Enqueue the next run at 15:45 ET on the next session (or today if early). */
+    /** Enqueue a daily refresh on the next exchange session. */
     fun scheduleNext(context: Context, calendar: com.edgestack.app.domain.TradingCalendar) {
-        val nowEt = ZonedDateTime.now(AlertPlanner.MARKET_ZONE)
+        val marketZone = ZoneId.of("America/New_York")
+        val refreshTime = LocalTime.of(18, 30)
+        val nowEt = ZonedDateTime.now(marketZone)
         var target = nowEt.toLocalDate()
-        if (!calendar.isSession(target) || !nowEt.toLocalTime().isBefore(AlertPlanner.ALERT_TIME)) {
+        if (!calendar.isSession(target) || !nowEt.toLocalTime().isBefore(refreshTime)) {
             target = calendar.nextSession(target) ?: return
         }
-        val fireAt = AlertPlanner.fireAt(target)
+        val fireAt = ZonedDateTime.of(target, refreshTime, marketZone)
         val delay = Duration.between(nowEt, fireAt).let {
             if (it.isNegative) Duration.ofMinutes(1) else it
         }
@@ -143,6 +100,9 @@ object WorkScheduler {
             .setInitialDelay(delay)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
-            DailyCheckWorker.UNIQUE_NAME, ExistingWorkPolicy.REPLACE, request)
+            DailyCheckWorker.UNIQUE_NAME,
+            ExistingWorkPolicy.REPLACE,
+            request,
+        )
     }
 }

@@ -4,95 +4,58 @@ import com.edgestack.app.data.local.JsonFileStore
 import com.edgestack.app.data.local.SeedAssets
 import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.remote.EdgeStackApi
-import com.edgestack.app.data.remote.YahooChartClient
-import com.edgestack.app.domain.EnsembleCalculator
-import com.edgestack.app.domain.OverlayCalculator
 import com.edgestack.app.domain.TradingCalendar
-import com.edgestack.app.domain.model.Board
-import com.edgestack.app.domain.model.Edge
-import com.edgestack.app.domain.model.EdgesBundle
-import com.edgestack.app.domain.model.OverlayState
+import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
 import com.edgestack.app.domain.model.PaperResponse
-import com.edgestack.app.domain.model.PicksBundle
+import com.edgestack.app.domain.model.PortfolioRecommendationV2
+import com.edgestack.app.domain.model.RecommendationPreviewRequestV2
 import com.edgestack.app.domain.model.TrackedPosition
 import com.edgestack.app.domain.model.TrackedPositions
-import com.edgestack.app.domain.model.SpyBar
 import okhttp3.OkHttpClient
 import java.time.LocalDate
 
-/** Read order everywhere: file cache -> bundled seed. Sync overwrites the cache. */
-class BoardRepository(
-    private val seed: SeedAssets,
-    private val store: JsonFileStore,
-    private val yahoo: YahooChartClient,
-) {
-    fun load(): Board =
-        store.read("board.json", Board.serializer()) ?: seed.board()
-
-    fun save(board: Board) = store.write("board.json", Board.serializer(), board)
-
-    fun loadPicks(): PicksBundle? =
-        store.read("picks.json", PicksBundle.serializer()) ?: seed.picks()
-
-    fun savePicks(picks: PicksBundle) =
-        store.write("picks.json", PicksBundle.serializer(), picks)
-
-    suspend fun liveQuotes(board: Board): Map<String, Double> =
-        yahoo.latestQuotes(board.rows.map { it.symbol })
-}
-
-class EdgesRepository(
+/** Offline reads show the last server result (or canonical seed) without recomputation. */
+class RecommendationRepository(
     private val seed: SeedAssets,
     private val store: JsonFileStore,
 ) {
-    fun load(): EdgesBundle =
-        store.read("edges.json", EdgesBundle.serializer()) ?: seed.edges()
+    fun loadBundle(): CanonicalRecommendationBundleV2 =
+        store.read(
+            "recommendation.json",
+            CanonicalRecommendationBundleV2.serializer(),
+        ) ?: seed.recommendation()
 
-    fun save(bundle: EdgesBundle) =
-        store.write("edges.json", EdgesBundle.serializer(), bundle)
-}
+    fun saveBundle(bundle: CanonicalRecommendationBundleV2) =
+        store.write(
+            "recommendation.json",
+            CanonicalRecommendationBundleV2.serializer(),
+            bundle,
+        )
 
-class OverlayRepository(
-    private val yahoo: YahooChartClient,
-    private val calendar: TradingCalendar,
-) {
+    fun loadPreview(): PortfolioRecommendationV2? =
+        store.read("recommendation_preview.json", PortfolioRecommendationV2.serializer())
 
-    private val cache = java.util.concurrent.ConcurrentHashMap<String, List<SpyBar>>()
+    fun savePreview(preview: PortfolioRecommendationV2) =
+        store.write(
+            "recommendation_preview.json",
+            PortfolioRecommendationV2.serializer(),
+            preview,
+        )
 
-    suspend fun bars(symbol: String = "SPY",
-                     forceRefresh: Boolean = false): List<SpyBar> {
-        val cached = cache[symbol].orEmpty()
-        if (cached.isEmpty() || forceRefresh ||
-            cached.last().date < LocalDate.now().minusDays(1)
-        ) {
-            runCatching { yahoo.dailyHistory(symbol, years = 3) }
-                .onSuccess {
-                    if (it.size > OverlayCalculator.WARMUP) cache[symbol] = it
-                }
-        }
-        return cache[symbol].orEmpty()
-    }
+    fun clearPreview() = store.delete("recommendation_preview.json")
 
-    suspend fun state(base: Double, forceRefresh: Boolean = false): OverlayState? =
-        OverlayCalculator.state(bars("SPY", forceRefresh), base = base,
-                                calendar = calendar)
-
-    suspend fun ensembleState(symbol: String,
-                              forceRefresh: Boolean = false): EnsembleCalculator.State? =
-        EnsembleCalculator.state(bars(symbol, forceRefresh))
+    fun displayedRecommendation(): PortfolioRecommendationV2 =
+        loadPreview() ?: loadBundle().defaultRecommendation
 }
 
 class PositionsRepository(private val store: JsonFileStore) {
-
     fun load(): List<TrackedPosition> =
-        store.read("positions.json", TrackedPositions.serializer())?.positions
-            .orEmpty()
+        store.read("positions.json", TrackedPositions.serializer())?.positions.orEmpty()
 
     fun save(positions: List<TrackedPosition>) =
-        store.write("positions.json", TrackedPositions.serializer(),
-                    TrackedPositions(positions))
+        store.write("positions.json", TrackedPositions.serializer(), TrackedPositions(positions))
 
-    fun add(p: TrackedPosition) = save(load() + p)
+    fun add(position: TrackedPosition) = save(load() + position)
 
     fun remove(symbol: String, entryDate: String) =
         save(load().filterNot { it.symbol == symbol && it.entryDate == entryDate })
@@ -100,8 +63,7 @@ class PositionsRepository(private val store: JsonFileStore) {
 
 class SyncRepository(
     private val settingsStore: SettingsStore,
-    private val boardRepo: BoardRepository,
-    private val edgesRepo: EdgesRepository,
+    private val recommendationRepo: RecommendationRepository,
     private val http: OkHttpClient,
 ) {
     private suspend fun api(): EdgeStackApi? {
@@ -111,31 +73,63 @@ class SyncRepository(
     }
 
     suspend fun paper(): Result<PaperResponse> = runCatching {
-        val api = api() ?: error("no server URL configured")
-        api.paper()
+        (api() ?: error("no server URL configured")).paper()
     }
 
     suspend fun testConnection(): Result<String> = runCatching {
         val api = api() ?: error("no server URL configured")
         api.health()
-        val v = api.version()
-        "EdgeStack API ${v.version} (${v.configHash.take(8)})"
+        val version = api.version()
+        "EdgeStack API ${version.version} (${version.configHash.take(8)})"
     }
 
-    /** Best-effort sync; returns a short human status line. */
+    suspend fun preview(): Result<PortfolioRecommendationV2> = runCatching {
+        val api = api() ?: error("no server URL configured")
+        val settings = settingsStore.current()
+        val bundle = recommendationRepo.loadBundle()
+        val previousState = settingsStore.decodedRiskState(settings)
+            ?: bundle.defaultRecommendation.outputRiskState
+        val profile = settings.profile(previousState.currentEquity)
+        val result = api.previewRecommendation(
+            RecommendationPreviewRequestV2(profile = profile, riskState = previousState),
+        )
+        recommendationRepo.savePreview(result)
+        settingsStore.saveCanonicalState(
+            result.status,
+            fingerprint(result),
+            result.freshness.isFresh,
+            result.outputRiskState,
+        )
+        result
+    }
+
     suspend fun syncAll(): Result<String> = runCatching {
         val api = api() ?: error("no server URL configured")
-        var boardMsg = "board: skipped"
-        runCatching { api.board() }.onSuccess {
-            boardRepo.save(it)
-            boardMsg = "board: ${it.asOf}"
+        val bundle = api.latestRecommendation()
+        recommendationRepo.saveBundle(bundle)
+        val previewResult = preview()
+        val preview = previewResult.getOrElse {
+            recommendationRepo.clearPreview()
+            val fallback = bundle.defaultRecommendation
+            settingsStore.saveCanonicalState(
+                fallback.status,
+                fingerprint(fallback),
+                fallback.freshness.isFresh,
+                fallback.outputRiskState,
+            )
+            fallback
         }
-        runCatching { api.picks() }.onSuccess { boardRepo.savePicks(it) }
-        val edges: List<Edge> = api.edges()
-        edgesRepo.save(EdgesBundle(edges = edges))
         settingsStore.stampSync(System.currentTimeMillis())
-        "$boardMsg, ${edges.size} edges"
+        "canonical ${bundle.session}: ${preview.status}, ${"%.2f".format(preview.effectiveLeverage)}x"
     }
+
+    private fun fingerprint(recommendation: PortfolioRecommendationV2): String = listOf(
+        recommendation.status,
+        recommendation.effectiveLeverage.toString(),
+        recommendation.personalizedTargetWeights.joinToString { "${it.symbol}:${it.weight}" },
+        recommendation.freshness.isFresh.toString(),
+        recommendation.outputRiskState.drawdownState,
+    ).joinToString("|")
 }
 
 class CalendarRepository(private val seed: SeedAssets) {
