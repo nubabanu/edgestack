@@ -224,6 +224,39 @@ class PortfolioRecommendationV2(V2Model):
     warnings: tuple[str, ...] = ()
     compatibility_metadata: dict[str, str] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def _uniform_sizing_invariants(self) -> PortfolioRecommendationV2:
+        cash = [
+            weight
+            for weight in self.personalized_target_weights
+            if weight.asset_kind is AssetKind.CASH
+        ]
+        if len(cash) != 1 or abs(cash[0].weight - (1.0 - self.effective_leverage)) > 1e-8:
+            raise ValueError("personalized recommendation requires one balancing cash weight")
+        risky = {
+            weight.symbol: weight.weight
+            for weight in self.personalized_target_weights
+            if weight.asset_kind is not AssetKind.CASH and abs(weight.weight) > 1e-12
+        }
+        if abs(sum(abs(weight) for weight in risky.values()) - self.effective_leverage) > 1e-8:
+            raise ValueError("risky target gross must equal effective leverage")
+        if self.compatibility_metadata.get("stale_preservation") != "true":
+            base = {
+                weight.symbol: weight.weight
+                for weight in self.base_recommendation_weights
+                if abs(weight.weight) > 1e-12
+            }
+            expected = {
+                symbol: weight * self.effective_leverage
+                for symbol, weight in base.items()
+                if abs(weight * self.effective_leverage) > 1e-12
+            }
+            if set(risky) != set(expected) or any(
+                abs(risky[symbol] - expected[symbol]) > 1e-8 for symbol in expected
+            ):
+                raise ValueError("risk preferences may only scale base weights uniformly")
+        return self
+
 
 class CanonicalRecommendationBundleV2(V2Model):
     schema_version: Literal[2] = 2
@@ -257,6 +290,15 @@ class CanonicalRecommendationBundleV2(V2Model):
                 raise ValueError("bundle children must share the bundle version set")
         if self.baseline_policy.policy_version != self.policy_version:
             raise ValueError("baseline policy version does not match bundle")
+        if self.default_risk_profile.profile_hash != self.default_recommendation.risk_profile_hash:
+            raise ValueError("default risk profile does not match default recommendation")
+        if (
+            self.base_recommendation.unlevered_base_weights
+            != self.default_recommendation.base_recommendation_weights
+            or self.base_recommendation.baseline_weights
+            != self.default_recommendation.baseline_weights
+        ):
+            raise ValueError("default recommendation must size the bundled frozen base")
         return self
 
     @property

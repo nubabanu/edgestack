@@ -9,14 +9,27 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from pathlib import Path
 
 from edgestack import __version__
+from edgestack.api.contracts import RecommendationPreviewRequestV2
 from edgestack.config import EdgeStackConfig
 from edgestack.data.catalog import DataCatalog
 from edgestack.discovery.edge_store import current_statuses, load_edges
 from edgestack.exceptions import DataError, EdgeStackError
-from edgestack.reporting.signal_report import load_report
+from edgestack.recommendation.compatibility import (
+    board_projection,
+    master_projection,
+    picks_projection,
+    signals_projection,
+)
+from edgestack.recommendation.schemas import (
+    CanonicalRecommendationBundleV2,
+    PortfolioRecommendationV2,
+)
+from edgestack.recommendation.service import (
+    CanonicalBundleRepository,
+    CanonicalRecommendationService,
+)
 from edgestack.types import EdgeStatus
 
 DISCLAIMER = "Research output only. Not investment advice."
@@ -32,12 +45,28 @@ def create_app(cfg: EdgeStackConfig):
 
     app = FastAPI(title="EdgeStack API", version=__version__, description=DISCLAIMER)
     catalog = DataCatalog(cfg)
+    recommendations = CanonicalRecommendationService(
+        CanonicalBundleRepository(catalog.artifacts_dir)
+    )
 
-    def _report(as_of: date | None = None):
+    def _canonical() -> CanonicalRecommendationBundleV2:
         try:
-            return load_report(catalog, as_of)
+            return recommendations.latest()
         except DataError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    def _deprecated(payload: dict | list):
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            content=payload,
+            headers={
+                "Deprecation": "true",
+                "Sunset": "Thu, 31 Dec 2026 23:59:59 GMT",
+                "Link": '</recommendations/latest>; rel="successor-version"',
+                "X-EdgeStack-Canonical": "true",
+            },
+        )
 
     @app.get("/health")
     def health() -> dict:
@@ -74,15 +103,27 @@ def create_app(cfg: EdgeStackConfig):
                 return json.loads(e.model_dump_json())
         raise HTTPException(status_code=404, detail=f"unknown edge {edge_id}")
 
-    @app.get("/board")
-    def board() -> dict:
-        path = Path("artifacts") / "live_board.json"
-        if not path.exists():
-            raise HTTPException(
-                status_code=404,
-                detail="live board not generated; run scripts/live_signals.py",
+    @app.get("/recommendations/latest", response_model=CanonicalRecommendationBundleV2)
+    def recommendations_latest() -> CanonicalRecommendationBundleV2:
+        return _canonical()
+
+    @app.post("/recommendations/preview", response_model=PortfolioRecommendationV2)
+    def recommendations_preview(
+        request: RecommendationPreviewRequestV2,
+    ) -> PortfolioRecommendationV2:
+        try:
+            return recommendations.preview(
+                profile=request.profile,
+                state=request.risk_state,
+                equity_override=request.equity_override,
+                reset_requested=request.reset_requested,
             )
-        return json.loads(path.read_text(encoding="utf-8"))
+        except DataError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/board", deprecated=True)
+    def board():
+        return _deprecated(board_projection(_canonical()))
 
     @app.get("/paper")
     def paper() -> dict:
@@ -104,41 +145,37 @@ def create_app(cfg: EdgeStackConfig):
             pass
         return {"state": state, "equity_history": history, "disclaimer": DISCLAIMER}
 
-    @app.get("/picks")
-    def picks() -> dict:
-        path = Path("artifacts") / "picks.json"
-        if not path.exists():
+    @app.get("/picks", deprecated=True)
+    def picks():
+        return _deprecated(picks_projection(_canonical()))
+
+    @app.get("/master", deprecated=True)
+    def master():
+        return _deprecated(master_projection(_canonical()))
+
+    @app.get("/signals/latest", deprecated=True)
+    def signals_latest():
+        return _deprecated(signals_projection(_canonical()))
+
+    @app.get("/signals/{as_of}", deprecated=True)
+    def signals_by_date(as_of: date):
+        bundle = _canonical()
+        if as_of != bundle.as_of.date():
             raise HTTPException(
                 status_code=404,
-                detail="picks not generated; run scripts/make_picks.py",
+                detail="only the atomically published canonical session is available",
             )
-        return json.loads(path.read_text(encoding="utf-8"))
+        return _deprecated(signals_projection(bundle))
 
-    @app.get("/master")
-    def master() -> dict:
-        path = Path("artifacts") / "master_signal.json"
-        if not path.exists():
-            raise HTTPException(
-                status_code=404,
-                detail="master signal not generated; run scripts/master_signal.py",
-            )
-        return json.loads(path.read_text(encoding="utf-8"))
+    @app.get("/candidates/long", deprecated=True)
+    def candidates_long():
+        _canonical()
+        return _deprecated([])
 
-    @app.get("/signals/latest")
-    def signals_latest() -> dict:
-        return json.loads(_report().model_dump_json())
-
-    @app.get("/signals/{as_of}")
-    def signals_by_date(as_of: date) -> dict:
-        return json.loads(_report(as_of).model_dump_json())
-
-    @app.get("/candidates/long")
-    def candidates_long() -> list[dict]:
-        return [json.loads(c.model_dump_json()) for c in _report().long_candidates]
-
-    @app.get("/candidates/short")
-    def candidates_short() -> list[dict]:
-        return [json.loads(c.model_dump_json()) for c in _report().short_candidates]
+    @app.get("/candidates/short", deprecated=True)
+    def candidates_short():
+        _canonical()
+        return _deprecated([])
 
     @app.get("/monitoring/edges")
     def monitoring_edges() -> list[dict]:

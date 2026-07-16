@@ -399,6 +399,7 @@ def size_recommendation(
         warnings=tuple(warnings),
         compatibility_metadata={
             "sizing_only": "true",
+            "stale_preservation": "true" if preserving_stale else "false",
             "funding_series": "DGS3MO",
             "funding_rate_as_of": inputs.funding_rate_as_of.isoformat(),
         },

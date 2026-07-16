@@ -83,10 +83,12 @@ def test_api_read_only_surface(prepared: EdgeStackConfig) -> None:
     assert detail["identity"]["edge_id"] == edges[0]["edge_id"]
     assert client.get("/edges/nope").status_code == 404
 
-    latest = client.get("/signals/latest").json()
-    assert "long_candidates" in latest and "abstentions" in latest
-    assert client.get("/candidates/long").status_code == 200
-    assert client.get("/candidates/short").status_code == 200
+    # Legacy candidates fail closed until an atomic V2 bundle is published;
+    # the old signal report is no longer an actionable API fallback.
+    assert client.get("/recommendations/latest").status_code == 404
+    assert client.get("/signals/latest").status_code == 404
+    assert client.get("/candidates/long").status_code == 404
+    assert client.get("/candidates/short").status_code == 404
 
     runs = client.get("/backtests").json()
     assert isinstance(runs, list)
