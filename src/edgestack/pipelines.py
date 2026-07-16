@@ -55,6 +55,7 @@ def run_intraday_download(
     *,
     symbols: tuple[str, ...],
     provider: str = "yahoo",
+    interval: str = "60m",
 ) -> None:
     from edgestack.data.catalog import DataCatalog
     from edgestack.data.providers.base import IntradayDataProvider
@@ -64,12 +65,12 @@ def run_intraday_download(
     price_provider = get_price_provider(provider, cfg)
     if not isinstance(price_provider, IntradayDataProvider):
         raise ProviderError(f"provider {provider!r} has no intraday capability")
-    bars = price_provider.fetch_intraday_bars(symbols, start, end, interval="60m")
+    bars = price_provider.fetch_intraday_bars(symbols, start, end, interval=interval)
     catalog = DataCatalog(cfg)
     written = catalog.write_intraday_bars(bars, provider=provider)
     catalog.audit("intraday_data_download", reason=provider, symbols=len(written), rows=len(bars))
     for symbol in symbols:
-        print(f"  {symbol}: {written.get(symbol, 0)} hourly rows")
+        print(f"  {symbol}: {written.get(symbol, 0)} {interval} rows")
 
 
 def run_data_validate(cfg: EdgeStackConfig) -> None:

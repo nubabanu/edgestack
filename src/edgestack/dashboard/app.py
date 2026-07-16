@@ -105,7 +105,10 @@ def main() -> None:  # pragma: no cover - interactive UI
                 daily_bars=daily,
                 intended_entry_at=intended,
                 intraday_bars=catalog.load_intraday_bars(
-                    resolution.resolved_symbol, end=bundle.as_of
+                    resolution.resolved_symbol, interval_minutes=60, end=bundle.as_of
+                ),
+                fifteen_minute_bars=catalog.load_intraday_bars(
+                    resolution.resolved_symbol, interval_minutes=15, end=bundle.as_of
                 ),
                 timing_artifacts=repository.timing_artifacts(),
                 news=repository.news_evidence(resolution.resolved_symbol),

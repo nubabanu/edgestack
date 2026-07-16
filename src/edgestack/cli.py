@@ -128,6 +128,7 @@ def intraday_download(
     ),
     end: str = typer.Option(str(date.today()), help="End date YYYY-MM-DD."),
     provider: str = typer.Option("yahoo", help="Intraday-capable provider."),
+    interval: str = typer.Option("60m", help="Bar interval: 15m or 60m."),
     config: Path | None = _CONFIG_OPT,
 ) -> None:
     """Download hourly bars used by day/hour timing analysis."""
@@ -144,6 +145,7 @@ def intraday_download(
         date.fromisoformat(end),
         symbols=wanted,
         provider=provider,
+        interval=interval,
     )
 
 

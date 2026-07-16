@@ -21,7 +21,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Any
+from typing import Any, cast
 
 import duckdb
 import pandas as pd
@@ -312,31 +312,40 @@ class DataCatalog:
         bars = validate_intraday_bars(df, context=f"intraday[{provider}]")
         written: dict[str, int] = {}
         for symbol, group in bars.groupby("symbol", sort=True):
-            path = safe_child_path(self.intraday_dir, f"{symbol}.parquet")
-            merged = group
-            if path.exists():
-                merged = (
-                    pd.concat([pd.read_parquet(path), group], ignore_index=True)
-                    .drop_duplicates(["symbol", "timestamp"], keep="last")
-                    .sort_values("timestamp")
-                    .reset_index(drop=True)
-                )
-            import io
+            written[str(symbol)] = 0
+            for interval, interval_group in group.groupby("interval_minutes", sort=True):
+                interval_value = int(cast(Any, interval))
+                directory = self.intraday_dir / f"{interval_value}m"
+                path = safe_child_path(directory, f"{symbol}.parquet")
+                merged = interval_group
+                if path.exists():
+                    merged = (
+                        pd.concat([pd.read_parquet(path), interval_group], ignore_index=True)
+                        .drop_duplicates(["symbol", "timestamp", "interval_minutes"], keep="last")
+                        .sort_values("timestamp")
+                        .reset_index(drop=True)
+                    )
+                import io
 
-            buffer = io.BytesIO()
-            merged.loc[:, list(INTRADAY_BAR_COLUMNS)].to_parquet(buffer, index=False)
-            atomic_write_bytes(path, buffer.getvalue())
-            written[str(symbol)] = len(group)
+                buffer = io.BytesIO()
+                merged.loc[:, list(INTRADAY_BAR_COLUMNS)].to_parquet(buffer, index=False)
+                atomic_write_bytes(path, buffer.getvalue())
+                written[str(symbol)] += len(interval_group)
         return written
 
     def load_intraday_bars(
         self,
         symbol: str,
         *,
+        interval_minutes: int = 60,
         start: datetime | None = None,
         end: datetime | None = None,
     ) -> pd.DataFrame:
-        path = safe_child_path(self.intraday_dir, f"{symbol.upper()}.parquet")
+        if interval_minutes not in {15, 60}:
+            raise DataError("intraday interval must be 15 or 60 minutes")
+        path = safe_child_path(
+            self.intraday_dir / f"{interval_minutes}m", f"{symbol.upper()}.parquet"
+        )
         if not path.exists():
             return pd.DataFrame(columns=INTRADAY_BAR_COLUMNS)
         output = validate_intraday_bars(pd.read_parquet(path), context=f"intraday[{symbol}]")
@@ -417,8 +426,8 @@ class DataCatalog:
         ):
             if not directory.exists():
                 continue
-            for path in sorted(directory.glob("*.parquet")):
-                h.update(f"{kind}/{path.name}".encode())
+            for path in sorted(directory.rglob("*.parquet")):
+                h.update(f"{kind}/{path.relative_to(directory).as_posix()}".encode())
                 with path.open("rb") as handle:
                     for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                         h.update(chunk)

@@ -122,6 +122,7 @@ def test_intraday_round_trip_changes_data_version(catalog: DataCatalog) -> None:
         {
             "symbol": "AAA",
             "timestamp": timestamps,
+            "interval_minutes": 60,
             "open": [100.0, 101.0, 100.5],
             "high": [101.2, 101.5, 101.0],
             "low": [99.8, 100.4, 99.9],
@@ -131,8 +132,15 @@ def test_intraday_round_trip_changes_data_version(catalog: DataCatalog) -> None:
     )
 
     catalog.write_intraday_bars(bars, provider="fixture")
+    catalog.write_intraday_bars(
+        bars.assign(interval_minutes=15),
+        provider="fixture",
+    )
     loaded = catalog.load_intraday_bars("AAA")
+    loaded_15 = catalog.load_intraday_bars("AAA", interval_minutes=15)
 
     assert len(loaded) == 3
     assert str(loaded["timestamp"].dt.tz) == "UTC"
+    assert set(loaded["interval_minutes"]) == {60}
+    assert set(loaded_15["interval_minutes"]) == {15}
     assert catalog.data_manifest_hash() != before

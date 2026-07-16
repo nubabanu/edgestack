@@ -119,7 +119,9 @@ def parse_corporate_actions(symbol: str, payload: dict[str, Any]) -> pd.DataFram
     return pd.DataFrame(rows, columns=columns)
 
 
-def parse_intraday_chart_payload(symbol: str, payload: dict[str, Any]) -> pd.DataFrame:
+def parse_intraday_chart_payload(
+    symbol: str, payload: dict[str, Any], *, interval_minutes: int = 60
+) -> pd.DataFrame:
     chart = payload.get("chart") or {}
     if chart.get("error"):
         raise ProviderError(f"yahoo intraday error for {symbol}: {chart['error']}")
@@ -135,6 +137,7 @@ def parse_intraday_chart_payload(symbol: str, payload: dict[str, Any]) -> pd.Dat
         {
             "symbol": symbol.upper(),
             "timestamp": pd.to_datetime(timestamps, unit="s", utc=True),
+            "interval_minutes": interval_minutes,
             "open": quote.get("open"),
             "high": quote.get("high"),
             "low": quote.get("low"),
@@ -179,6 +182,7 @@ class YahooProvider(PriceDataProvider, IntradayDataProvider):
                 "no delisted securities: survivorship-biased symbol coverage",
                 "no point-in-time universe membership",
                 "60m history is vendor-limited to 729 calendar days per request",
+                "15m history is vendor-limited to 59 calendar days per request",
             ),
             frequencies=("1d", "60m"),
         )
@@ -244,10 +248,14 @@ class YahooProvider(PriceDataProvider, IntradayDataProvider):
     def fetch_intraday_bars(
         self, symbols: tuple[str, ...], start: date, end: date, *, interval: str = "60m"
     ) -> pd.DataFrame:
-        if interval != "60m":
-            raise ProviderError("the V2 timing workflow currently accepts only 60m Yahoo bars")
-        if (end - start).days > 729:
-            raise ProviderError("Yahoo 60m requests are limited to at most 729 calendar days")
+        limits = {"15m": (15, 59), "60m": (60, 729)}
+        if interval not in limits:
+            raise ProviderError("the V2 timing workflow accepts only 15m or 60m Yahoo bars")
+        interval_minutes, maximum_days = limits[interval]
+        if (end - start).days > maximum_days:
+            raise ProviderError(
+                f"Yahoo {interval} requests are limited to at most {maximum_days} calendar days"
+            )
         frames: list[pd.DataFrame] = []
         params = {
             "period1": str(int(pd.Timestamp(start, tz="UTC").timestamp())),
@@ -260,7 +268,9 @@ class YahooProvider(PriceDataProvider, IntradayDataProvider):
             if index:
                 time.sleep(_POLITE_DELAY_S)
             payload = self._request_with_retries(symbol, params)
-            frames.append(parse_intraday_chart_payload(symbol, payload))
+            frames.append(
+                parse_intraday_chart_payload(symbol, payload, interval_minutes=interval_minutes)
+            )
         if not frames:
             raise ProviderError(f"yahoo returned no intraday data for {symbols!r}")
         return validate_intraday_bars(

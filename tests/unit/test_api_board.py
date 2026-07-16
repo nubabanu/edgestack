@@ -291,3 +291,43 @@ def test_instrument_analysis_is_version_bound_and_non_promotional(cfg: EdgeStack
     assert payload["horizon_analyses"][0]["best_window"] is None
     assert payload["horizon_analyses"][1]["best_window"]["actionable"] is False
     assert len(catalog.audit_events("test_set_accessed")) == 1
+
+    recheck = client.post(
+        "/instruments/recheck",
+        json={
+            "previous_analysis": payload,
+            "request": {
+                "symbol": "AAA",
+                "intended_entry_at": "2026-07-20T09:30:00-04:00",
+                "round_trip_cost_bps": 12,
+            },
+        },
+    )
+    assert recheck.status_code == 200
+    assert recheck.json()["previous_analysis_id"] == payload["analysis_id"]
+    assert recheck.json()["analysis"]["recheck_plan"]["cadence_minutes"] == 60
+
+    leaders = client.post(
+        "/instruments/pattern-leaders",
+        json={
+            "symbols": ["AAA", "MISSING"],
+            "resolution": "DAY",
+            "horizon": "WEEK",
+        },
+    )
+    assert leaders.status_code == 200
+    assert leaders.json()["leaders"][0]["symbol"] == "AAA"
+    assert leaders.json()["leaders"][0]["actionable"] is False
+    assert leaders.json()["skipped_symbols"] == ["MISSING"]
+    assert "watchlist research only" in leaders.json()["warning"]
+
+    day_only = client.post(
+        "/instruments/analyze",
+        json={"symbol": "AAA", "intended_entry_date": "2026-07-21"},
+    )
+    assert day_only.status_code == 200
+    assert all(
+        item["resolution"] not in {"MINUTE_15", "HOUR"}
+        for item in day_only.json()["chosen_time_ratings"]
+    )
+    assert any(item["resolution"] == "DAY" for item in day_only.json()["chosen_time_ratings"])

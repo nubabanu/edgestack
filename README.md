@@ -60,6 +60,8 @@ The orchestrator fails on data-quality, artifact, schema, or checksum errors. It
 - `GET /recommendations/latest` returns the verified canonical bundle.
 - `POST /recommendations/preview` accepts `RiskProfileV2`, optional `RiskStateV2`/equity override, and an optional reset request. It only recalculates sizing and stress; it cannot research, promote, select, or persist.
 - `POST /instruments/analyze` accepts a stock/ETF ticker or commodity name/proxy and an optional intended-entry timestamp. It returns day/week/month/year best and worst historical windows, tailwinds, headwinds, counter-effects, news context, current-year observations, and explicit abstentions. Only compatible frozen promoted timing artifacts can make a window actionable or create a directional rating.
+- `POST /instruments/recheck` compares a prior analysis with the latest canonical inputs and reports whether the selected timing still holds or a higher-ranked alternative emerged.
+- `POST /instruments/pattern-leaders` scans 1–50 explicitly supplied symbols and returns a research-only ranking. It never promotes the symbol/slot search.
 - `/board`, `/picks`, `/master`, `/signals/*`, and `/candidates/*` are deprecated compatibility projections. Board rows and picks are empty; master contains canonical weights only.
 
 Run the API with:
@@ -68,14 +70,17 @@ Run the API with:
 edgestack api serve --config configs/live.yaml
 ```
 
-Hourly analysis is opt-in because daily bars cannot identify a best hour:
+Hourly and 15-minute analysis are opt-in because daily bars cannot identify an intraday slot:
 
 ```bash
-edgestack data intraday-download --symbols GLD,AAPL --start 2025-07-16 --end 2026-07-16 --config configs/live.yaml
+edgestack data intraday-download --symbols GLD,AAPL --interval 60m --start 2025-07-16 --end 2026-07-16 --config configs/live.yaml
+edgestack data intraday-download --symbols GLD,AAPL --interval 15m --start 2026-05-20 --end 2026-07-16 --config configs/live.yaml
 python scripts/nightly.py --config configs/live.yaml --skip-data-update --skip-features
 ```
 
 Commodity words resolve to disclosed tradable proxies (`GOLD → GLD`, `OIL/WTI → USO`, `BRENT → BNO`, `SILVER → SLV`). Proxy fees, tracking error, roll yield, and trading hours remain visible warnings.
+
+When an intended entry includes a date and time, EdgeStack separately rates its 15-minute slot, hour, weekday across every holding horizon, position within the month, and month of the year. It displays rank, cost-adjusted historical win score, a better compatible slot if available, and conditional day/week/month/year exits. Win score is a shrunk historical frequency with an ESS confidence penalty—not a promised probability of profit. Rechecks tighten from daily to six-hourly, hourly, and finally 15-minute cadence as entry approaches.
 
 ## User risk sizing
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -28,6 +29,7 @@ from edgestack.recommendation.schemas import (
     RiskProfileV2,
     RiskStateV2,
 )
+from edgestack.recommendation.trade_calendar import build_recheck_plan, compare_recheck
 
 SESSION = date(2026, 7, 16)
 
@@ -111,8 +113,8 @@ def _daily(symbol: str = "GLD", sessions: int = 900) -> pd.DataFrame:
     )
 
 
-def _intraday(symbol: str = "GLD") -> pd.DataFrame:
-    sessions = pd.bdate_range(end=SESSION, periods=60)
+def _intraday(symbol: str = "GLD", *, sessions_count: int = 60) -> pd.DataFrame:
+    sessions = pd.bdate_range(end=SESSION, periods=sessions_count)
     rows = []
     rng = np.random.default_rng(22)
     for session in sessions:
@@ -129,11 +131,42 @@ def _intraday(symbol: str = "GLD") -> pd.DataFrame:
                 {
                     "symbol": symbol,
                     "timestamp": timestamp,
+                    "interval_minutes": 60,
                     "open": price,
                     "high": max(price, next_price) * 1.001,
                     "low": min(price, next_price) * 0.999,
                     "close": next_price,
                     "volume": 100_000.0,
+                }
+            )
+            price = next_price
+    return pd.DataFrame(rows)
+
+
+def _fifteen_minute(symbol: str = "GLD", *, sessions_count: int = 42) -> pd.DataFrame:
+    sessions = pd.bdate_range(end=SESSION, periods=sessions_count)
+    rows = []
+    rng = np.random.default_rng(23)
+    for session in sessions:
+        timestamps = pd.date_range(
+            pd.Timestamp(session.date(), tz="UTC") + pd.Timedelta(hours=13, minutes=30),
+            periods=26,
+            freq="15min",
+        )
+        price = 100.0
+        for index, timestamp in enumerate(timestamps):
+            drift = 0.0015 if index == 4 else -0.00005
+            next_price = price * (1 + drift + rng.normal(0, 0.001))
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "timestamp": timestamp,
+                    "interval_minutes": 15,
+                    "open": price,
+                    "high": max(price, next_price) * 1.001,
+                    "low": min(price, next_price) * 0.999,
+                    "close": next_price,
+                    "volume": 30_000.0,
                 }
             )
             price = next_price
@@ -176,6 +209,10 @@ def test_commodity_alias_uses_tradable_proxy_and_discloses_tracking_risk() -> No
     assert resolution.instrument_kind is InstrumentKind.COMMODITY_PROXY
     assert resolution.proxy_for == "physical gold"
     assert "tracking error" in " ".join(resolution.notes)
+    futures = resolve_instrument("CL=F")
+    assert futures.instrument_kind is InstrumentKind.COMMODITY_PROXY
+    assert futures.proxy_for == "commodity futures contract"
+    assert "expiry" in " ".join(futures.notes)
 
 
 def test_observational_windows_never_create_rating_or_claim_an_hour() -> None:
@@ -281,3 +318,74 @@ def test_frozen_news_is_context_only_and_future_news_is_excluded() -> None:
     assert [item.news_id for item in result.news] == ["current"]
     assert result.news[0].actionable_contribution == 0
     assert result.overall_rating is DirectionalRating.NOT_RATED
+
+
+def test_selected_time_is_ranked_with_alternatives_exits_and_tailwind_calendars() -> None:
+    bundle = _bundle()
+    intended = datetime(2026, 7, 21, 9, 30, tzinfo=ZoneInfo("America/New_York"))
+    result = analyze_instrument(
+        bundle=bundle,
+        resolution=resolve_instrument("GLD", canonical=bundle),
+        daily_bars=_daily(),
+        intraday_bars=_intraday(sessions_count=400),
+        fifteen_minute_bars=_fifteen_minute(),
+        intended_entry_at=intended,
+    )
+
+    resolutions = {item.resolution for item in result.tailwind_calendars}
+    assert {"MINUTE_15", "HOUR", "DAY", "MONTH", "YEAR"} == {item.value for item in resolutions}
+    fifteen_rating = next(
+        item for item in result.chosen_time_ratings if item.resolution.value == "MINUTE_15"
+    )
+    assert fifteen_rating.matched_slot == "09:30"
+    assert fifteen_rating.score is not None
+    assert fifteen_rating.better_alternative is not None
+    assert fifteen_rating.better_alternative.score.win_score > fifteen_rating.score.win_score
+    weekday_rating = next(
+        item
+        for item in result.chosen_time_ratings
+        if item.resolution.value == "DAY" and item.horizon is TimingHorizon.WEEK
+    )
+    assert weekday_rating.score is not None
+    assert weekday_rating.score.rank >= 1
+    assert len(result.exit_plans) == 4
+    assert all(item.entry_slot for item in result.exit_plans)
+    assert next(
+        item for item in result.exit_plans if item.horizon is TimingHorizon.DAY
+    ).preferred_exit
+    assert result.recheck_plan.enabled
+    assert result.recheck_plan.cadence_minutes == 60
+
+
+def test_recheck_cadence_tightens_and_server_reports_better_alternative_changes() -> None:
+    as_of = datetime(2026, 7, 16, 12, tzinfo=UTC)
+    assert build_recheck_plan(as_of, as_of + pd.Timedelta(days=40)).cadence_minutes == 1_440
+    assert build_recheck_plan(as_of, as_of + pd.Timedelta(days=10)).cadence_minutes == 360
+    assert build_recheck_plan(as_of, as_of + pd.Timedelta(days=2)).cadence_minutes == 60
+    assert build_recheck_plan(as_of, as_of + pd.Timedelta(hours=2)).cadence_minutes == 15
+
+    bundle = _bundle()
+    intended = datetime(2026, 7, 21, 9, 30, tzinfo=ZoneInfo("America/New_York"))
+    previous = analyze_instrument(
+        bundle=bundle,
+        resolution=resolve_instrument("GLD", canonical=bundle),
+        daily_bars=_daily(),
+        intraday_bars=_intraday(sessions_count=400),
+        fifteen_minute_bars=_fifteen_minute(),
+        intended_entry_at=intended,
+    )
+    current = previous.model_copy(
+        update={
+            "analysis_id": "new-analysis",
+            "chosen_time_ratings": tuple(
+                item.model_copy(update={"rating": "WEAK"})
+                if item.resolution.value == "MINUTE_15"
+                else item
+                for item in previous.chosen_time_ratings
+            ),
+        }
+    )
+    comparison = compare_recheck(previous, current)
+
+    assert not comparison.recommendation_still_holds
+    assert comparison.previous_analysis_id == previous.analysis_id

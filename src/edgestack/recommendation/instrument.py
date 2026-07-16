@@ -37,6 +37,7 @@ from edgestack.recommendation.schemas import (
     EvidenceGrade,
     SleeveContributionV2,
 )
+from edgestack.recommendation.trade_calendar import build_trade_calendars
 from edgestack.validation.clustered import session_effective_sample_size
 
 _SYMBOL = re.compile(r"^[A-Z0-9.^=_-]{1,24}$")
@@ -150,7 +151,9 @@ def analyze_instrument(
     resolution: InstrumentResolutionV2,
     daily_bars: pd.DataFrame,
     intended_entry_at: datetime | None = None,
+    rate_intraday_choice: bool = True,
     intraday_bars: pd.DataFrame | None = None,
+    fifteen_minute_bars: pd.DataFrame | None = None,
     timing_artifacts: tuple[FrozenTimingArtifactV2, ...] = (),
     news: tuple[NewsEvidenceV2, ...] = (),
     round_trip_cost_bps: float = 10.0,
@@ -169,13 +172,24 @@ def analyze_instrument(
         if effect.direction in {EffectDirection.MIXED, EffectDirection.NEUTRAL}
     )
 
+    preferred_intraday = (
+        fifteen_minute_bars
+        if fifteen_minute_bars is not None and not fifteen_minute_bars.empty
+        else intraday_bars
+    )
+    preferred_resolution = (
+        "15-minute"
+        if fifteen_minute_bars is not None and not fifteen_minute_bars.empty
+        else "hourly"
+    )
     analyses = (
         _intraday_analysis(
-            intraday_bars,
+            preferred_intraday,
             symbol=symbol,
             intended=intended_entry_at,
             cost_bps=round_trip_cost_bps,
             artifact=_artifact_for(compatible_artifacts, TimingHorizon.DAY),
+            resolution=preferred_resolution,
         ),
         _daily_horizon_analysis(
             daily,
@@ -269,6 +283,16 @@ def analyze_instrument(
     current_news = tuple(
         item for item in news if item.symbol == symbol and item.published_at <= bundle.as_of
     )
+    calendars, choice_ratings, exit_plans, recheck_plan = build_trade_calendars(
+        daily=daily,
+        hourly=intraday_bars,
+        fifteen_minute=fifteen_minute_bars,
+        intended_entry_at=intended_entry_at,
+        cost_bps=round_trip_cost_bps,
+        timing_artifacts=compatible_artifacts,
+        as_of=bundle.as_of,
+        rate_intraday_choice=rate_intraday_choice,
+    )
     warnings = list(resolution.notes)
     warnings.extend(
         [
@@ -283,6 +307,10 @@ def analyze_instrument(
         warnings.append("No compatible frozen news snapshot is available for this instrument.")
     if intraday_bars is None or intraday_bars.empty:
         warnings.append("No hourly history is available; the system abstains from naming an hour.")
+    if fifteen_minute_bars is None or fifteen_minute_bars.empty:
+        warnings.append(
+            "No 15-minute history is available; the system abstains from a 15-minute calendar."
+        )
     if not enough_daily:
         warnings.append(f"Only {len(daily)} daily sessions are available; at least 252 are needed.")
 
@@ -295,6 +323,8 @@ def analyze_instrument(
                 "daily_through": daily["date"].max() if not daily.empty else None,
                 "cost_bps": round_trip_cost_bps,
                 "timing_artifacts": [item.artifact_hash for item in compatible_artifacts],
+                "hourly_through": _latest_timestamp(intraday_bars),
+                "fifteen_minute_through": _latest_timestamp(fifteen_minute_bars),
             }
         ),
         resolution=resolution,
@@ -310,6 +340,10 @@ def analyze_instrument(
         canonical_portfolio_weight=weight,
         alignment=alignment,
         horizon_analyses=analyses,
+        chosen_time_ratings=choice_ratings,
+        exit_plans=exit_plans,
+        tailwind_calendars=calendars,
+        recheck_plan=recheck_plan,
         tailwinds=tailwinds,
         headwinds=headwinds,
         mixed_effects=mixed,
@@ -680,18 +714,21 @@ def _intraday_analysis(
     intended: datetime | None,
     cost_bps: float,
     artifact: FrozenTimingArtifactV2 | None,
+    resolution: str = "hourly",
 ) -> HorizonTimingAnalysisV2:
     if frame is None or frame.empty:
         if artifact is None:
             return HorizonTimingAnalysisV2(
                 horizon=TimingHorizon.DAY,
-                data_resolution="hourly",
+                data_resolution=resolution,
                 warning=(
                     "Hourly history is unavailable. No best or worst hour is inferred from "
                     "daily bars."
                 ),
             )
-        return _assemble_horizon([], TimingHorizon.DAY, intended, artifact, "frozen hourly rule")
+        return _assemble_horizon(
+            [], TimingHorizon.DAY, intended, artifact, f"frozen {resolution} rule"
+        )
     required = {"symbol", "timestamp", "open", "close"}
     if missing := required - set(frame.columns):
         raise DataError(f"intraday bars missing {sorted(missing)}")
@@ -717,9 +754,12 @@ def _intraday_analysis(
                 _Candidate(
                     horizon=TimingHorizon.DAY,
                     key=slot,
-                    label=f"{slot} New York → {holding} hourly bars",
+                    label=f"{slot} New York → {holding} {resolution} bars",
                     entry=f"At or after the {slot} America/New_York bar open",
-                    exit=f"{holding} hourly bars later; never carry merely because of this study",
+                    exit=(
+                        f"{holding} {resolution} bars later; never carry merely because of "
+                        "this study"
+                    ),
                     holding=1,
                     mean=mean,
                     ci_low=mean - 1.96 * se,
@@ -729,7 +769,13 @@ def _intraday_analysis(
                     ess=ess,
                 )
             )
-    return _assemble_horizon(raw, TimingHorizon.DAY, intended, artifact, "hourly")
+    return _assemble_horizon(raw, TimingHorizon.DAY, intended, artifact, resolution)
+
+
+def _latest_timestamp(frame: pd.DataFrame | None) -> str | None:
+    if frame is None or frame.empty or "timestamp" not in frame:
+        return None
+    return pd.to_datetime(frame["timestamp"], utc=True).max().isoformat()
 
 
 def _assemble_horizon(

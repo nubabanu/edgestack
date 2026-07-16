@@ -80,7 +80,10 @@ def test_parse_intraday_payload_preserves_timezone_aware_timestamp() -> None:
 
     assert len(bars) == 2
     assert str(bars["timestamp"].dt.tz) == "UTC"
+    assert bars["interval_minutes"].unique().tolist() == [60]
     assert bars["symbol"].unique().tolist() == ["AAPL"]
+    bars_15 = parse_intraday_chart_payload("aapl", FIXTURE, interval_minutes=15)
+    assert bars_15["interval_minutes"].unique().tolist() == [15]
 
 
 @pytest.mark.network

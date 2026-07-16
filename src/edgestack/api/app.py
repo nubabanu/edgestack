@@ -7,10 +7,16 @@ promote, persist, or mutate the atomically published bundle.
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
 
 from edgestack import __version__
-from edgestack.api.contracts import InstrumentAnalysisRequestV2, RecommendationPreviewRequestV2
+from edgestack.api.contracts import (
+    InstrumentAnalysisRequestV2,
+    InstrumentRecheckRequestV2,
+    PatternLeaderRequestV2,
+    RecommendationPreviewRequestV2,
+)
 from edgestack.config import EdgeStackConfig
 from edgestack.data.catalog import DataCatalog
 from edgestack.discovery.edge_store import current_statuses, load_edges
@@ -22,7 +28,12 @@ from edgestack.recommendation.compatibility import (
     signals_projection,
 )
 from edgestack.recommendation.instrument import analyze_instrument, resolve_instrument
-from edgestack.recommendation.instrument_schemas import InstrumentAnalysisV2
+from edgestack.recommendation.instrument_schemas import (
+    InstrumentAnalysisV2,
+    InstrumentRecheckV2,
+    PatternLeaderBoardV2,
+    PatternLeaderV2,
+)
 from edgestack.recommendation.schemas import (
     CanonicalRecommendationBundleV2,
     PortfolioRecommendationV2,
@@ -31,6 +42,7 @@ from edgestack.recommendation.service import (
     CanonicalBundleRepository,
     CanonicalRecommendationService,
 )
+from edgestack.recommendation.trade_calendar import compare_recheck
 from edgestack.types import EdgeStatus
 
 DISCLAIMER = "Research output only. Not investment advice."
@@ -126,48 +138,138 @@ def create_app(cfg: EdgeStackConfig):
     def instruments_analyze(request: InstrumentAnalysisRequestV2) -> InstrumentAnalysisV2:
         """Analyze one instrument without changing portfolio selection or promotion state."""
         try:
-            bundle = recommendations.latest()
-            resolution = resolve_instrument(
-                request.symbol,
-                requested_kind=request.instrument_kind,
-                canonical=bundle,
-            )
-            current_data_version = catalog.data_manifest_hash()
-            if current_data_version != bundle.data_version:
-                raise DataError(
-                    "market data changed after canonical publication; republish before analysis"
-                )
-            with catalog.guard.unlock(
-                reason=(
-                    "user-selected descriptive instrument analysis; previously accessed period; "
-                    "not promotion evidence"
-                )
-            ) as key:
-                daily = catalog.load_panel(
-                    symbols=(resolution.resolved_symbol,),
-                    end=bundle.session,
-                    unlock_key=key,
-                )
-            intraday = catalog.load_intraday_bars(
-                resolution.resolved_symbol,
-                end=bundle.as_of,
-            )
-            return analyze_instrument(
-                bundle=bundle,
-                resolution=resolution,
-                daily_bars=daily,
-                intended_entry_at=request.intended_entry_at,
-                intraday_bars=intraday,
-                timing_artifacts=recommendations.repository.timing_artifacts(),
-                news=(
-                    recommendations.repository.news_evidence(resolution.resolved_symbol)
-                    if request.include_news
-                    else ()
-                ),
-                round_trip_cost_bps=request.round_trip_cost_bps,
-            )
+            return _analyze_instrument(request)
         except DataError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/instruments/recheck", response_model=InstrumentRecheckV2)
+    def instruments_recheck(request: InstrumentRecheckRequestV2) -> InstrumentRecheckV2:
+        """Re-run the server-owned analysis and compare it with the prior signed contract."""
+        try:
+            current = _analyze_instrument(request.request)
+            return compare_recheck(request.previous_analysis, current)
+        except DataError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/instruments/pattern-leaders", response_model=PatternLeaderBoardV2)
+    def instruments_pattern_leaders(request: PatternLeaderRequestV2) -> PatternLeaderBoardV2:
+        """Rank explicitly requested symbols without turning the scan into a recommendation."""
+        bundle = _canonical()
+        candidates = []
+        skipped = []
+        searched_cells = 0
+        for symbol in request.symbols:
+            try:
+                analysis = _analyze_instrument(
+                    InstrumentAnalysisRequestV2(symbol=symbol, include_news=False)
+                )
+                calendar = next(
+                    (
+                        item
+                        for item in analysis.tailwind_calendars
+                        if item.resolution is request.resolution and item.horizon is request.horizon
+                    ),
+                    None,
+                )
+                if calendar is None or not calendar.cells:
+                    skipped.append(symbol)
+                    continue
+                searched_cells += len(calendar.cells)
+                candidates.append((analysis.resolution.resolved_symbol, calendar.cells[0]))
+            except DataError:
+                skipped.append(symbol)
+        candidates.sort(key=lambda item: item[1].score.win_score, reverse=True)
+        leaders = tuple(
+            PatternLeaderV2(
+                rank=rank,
+                symbol=symbol,
+                resolution=request.resolution,
+                horizon=request.horizon,
+                strongest_slot=cell.model_copy(
+                    update={
+                        "score": cell.score.model_copy(
+                            update={
+                                "multiple_testing_adjusted_pvalue": min(
+                                    1.0,
+                                    cell.score.multiple_testing_adjusted_pvalue
+                                    * searched_cells
+                                    / cell.score.candidates_ranked,
+                                ),
+                                "explanation": (
+                                    cell.score.explanation
+                                    + f" Leader scan adjusted over {searched_cells} cells."
+                                ),
+                            }
+                        )
+                    }
+                ),
+            )
+            for rank, (symbol, cell) in enumerate(candidates[: request.limit], start=1)
+        )
+        return PatternLeaderBoardV2(
+            as_of=bundle.as_of,
+            resolution=request.resolution,
+            horizon=request.horizon,
+            searched_symbols=request.symbols,
+            skipped_symbols=tuple(skipped),
+            searched_cells=searched_cells,
+            leaders=leaders,
+        )
+
+    def _analyze_instrument(request: InstrumentAnalysisRequestV2) -> InstrumentAnalysisV2:
+        bundle = recommendations.latest()
+        resolution = resolve_instrument(
+            request.symbol,
+            requested_kind=request.instrument_kind,
+            canonical=bundle,
+        )
+        current_data_version = catalog.data_manifest_hash()
+        if current_data_version != bundle.data_version:
+            raise DataError(
+                "market data changed after canonical publication; republish before analysis"
+            )
+        with catalog.guard.unlock(
+            reason=(
+                "user-selected descriptive instrument analysis; previously accessed period; "
+                "not promotion evidence"
+            )
+        ) as key:
+            daily = catalog.load_panel(
+                symbols=(resolution.resolved_symbol,),
+                end=bundle.session,
+                unlock_key=key,
+            )
+        intended_entry = request.intended_entry_at
+        if intended_entry is None and request.intended_entry_date is not None:
+            intended_entry = datetime.combine(
+                request.intended_entry_date,
+                time(9, 30),
+                tzinfo=ZoneInfo("America/New_York"),
+            )
+        return analyze_instrument(
+            bundle=bundle,
+            resolution=resolution,
+            daily_bars=daily,
+            intended_entry_at=intended_entry,
+            rate_intraday_choice=request.intended_entry_at is not None,
+            intraday_bars=catalog.load_intraday_bars(
+                resolution.resolved_symbol,
+                interval_minutes=60,
+                end=bundle.as_of,
+            ),
+            fifteen_minute_bars=catalog.load_intraday_bars(
+                resolution.resolved_symbol,
+                interval_minutes=15,
+                end=bundle.as_of,
+            ),
+            timing_artifacts=recommendations.repository.timing_artifacts(),
+            news=(
+                recommendations.repository.news_evidence(resolution.resolved_symbol)
+                if request.include_news
+                else ()
+            ),
+            round_trip_cost_bps=request.round_trip_cost_bps,
+        )
 
     @app.get("/board", deprecated=True)
     def board():

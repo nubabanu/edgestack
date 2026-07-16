@@ -48,6 +48,7 @@ CORPORATE_ACTION_COLUMNS: tuple[str, ...] = ("symbol", "date", "action_type", "v
 INTRADAY_BAR_COLUMNS: tuple[str, ...] = (
     "symbol",
     "timestamp",
+    "interval_minutes",
     "open",
     "high",
     "low",
@@ -150,18 +151,28 @@ def validate_intraday_bars(df: pd.DataFrame, *, context: str = "intraday_bars") 
     output = df.loc[:, list(INTRADAY_BAR_COLUMNS)].copy()
     output["symbol"] = output["symbol"].astype(str).str.upper()
     output["timestamp"] = pd.to_datetime(output["timestamp"], utc=True, errors="coerce")
+    output["interval_minutes"] = pd.to_numeric(output["interval_minutes"], errors="coerce").astype(
+        "Int64"
+    )
     for column in ("open", "high", "low", "close", "volume"):
         output[column] = pd.to_numeric(output[column], errors="coerce")
     problems: list[str] = []
-    if output[["timestamp", "open", "high", "low", "close", "volume"]].isna().any().any():
+    if (
+        output[["timestamp", "interval_minutes", "open", "high", "low", "close", "volume"]]
+        .isna()
+        .any()
+        .any()
+    ):
         problems.append("null timestamp, price, or volume")
-    if output.duplicated(["symbol", "timestamp"]).any():
-        problems.append("duplicate (symbol, timestamp) rows")
+    if output.duplicated(["symbol", "timestamp", "interval_minutes"]).any():
+        problems.append("duplicate (symbol, timestamp, interval_minutes) rows")
     valid = output.dropna()
     if (valid[["open", "high", "low", "close"]] <= 0).any().any():
         problems.append("non-positive prices")
     if (valid["volume"] < 0).any():
         problems.append("negative volume")
+    if (~valid["interval_minutes"].isin({15, 60})).any():
+        problems.append("interval_minutes must be 15 or 60")
     if (valid["high"] < valid[["open", "close", "low"]].max(axis=1)).any():
         problems.append("high below another price")
     if (valid["low"] > valid[["open", "close", "high"]].min(axis=1)).any():

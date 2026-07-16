@@ -71,7 +71,15 @@ Profile fields migrate the former base-leverage value once into the 0–5× ceil
 
 ## User-selected instrument timing
 
-`POST /instruments/analyze` is version-bound to the current canonical publication and cannot mutate portfolio selection, promotion, paper targets, or risk state. It resolves common commodity requests to tradable proxies and discloses the mapping. Daily adjusted-open total returns support week/month/year studies; separately ingested timezone-aware hourly bars support the day/hour study. Daily data is never used to infer an hour.
+`POST /instruments/analyze` is version-bound to the current canonical publication and cannot mutate portfolio selection, promotion, paper targets, or risk state. It resolves common commodity requests to tradable proxies and discloses the mapping. Daily adjusted-open total returns support day/week/month/year studies; separately stored timezone-aware 60-minute and 15-minute bars support intraday entry and exit studies. Daily data is never used to infer an hour or 15-minute slot.
+
+For a user-selected time, the response rates the nearest compatible 15-minute slot, hour, weekday under each holding horizon, month bucket, and month of year. Each rating includes rank, alternatives, cost-adjusted net return, confidence bound, ESS, and a win score. Win score shrinks observed net win frequency toward 50% and pulls it further toward 50 as ESS falls. It is descriptive and is never presented as a forecast probability.
+
+Conditional exit maps search exit slots for same-day, one-week, one-month, and one-year holding offsets. Same-day uses 15-minute data; longer horizons use hourly data. Fewer than 20 compatible observations produces no exit time. Every entry/exit pair remains in the searched family.
+
+`POST /instruments/recheck` repeats the analysis against the current canonical version and compares server-owned ratings and alternatives. The returned schedule is daily more than 30 days away, six-hourly within 30 days, hourly within seven days, and 15-minute within one day. Android schedules one-shot WorkManager rechecks from that server cadence and notifies only when the choice deteriorates or a better alternative appears.
+
+`POST /instruments/pattern-leaders` ranks an explicit bounded universe (up to 50 symbols), including common SPY/QQQ/GLD/USO and large-cap watchlists. The entire cross-symbol/slot scan is disclosed as watchlist research and cannot promote a sleeve.
 
 The response separates three concepts:
 
@@ -89,7 +97,7 @@ News is a frozen, timestamped context input with source, age, and freshness. Its
 - Yahoo coverage is survivorship-biased and does not supply a point-in-time delisted universe.
 - DGS3MO is a proxy; broker-specific margin terms can be materially worse.
 - Daily bars cannot reconstruct intraday queue priority or market impact exactly.
-- Free hourly history is limited and can be throttled; no hour is reported when it is absent.
+- Free hourly and 15-minute history is limited and can be throttled; no intraday slot is reported when it is absent. Yahoo requests are capped at 729 and 59 calendar days respectively.
 - News context may be absent, delayed, duplicated, or wrong and does not change the score by default.
 - The baseline is diversified by instrument labels, not guaranteed economic risk parity.
 - No sleeve is currently entitled to weight solely from a legacy status or report.

@@ -50,6 +50,23 @@ class EffectDirection(enum.StrEnum):
     NEUTRAL = "NEUTRAL"
 
 
+class CalendarResolution(enum.StrEnum):
+    MINUTE_15 = "MINUTE_15"
+    HOUR = "HOUR"
+    DAY = "DAY"
+    MONTH = "MONTH"
+    YEAR = "YEAR"
+
+
+class ChoiceRating(enum.StrEnum):
+    STRONG = "STRONG"
+    ABOVE_AVERAGE = "ABOVE_AVERAGE"
+    AVERAGE = "AVERAGE"
+    BELOW_AVERAGE = "BELOW_AVERAGE"
+    WEAK = "WEAK"
+    NOT_RATED = "NOT_RATED"
+
+
 class InstrumentResolutionV2(V2Model):
     requested_symbol: str
     resolved_symbol: str
@@ -113,6 +130,95 @@ class TimingWindowV2(V2Model):
         ):
             raise ValueError("actionable timing requires a frozen promoted artifact")
         return self
+
+
+class WinScoreV2(V2Model):
+    """Transparent descriptive score; never a guaranteed win probability."""
+
+    net_win_rate: float = Field(ge=0, le=1)
+    shrunk_win_rate: float = Field(ge=0, le=1)
+    win_score: float = Field(ge=0, le=100)
+    expected_net_return: float
+    lower_95: float
+    observations: int = Field(ge=0)
+    effective_sample_size: float = Field(ge=0)
+    rank: int = Field(ge=1)
+    candidates_ranked: int = Field(ge=1)
+    multiple_testing_adjusted_pvalue: float = Field(ge=0, le=1)
+    evidence_grade: EvidenceGrade
+    actionable: bool = False
+    explanation: str = (
+        "Cost-adjusted historical win frequency shrunk toward 50% and confidence-weighted; "
+        "not a forecast or guarantee."
+    )
+
+    @model_validator(mode="after")
+    def _actionable_score_requires_promotion(self) -> WinScoreV2:
+        if self.actionable and self.evidence_grade is not EvidenceGrade.PROMOTED:
+            raise ValueError("an actionable win score requires promoted evidence")
+        return self
+
+
+class TailwindCalendarCellV2(V2Model):
+    slot_key: str
+    display_label: str
+    entry_window: str
+    exit_window: str
+    horizon: TimingHorizon
+    score: WinScoreV2
+    rank_percentile: float = Field(ge=0, le=1)
+
+
+class TailwindCalendarV2(V2Model):
+    resolution: CalendarResolution
+    timezone: str
+    horizon: TimingHorizon
+    data_start: datetime | None = None
+    data_end: datetime | None = None
+    cells: tuple[TailwindCalendarCellV2, ...] = ()
+    warning: str
+
+
+class ChosenTimeRatingV2(V2Model):
+    resolution: CalendarResolution
+    horizon: TimingHorizon
+    requested_time: datetime
+    matched_slot: str | None = None
+    rating: ChoiceRating
+    score: WinScoreV2 | None = None
+    better_alternative: TailwindCalendarCellV2 | None = None
+    score_improvement: float | None = Field(default=None, ge=0)
+    recommendation: str
+    actionable: bool = False
+
+    @model_validator(mode="after")
+    def _choice_actionability(self) -> ChosenTimeRatingV2:
+        if self.actionable and (self.score is None or not self.score.actionable):
+            raise ValueError("an actionable choice requires an actionable score")
+        return self
+
+
+class ExitPlanV2(V2Model):
+    horizon: TimingHorizon
+    entry_slot: str
+    preferred_exit: str | None = None
+    holding_sessions: int = Field(ge=0)
+    data_resolution: CalendarResolution
+    score: WinScoreV2 | None = None
+    alternatives: tuple[TailwindCalendarCellV2, ...] = ()
+    actionable: bool = False
+    rationale: str
+    warning: str | None = None
+
+
+class RecheckPlanV2(V2Model):
+    enabled: bool
+    intended_entry_at: datetime | None = None
+    next_check_at: datetime | None = None
+    cadence_minutes: int | None = Field(default=None, ge=15)
+    required_resolution: CalendarResolution | None = None
+    automatic_recheck_supported: bool = True
+    reason: str
 
 
 class HorizonTimingAnalysisV2(V2Model):
@@ -217,6 +323,12 @@ class InstrumentAnalysisV2(V2Model):
     canonical_portfolio_weight: float = 0.0
     alignment: AlignmentSummaryV2
     horizon_analyses: tuple[HorizonTimingAnalysisV2, ...]
+    chosen_time_ratings: tuple[ChosenTimeRatingV2, ...] = ()
+    exit_plans: tuple[ExitPlanV2, ...] = ()
+    tailwind_calendars: tuple[TailwindCalendarV2, ...] = ()
+    recheck_plan: RecheckPlanV2 = RecheckPlanV2(
+        enabled=False, reason="No intended entry time was supplied."
+    )
     tailwinds: tuple[EdgeEffectV2, ...] = ()
     headwinds: tuple[EdgeEffectV2, ...] = ()
     mixed_effects: tuple[EdgeEffectV2, ...] = ()
@@ -237,3 +349,36 @@ class InstrumentAnalysisV2(V2Model):
         if self.status is InstrumentAnalysisStatus.ACTIONABLE and not self.alignment.aligned_trade:
             raise ValueError("ACTIONABLE requires an all-promoted aligned setup")
         return self
+
+
+class InstrumentRecheckV2(V2Model):
+    schema_version: Literal[2] = 2
+    previous_analysis_id: str
+    analysis: InstrumentAnalysisV2
+    recommendation_still_holds: bool
+    better_alternative_emerged: bool
+    changes: tuple[str, ...] = ()
+
+
+class PatternLeaderV2(V2Model):
+    rank: int = Field(ge=1)
+    symbol: str
+    resolution: CalendarResolution
+    horizon: TimingHorizon
+    strongest_slot: TailwindCalendarCellV2
+    actionable: Literal[False] = False
+
+
+class PatternLeaderBoardV2(V2Model):
+    schema_version: Literal[2] = 2
+    as_of: datetime
+    resolution: CalendarResolution
+    horizon: TimingHorizon
+    searched_symbols: tuple[str, ...]
+    skipped_symbols: tuple[str, ...] = ()
+    searched_cells: int = Field(ge=0)
+    leaders: tuple[PatternLeaderV2, ...]
+    warning: str = (
+        "Cross-instrument historical pattern ranking is watchlist research only. The symbol/slot "
+        "search expands the multiple-testing family and cannot promote or authorize a trade."
+    )
