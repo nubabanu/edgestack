@@ -8,12 +8,21 @@ calibrator on in-sample predictions would just launder overconfidence.
 from __future__ import annotations
 
 import itertools
+from dataclasses import dataclass
 
 import numpy as np
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 
 from edgestack.exceptions import ValidationError
+
+
+@dataclass(frozen=True)
+class CrossFittedCalibration:
+    final_calibrator: IsotonicRegression
+    calibrated_oof: np.ndarray
+    fold_assignments: np.ndarray
+    metrics: dict[str, float]
 
 
 def brier_score(y_true: np.ndarray, p: np.ndarray) -> float:
@@ -69,6 +78,41 @@ def fit_isotonic(oof_pred: np.ndarray, oof_true: np.ndarray) -> IsotonicRegressi
     iso = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
     iso.fit(np.asarray(oof_pred, dtype=float), np.asarray(oof_true, dtype=float))
     return iso
+
+
+def cross_fit_isotonic(
+    oof_pred: np.ndarray,
+    oof_true: np.ndarray,
+    fold_assignments: np.ndarray,
+) -> CrossFittedCalibration:
+    """Evaluate calibration only on rows excluded from calibrator fitting."""
+    raw = np.asarray(oof_pred, dtype=float)
+    true = np.asarray(oof_true, dtype=int)
+    folds = np.asarray(fold_assignments, dtype=int)
+    if not (len(raw) == len(true) == len(folds)):
+        raise ValidationError("predictions, outcomes, and calibration folds must align")
+    unique = np.unique(folds)
+    if len(unique) < 2:
+        raise ValidationError("cross-fitted calibration needs at least two folds")
+    calibrated = np.full(len(raw), np.nan)
+    for fold in unique:
+        evaluation = folds == fold
+        training = ~evaluation
+        calibrator = fit_isotonic(raw[training], true[training])
+        calibrated[evaluation] = np.clip(calibrator.predict(raw[evaluation]), 0.0, 1.0)
+    if not np.isfinite(calibrated).all():
+        raise ValidationError("cross-fitted calibration did not cover every row")
+    final = fit_isotonic(raw, true)
+    return CrossFittedCalibration(
+        final_calibrator=final,
+        calibrated_oof=calibrated,
+        fold_assignments=folds,
+        metrics={
+            "oof_brier": brier_score(true, calibrated),
+            "oof_log_loss": log_loss_score(true, calibrated),
+            "oof_ece": expected_calibration_error(true, calibrated),
+        },
+    )
 
 
 class PlattCalibrator:

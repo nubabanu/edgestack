@@ -24,8 +24,8 @@ from edgestack.logging import get_logger, log_event
 from edgestack.models.base import MODEL_FACTORIES, TrainedModel
 from edgestack.models.calibration import (
     brier_score,
+    cross_fit_isotonic,
     expected_calibration_error,
-    fit_isotonic,
     log_loss_score,
     reliability_bins,
 )
@@ -76,27 +76,34 @@ def train_models(
             net = directional - cost_model.roundtrip_cost(side, horizon)
             y = (net > 0).astype(int)
 
-            oof_by_model: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+            oof_by_model: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
             for name, factory in MODEL_FACTORIES:
                 preds: list[np.ndarray] = []
                 trues: list[np.ndarray] = []
+                calibration_folds: list[np.ndarray] = []
                 for fold in folds:
                     est = factory(cfg.project.random_seed)
                     est.fit(X.iloc[fold.train_idx], y[fold.train_idx])
                     preds.append(est.predict_proba(X.iloc[fold.test_idx])[:, 1])
                     trues.append(y[fold.test_idx])
-                oof_by_model[name] = (np.concatenate(preds), np.concatenate(trues))
+                    calibration_folds.append(np.full(len(fold.test_idx), fold.fold_id, dtype=int))
+                oof_by_model[name] = (
+                    np.concatenate(preds),
+                    np.concatenate(trues),
+                    np.concatenate(calibration_folds),
+                )
 
             selected = _select_simplest(oof_by_model)
-            oof_pred, oof_true = oof_by_model[selected]
+            oof_pred, oof_true, calibration_folds_array = oof_by_model[selected]
             calibrator = None
             if selected != "base_rate":
-                calibrator = fit_isotonic(oof_pred, oof_true)
-                calibrated = np.clip(calibrator.predict(oof_pred), 0.0, 1.0)
+                cross_fitted = cross_fit_isotonic(oof_pred, oof_true, calibration_folds_array)
+                calibrator = cross_fitted.final_calibrator
+                calibrated = cross_fitted.calibrated_oof
             else:
                 calibrated = oof_pred  # a constant base rate is calibrated by construction
 
-            base_pred, base_true = oof_by_model["base_rate"]
+            base_pred, base_true, _ = oof_by_model["base_rate"]
             metrics = {
                 "oof_brier": brier_score(oof_true, calibrated),
                 "oof_log_loss": log_loss_score(oof_true, calibrated),
@@ -121,6 +128,8 @@ def train_models(
                     featureset_id=fsid,
                     config_hash=cfg.config_hash(),
                     seed=cfg.project.random_seed,
+                    calibration_fold_assignments=tuple(int(x) for x in calibration_folds_array),
+                    cross_fitted_calibrated_predictions=tuple(float(x) for x in calibrated),
                 )
             )
             log_event(
@@ -135,9 +144,11 @@ def train_models(
     return models
 
 
-def _select_simplest(oof_by_model: dict[str, tuple[np.ndarray, np.ndarray]]) -> str:
+def _select_simplest(
+    oof_by_model: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]],
+) -> str:
     """Walk simplest -> complex; upgrade only on a material OOF improvement."""
-    losses = {name: log_loss_score(true, pred) for name, (pred, true) in oof_by_model.items()}
+    losses = {name: log_loss_score(true, pred) for name, (pred, true, _) in oof_by_model.items()}
     ordered = [name for name, _ in MODEL_FACTORIES if name in losses]
     selected = ordered[0]
     for challenger in ordered[1:]:
