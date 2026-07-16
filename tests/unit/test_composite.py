@@ -28,8 +28,9 @@ def bars() -> pd.DataFrame:
     high = close * (1 + rng.uniform(0, 0.01, n))
     low = close * (1 - rng.uniform(0, 0.01, n))
     opn = low + (high - low) * rng.uniform(0, 1, n)
-    return pd.DataFrame({"open": opn, "high": high, "low": low,
-                         "close": close, "adj": close}, index=idx)
+    return pd.DataFrame(
+        {"open": opn, "high": high, "low": low, "close": close, "adj": close}, index=idx
+    )
 
 
 def test_family_positions_bounds_and_columns(bars: pd.DataFrame) -> None:
@@ -81,12 +82,19 @@ def test_parity_with_strategy_zoo_rules() -> None:
     from strategy_zoo import build_rules
 
     df = pd.read_parquet(ZOO_CACHE)
-    df = (df.assign(date=df["dt"].dt.tz_localize(None).dt.normalize())
-            .set_index("date").drop(columns="dt"))
+    df = (
+        df.assign(date=df["dt"].dt.tz_localize(None).dt.normalize())
+        .set_index("date")
+        .drop(columns="dt")
+    )
     rules = build_rules(df)
     fams = family_positions(df)
-    zoo_ens = (rules["cmb_trend_or_rsi2dip"] + rules["brk_20d_high_hold10"]
-               + rules["vol_target_10pct"] + rules["mr_3down_days"]) / 4
+    zoo_ens = (
+        rules["cmb_trend_or_rsi2dip"]
+        + rules["brk_20d_high_hold10"]
+        + rules["vol_target_10pct"]
+        + rules["mr_3down_days"]
+    ) / 4
     diff = (ensemble_exposure(df) - zoo_ens).abs().max()
     assert diff < 1e-9, f"package ensemble diverged from zoo reference: {diff}"
     assert (fams["trend_or_dip"] - rules["cmb_trend_or_rsi2dip"]).abs().max() < 1e-9

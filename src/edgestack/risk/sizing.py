@@ -16,8 +16,7 @@ def _round_tick(price: float) -> float:
     return round(round(price / TICK) * TICK, 2)
 
 
-def build_risk_plan(side: Side, entry_ref: float, atr: float,
-                    cfg: EdgeStackConfig) -> RiskPlan:
+def build_risk_plan(side: Side, entry_ref: float, atr: float, cfg: EdgeStackConfig) -> RiskPlan:
     """ATR-multiple stop and targets around a reference entry price."""
     if entry_ref <= 0 or atr <= 0:
         raise DataError("entry price and ATR must be positive")
@@ -44,9 +43,14 @@ def build_risk_plan(side: Side, entry_ref: float, atr: float,
     )
 
 
-def build_entry_plan(side: Side, close: float, atr: float, as_of: date,
-                     calendar: TradingCalendar,
-                     execution_delay_sessions: int = 1) -> EntryPlan:
+def build_entry_plan(
+    side: Side,
+    close: float,
+    atr: float,
+    as_of: date,
+    calendar: TradingCalendar,
+    execution_delay_sessions: int = 1,
+) -> EntryPlan:
     """Next-open entry with a volatility-scaled limit zone.
 
     The earliest valid execution is the open of the session

@@ -39,7 +39,7 @@ def adverse_excursion_labels(
         dates = df.index.to_numpy()
 
         # window of sessions [t+delay, t+delay+horizon-1] for each signal t
-        low_windows = sliding_window_view(lows, window)    # starts at index i
+        low_windows = sliding_window_view(lows, window)  # starts at index i
         high_windows = sliding_window_view(highs, window)
         # valid signal indices: t such that t+delay+horizon <= n-1 (exit exists)
         t_max = n - need
@@ -49,16 +49,21 @@ def adverse_excursion_labels(
         mae = low_windows[start].min(axis=1) / entry - 1.0
         mfe = high_windows[start].max(axis=1) / entry - 1.0
 
-        frames.append(pd.DataFrame({
-            "symbol": symbol,
-            "date": dates[t_idx],
-            "horizon": horizon,
-            "entry_date": dates[start],
-            "label_end": dates[t_idx + need],
-            "mae": mae,
-            "mfe": mfe,
-        }))
+        frames.append(
+            pd.DataFrame(
+                {
+                    "symbol": symbol,
+                    "date": dates[t_idx],
+                    "horizon": horizon,
+                    "entry_date": dates[start],
+                    "label_end": dates[t_idx + need],
+                    "mae": mae,
+                    "mfe": mfe,
+                }
+            )
+        )
     if not frames:
         raise DataError("panel too short for adverse-excursion labels")
-    return pd.concat(frames, ignore_index=True).sort_values(
-        ["symbol", "date"]).reset_index(drop=True)
+    return (
+        pd.concat(frames, ignore_index=True).sort_values(["symbol", "date"]).reset_index(drop=True)
+    )

@@ -17,6 +17,7 @@ import abc
 import zlib
 from dataclasses import dataclass, field
 from datetime import date
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -94,7 +95,7 @@ class CalendarEffect(Effect):
     active_end: date | None = None
 
     def drift(self, t: int, facts: pd.Series, returns: np.ndarray) -> float:
-        session: pd.Timestamp = facts.name  # facts row is indexed by session date
+        session = cast(pd.Timestamp, facts.name)  # facts row is indexed by session date
         if self.active_start is not None and session.date() < self.active_start:
             return 0.0
         if self.active_end is not None and session.date() > self.active_end:
@@ -199,9 +200,7 @@ class SyntheticPriceProvider(PriceDataProvider):
             limitations=("synthetic data: for tests and demos only",),
         )
 
-    def fetch_daily_bars(
-        self, symbols: tuple[str, ...], start: date, end: date
-    ) -> pd.DataFrame:
+    def fetch_daily_bars(self, symbols: tuple[str, ...], start: date, end: date) -> pd.DataFrame:
         return self.market.generate(symbols, start, end)
 
 

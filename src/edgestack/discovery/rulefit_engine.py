@@ -27,20 +27,22 @@ import pandas as pd
 from edgestack.exceptions import ValidationError
 from edgestack.types import AllOf, Condition, Predicate
 
-_TERM_RE = re.compile(r"^\s*(?P<feat>[A-Za-z0-9_]+)\s*(?P<op><=|>=|<|>)\s*"
-                      r"(?P<thr>-?\d+(?:\.\d+)?(?:[eE]-?\d+)?)\s*$")
+_TERM_RE = re.compile(
+    r"^\s*(?P<feat>[A-Za-z0-9_]+)\s*(?P<op><=|>=|<|>)\s*"
+    r"(?P<thr>-?\d+(?:\.\d+)?(?:[eE]-?\d+)?)\s*$"
+)
 
 MAX_FIT_ROWS = 80_000
 
 
-def _tree_rules(tree, feature_names: list[str],
-                max_conditions: int) -> list[tuple[tuple[str, str, float], ...]]:
+def _tree_rules(
+    tree, feature_names: list[str], max_conditions: int
+) -> list[tuple[tuple[str, str, float], ...]]:
     """All root-to-leaf conjunctions of one fitted sklearn tree."""
     t = tree.tree_
     out: list[tuple[tuple[str, str, float], ...]] = []
 
-    def simplify(path: tuple[tuple[str, str, float], ...]
-                 ) -> tuple[tuple[str, str, float], ...]:
+    def simplify(path: tuple[tuple[str, str, float], ...]) -> tuple[tuple[str, str, float], ...]:
         """Collapse repeated same-feature bounds to the tightest one."""
         upper: dict[str, float] = {}
         lower: dict[str, float] = {}
@@ -75,11 +77,11 @@ def _tree_rules(tree, feature_names: list[str],
 @dataclass(frozen=True)
 class DiscoveredRule:
     condition: Condition
-    coef: float                    # sign = predicted direction of excess return
-    support: float                 # fraction of training rows matched
+    coef: float  # sign = predicted direction of excess return
+    support: float  # fraction of training rows matched
     n_symbols: int
     raw: str
-    signature: str                 # canonical structural identity
+    signature: str  # canonical structural identity
 
 
 def parse_rule_string(raw: str, feature_cols: set[str]) -> list[Predicate] | None:
@@ -89,14 +91,17 @@ def parse_rule_string(raw: str, feature_cols: set[str]) -> list[Predicate] | Non
         m = _TERM_RE.match(term)
         if not m or m.group("feat") not in feature_cols:
             return None
-        preds.append(Predicate(feature=m.group("feat"),
-                               op=m.group("op"),  # type: ignore[arg-type]
-                               value=float(m.group("thr"))))
+        preds.append(
+            Predicate(
+                feature=m.group("feat"),
+                op=m.group("op"),  # type: ignore[arg-type]
+                value=float(m.group("thr")),
+            )
+        )
     return preds or None
 
 
-def rule_signature(preds: list[Predicate], decile_of: dict[str, np.ndarray],
-                   coef: float) -> str:
+def rule_signature(preds: list[Predicate], decile_of: dict[str, np.ndarray], coef: float) -> str:
     """Structural identity: feature+direction+threshold decile (+rule sign).
 
     vol<0.22, vol<0.24 and vol<0.25 land in the same decile bucket and merge.
@@ -147,8 +152,12 @@ def discover_rules(
     # 1) Rule generation: shallow boosted trees on subsamples (Friedman-Popescu).
     n_estimators = max(40, max_rules // (2 ** (max_conditions - 1)))
     gbr = GradientBoostingRegressor(
-        n_estimators=n_estimators, max_depth=max_conditions,
-        learning_rate=0.1, subsample=0.7, max_features=0.8, random_state=seed,
+        n_estimators=n_estimators,
+        max_depth=max_conditions,
+        learning_rate=0.1,
+        subsample=0.7,
+        max_features=0.8,
+        random_state=seed,
     )
     x_np = frame.to_numpy()
     gbr.fit(x_np, y)
@@ -162,23 +171,29 @@ def discover_rules(
 
     # 2) Rule indicator matrix + bounded-path Lasso for sparse selection.
     preds_per_rule = [
-        [Predicate(feature=f, op=op, value=thr)  # type: ignore[arg-type]
-         for f, op, thr in rule]
+        [
+            Predicate(feature=f, op=op, value=thr)  # type: ignore[arg-type]
+            for f, op, thr in rule
+        ]
         for rule in unique_rules
     ]
-    indicator = np.column_stack([
-        _fast_mask(frame, preds).astype(np.float32) for preds in preds_per_rule
-    ])
+    indicator = np.column_stack(
+        [_fast_mask(frame, preds).astype(np.float32) for preds in preds_per_rule]
+    )
     lasso = ElasticNetCV(
-        l1_ratio=1.0, alphas=20, cv=3, tol=1e-3, max_iter=3000,
-        selection="random", random_state=seed, n_jobs=-1,
+        l1_ratio=1.0,
+        alphas=20,
+        cv=3,
+        tol=1e-3,
+        max_iter=3000,
+        selection="random",
+        random_state=seed,
+        n_jobs=-1,
     )
     lasso.fit(indicator, y - y.mean())
     coefs = lasso.coef_
 
-    decile_of = {
-        c: np.quantile(frame[c].to_numpy(), np.linspace(0.1, 0.9, 9)) for c in cols
-    }
+    decile_of = {c: np.quantile(frame[c].to_numpy(), np.linspace(0.1, 0.9, 9)) for c in cols}
     order = np.argsort(-np.abs(coefs))
     out: list[DiscoveredRule] = []
     seen: set[str] = set()
@@ -190,8 +205,7 @@ def discover_rules(
         # Prune near-vacuous companion conditions (a predicate matching ~90%
         # of rows filters nothing and only fragments the structural identity).
         if len(preds) > 1:
-            kept = [p for p in preds
-                    if float(_fast_mask(frame, [p]).mean()) < 0.9]
+            kept = [p for p in preds if float(_fast_mask(frame, [p]).mean()) < 0.9]
             preds = kept or preds
         mask = _fast_mask(frame, preds)
         support = float(mask.mean())
@@ -204,8 +218,11 @@ def discover_rules(
         seen.add(sig)
         cond: Condition = preds[0] if len(preds) == 1 else AllOf(conditions=tuple(preds))
         raw = " and ".join(f"{p.feature} {p.op} {float(p.value):.6g}" for p in preds)
-        out.append(DiscoveredRule(condition=cond, coef=coef, support=support,
-                                  n_symbols=n_syms, raw=raw, signature=sig))
+        out.append(
+            DiscoveredRule(
+                condition=cond, coef=coef, support=support, n_symbols=n_syms, raw=raw, signature=sig
+            )
+        )
     return out, total_generated
 
 

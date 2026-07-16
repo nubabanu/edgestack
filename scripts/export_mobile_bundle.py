@@ -30,8 +30,7 @@ def main() -> int:
 
     board_path = Path("artifacts") / "live_board.json"
     if not board_path.exists():
-        raise SystemExit("artifacts/live_board.json missing — run "
-                         "scripts/live_signals.py first")
+        raise SystemExit("artifacts/live_board.json missing — run scripts/live_signals.py first")
     atomic_write_bytes(SEED / "board.json", board_path.read_bytes())
     picks_path = Path("artifacts") / "picks.json"
     if picks_path.exists():
@@ -40,25 +39,34 @@ def main() -> int:
     cfg = load_config("configs/live.yaml")
     catalog = DataCatalog(cfg)
     statuses = current_statuses(catalog).set_index("edge_id")["status"].to_dict()
-    edges = [json.loads(e.model_dump_json())
-             | {"current_status": statuses.get(e.identity.edge_id)}
-             for e in load_edges(catalog, statuses=(EdgeStatus.VALIDATED,))]
-    atomic_write_bytes(SEED / "edges.json", json.dumps(
-        {"schema_version": 1, "generated_at": now, "edges": edges}).encode())
+    edges = [
+        json.loads(e.model_dump_json()) | {"current_status": statuses.get(e.identity.edge_id)}
+        for e in load_edges(catalog, statuses=(EdgeStatus.VALIDATED,))
+    ]
+    atomic_write_bytes(
+        SEED / "edges.json",
+        json.dumps({"schema_version": 1, "generated_at": now, "edges": edges}).encode(),
+    )
 
     cal = xcals.get_calendar("XNYS", start="2025-01-01", end="2030-12-31")
-    sessions = [str(s.date()) for s in
-                cal.sessions_in_range(cal.first_session, cal.last_session)]
-    atomic_write_bytes(SEED / "calendar.json", json.dumps(
-        {"schema_version": 1, "exchange": "XNYS", "sessions": sessions}).encode())
+    sessions = [str(s.date()) for s in cal.sessions_in_range(cal.first_session, cal.last_session)]
+    atomic_write_bytes(
+        SEED / "calendar.json",
+        json.dumps({"schema_version": 1, "exchange": "XNYS", "sessions": sessions}).encode(),
+    )
 
-    atomic_write_bytes(SEED / "meta.json", json.dumps({
-        "schema_version": 1, "generated_at": now,
-        "config_hash": cfg.config_hash(),
-        "disclaimer": "Research output only. Not investment advice.",
-    }).encode())
-    print(f"seed bundle written to {SEED} "
-          f"({len(edges)} edges, {len(sessions)} sessions)")
+    atomic_write_bytes(
+        SEED / "meta.json",
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": now,
+                "config_hash": cfg.config_hash(),
+                "disclaimer": "Research output only. Not investment advice.",
+            }
+        ).encode(),
+    )
+    print(f"seed bundle written to {SEED} ({len(edges)} edges, {len(sessions)} sessions)")
     return 0
 
 

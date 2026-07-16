@@ -44,16 +44,18 @@ def main() -> int:
             "name": "permanent_portfolio_quarterly",
             "weights": CORE_WEIGHTS,
             "note": "best all-era monthly family (NW alpha t=2.20, beta 0.25); "
-                    "rebalance quarterly or on 5% bands",
+            "rebalance quarterly or on 5% bands",
         },
         "instruments": {},
     }
     print("=== MASTER SIGNAL (validated ensemble4) ===")
     for sym in INSTRUMENTS:
-        df = fetch(session, sym, interval="1d", period1=now - 3 * 365 * 86400,
-                   period2=now)
-        df = (df.assign(date=df["dt"].dt.tz_localize(None).dt.normalize())
-                .set_index("date").drop(columns="dt"))
+        df = fetch(session, sym, interval="1d", period1=now - 3 * 365 * 86400, period2=now)
+        df = (
+            df.assign(date=df["dt"].dt.tz_localize(None).dt.normalize())
+            .set_index("date")
+            .drop(columns="dt")
+        )
         fams = family_positions(df)
         ens = ensemble_exposure(df)
         seas = seasonal_multiplier(df.index)
@@ -61,21 +63,21 @@ def main() -> int:
         today = {
             "as_of": str(as_of.date()),
             "close": round(float(df["close"].iloc[-1]), 2),
-            "families": {k: round(float(fams[k].iloc[-1]), 3)
-                         for k in fams.columns},
+            "families": {k: round(float(fams[k].iloc[-1]), 3) for k in fams.columns},
             "ensemble_exposure_next_session": round(float(ens.iloc[-1]), 3),
             "seasonal_multiplier_unvalidated": round(float(seas.iloc[-1]), 2),
         }
         out["instruments"][sym] = today
         fam_str = "  ".join(f"{k}={v:.2f}" for k, v in today["families"].items())
-        print(f"{sym}: exposure {today['ensemble_exposure_next_session']:.2f} "
-              f"(as of {today['as_of']}, close {today['close']})")
+        print(
+            f"{sym}: exposure {today['ensemble_exposure_next_session']:.2f} "
+            f"(as of {today['as_of']}, close {today['close']})"
+        )
         print(f"     {fam_str}")
         time.sleep(0.3)
 
     print(f"\nCORE (reference): {CORE_WEIGHTS} — quarterly/5%-band rebalance")
-    atomic_write_bytes(Path("artifacts") / "master_signal.json",
-                       json.dumps(out, indent=1).encode())
+    atomic_write_bytes(Path("artifacts") / "master_signal.json", json.dumps(out, indent=1).encode())
     print("saved -> artifacts/master_signal.json")
     return 0
 

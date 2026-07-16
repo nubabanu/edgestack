@@ -20,8 +20,11 @@ from edgestack.config import EdgeStackConfig, load_config
 from edgestack.exceptions import EdgeStackError
 from edgestack.logging import configure, get_logger, log_event
 
-app = typer.Typer(name="edgestack", help="EdgeStack — statistical edge research platform. "
-                                          "Research / paper trading only.", no_args_is_help=True)
+app = typer.Typer(
+    name="edgestack",
+    help="EdgeStack — statistical edge research platform. Research / paper trading only.",
+    no_args_is_help=True,
+)
 data_app = typer.Typer(help="Download and validate market data.", no_args_is_help=True)
 features_app = typer.Typer(help="Build feature datasets.", no_args_is_help=True)
 edges_app = typer.Typer(help="Discover and validate edges.", no_args_is_help=True)
@@ -35,10 +38,17 @@ api_app = typer.Typer(help="Serve the read-only API.", no_args_is_help=True)
 dashboard_app = typer.Typer(help="Serve the research dashboard.", no_args_is_help=True)
 
 for name, sub in [
-    ("data", data_app), ("features", features_app), ("edges", edges_app),
-    ("models", models_app), ("signals", signals_app), ("backtest", backtest_app),
-    ("monitor", monitor_app), ("report", report_app), ("paper", paper_app),
-    ("api", api_app), ("dashboard", dashboard_app),
+    ("data", data_app),
+    ("features", features_app),
+    ("edges", edges_app),
+    ("models", models_app),
+    ("signals", signals_app),
+    ("backtest", backtest_app),
+    ("monitor", monitor_app),
+    ("report", report_app),
+    ("paper", paper_app),
+    ("api", api_app),
+    ("dashboard", dashboard_app),
 ]:
     app.add_typer(sub, name=name)
 
@@ -50,8 +60,13 @@ _CONFIG_OPT = typer.Option(None, "--config", "-c", help="Path to YAML config fil
 def _setup(config_path: Path | None) -> EdgeStackConfig:
     configure()
     cfg = load_config(config_path)
-    log_event(log, _stdlib_logging.INFO, "config loaded",
-              config_hash=cfg.config_hash()[:12], seed=cfg.project.random_seed)
+    log_event(
+        log,
+        _stdlib_logging.INFO,
+        "config loaded",
+        config_hash=cfg.config_hash()[:12],
+        seed=cfg.project.random_seed,
+    )
     return cfg
 
 
@@ -93,8 +108,14 @@ def data_download(
     from edgestack.pipelines import run_data_download
 
     sym = tuple(s.strip().upper() for s in symbols.split(",")) if symbols else None
-    _run(run_data_download, cfg, date.fromisoformat(start), date.fromisoformat(end),
-         provider=provider, symbols=sym)
+    _run(
+        run_data_download,
+        cfg,
+        date.fromisoformat(start),
+        date.fromisoformat(end),
+        provider=provider,
+        symbols=sym,
+    )
 
 
 @data_app.command("validate")
@@ -236,14 +257,16 @@ def dashboard_serve(config: Path | None = _CONFIG_OPT) -> None:
     import subprocess
 
     if importlib.util.find_spec("streamlit") is None:
-        typer.secho("streamlit is not installed; install with: "
-                    "pip install edgestack[dashboard]", fg=typer.colors.YELLOW, err=True)
+        typer.secho(
+            "streamlit is not installed; install with: pip install edgestack[dashboard]",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
         raise typer.Exit(2)
     from edgestack import dashboard as dashboard_pkg
 
     script = Path(dashboard_pkg.__file__).parent / "app.py"
-    raise typer.Exit(subprocess.call([sys.executable, "-m", "streamlit", "run",
-                                      str(script)]))
+    raise typer.Exit(subprocess.call([sys.executable, "-m", "streamlit", "run", str(script)]))
 
 
 if __name__ == "__main__":

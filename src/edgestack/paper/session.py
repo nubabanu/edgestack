@@ -17,6 +17,7 @@ monitoring can compare forecasts with outcomes.
 from __future__ import annotations
 
 from datetime import date
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -98,17 +99,22 @@ def run_session(cfg: EdgeStackConfig, as_of: date | None = None) -> str:
         raise DataError(f"{session_ts.date()} is not a session with data")
 
     day = panel.loc[pd.to_datetime(panel["date"]) == session_ts]
-    bars = {
-        str(r.symbol): Bar(session=session_ts, open=r.open, high=r.high,
-                           low=r.low, close=r.close, volume=r.volume)
-        for r in day.itertuples(index=False)
-    }
+    bars: dict[str, Bar] = {}
+    for row in day.itertuples(index=False):
+        record = cast(Any, row)
+        bars[str(record.symbol)] = Bar(
+            session=session_ts,
+            open=float(record.open),
+            high=float(record.high),
+            low=float(record.low),
+            close=float(record.close),
+            volume=float(record.volume),
+        )
 
     state = load_state(catalog, cfg)
     if state.last_session is not None and session_ts.date() <= state.last_session:
         raise DataError(
-            f"session {session_ts.date()} already processed "
-            f"(last was {state.last_session})"
+            f"session {session_ts.date()} already processed (last was {state.last_session})"
         )
 
     lines = [f"PAPER session {session_ts.date()} — simulated fills only, not advice"]
@@ -116,14 +122,16 @@ def run_session(cfg: EdgeStackConfig, as_of: date | None = None) -> str:
     _process_entries(cfg, catalog, calendar, state, bars, broker, session_ts, lines)
 
     closes = {s: b.close for s, b in bars.items()}
-    market_value = sum(
-        p.quantity * closes.get(p.symbol, p.entry_price) for p in state.positions
-    )
+    market_value = sum(p.quantity * closes.get(p.symbol, p.entry_price) for p in state.positions)
     equity = state.cash + market_value
     state.last_session = session_ts.date()
     save_state(catalog, state)
-    catalog.audit("paper_session", reason=str(session_ts.date()),
-                  equity=round(equity, 2), positions=len(state.positions))
+    catalog.audit(
+        "paper_session",
+        reason=str(session_ts.date()),
+        equity=round(equity, 2),
+        positions=len(state.positions),
+    )
 
     realized = sum(t.net_pnl for t in state.trades)
     lines.append(
@@ -144,9 +152,14 @@ def run_session(cfg: EdgeStackConfig, as_of: date | None = None) -> str:
     return report
 
 
-def _process_exits(state: PaperState, bars: dict[str, Bar], broker,
-                   calendar: TradingCalendar, session_ts: pd.Timestamp,
-                   lines: list[str]) -> None:
+def _process_exits(
+    state: PaperState,
+    bars: dict[str, Bar],
+    broker,
+    calendar: TradingCalendar,
+    session_ts: pd.Timestamp,
+    lines: list[str],
+) -> None:
     still_open: list[PaperPosition] = []
     for pos in state.positions:
         bar = bars.get(pos.symbol)
@@ -157,21 +170,35 @@ def _process_exits(state: PaperState, bars: dict[str, Bar], broker,
         fill = None
         reason = ""
         if held >= pos.horizon:
-            order = Order(symbol=pos.symbol, quantity=-pos.quantity,
-                          order_type=OrderType.MARKET_ON_OPEN,
-                          created_session=session_ts, tag="time_exit")
+            order = Order(
+                symbol=pos.symbol,
+                quantity=-pos.quantity,
+                order_type=OrderType.MARKET_ON_OPEN,
+                created_session=session_ts,
+                tag="time_exit",
+            )
             fill = broker.execute_against_bar(order, bar, at_open_phase=True)
             reason = "time_exit"
         if fill is None:
-            order = Order(symbol=pos.symbol, quantity=-pos.quantity,
-                          order_type=OrderType.STOP, created_session=session_ts,
-                          stop_price=pos.stop_price, tag="stop_loss")
+            order = Order(
+                symbol=pos.symbol,
+                quantity=-pos.quantity,
+                order_type=OrderType.STOP,
+                created_session=session_ts,
+                stop_price=pos.stop_price,
+                tag="stop_loss",
+            )
             fill = broker.execute_against_bar(order, bar, at_open_phase=False)
             reason = "stop_loss"
         if fill is None:
-            order = Order(symbol=pos.symbol, quantity=-pos.quantity,
-                          order_type=OrderType.LIMIT, created_session=session_ts,
-                          limit_price=pos.target_price, tag="target")
+            order = Order(
+                symbol=pos.symbol,
+                quantity=-pos.quantity,
+                order_type=OrderType.LIMIT,
+                created_session=session_ts,
+                limit_price=pos.target_price,
+                tag="target",
+            )
             fill = broker.execute_against_bar(order, bar, at_open_phase=False)
             reason = "target"
         if fill is None:
@@ -180,26 +207,42 @@ def _process_exits(state: PaperState, bars: dict[str, Bar], broker,
 
         state.cash -= fill.quantity * fill.price + fill.cost
         direction = 1.0 if pos.side is Side.LONG else -1.0
-        net_pnl = (direction * abs(pos.quantity) * (fill.price - pos.entry_price)
-                   - fill.cost - pos.entry_cost)
+        net_pnl = (
+            direction * abs(pos.quantity) * (fill.price - pos.entry_price)
+            - fill.cost
+            - pos.entry_cost
+        )
         realized_ret = direction * (fill.price / pos.entry_price - 1.0)
-        state.trades.append(PaperTrade(
-            symbol=pos.symbol, side=pos.side, entry_session=pos.entry_session,
-            exit_session=session_ts.date(), entry_price=pos.entry_price,
-            exit_price=fill.price, quantity=pos.quantity, net_pnl=net_pnl,
-            exit_reason=reason, predicted_probability=pos.predicted_probability,
-            predicted_net_return=pos.predicted_net_return,
-            realized_net_return=realized_ret,
-        ))
-        lines.append(f"closed {pos.symbol} {pos.side.value} via {reason}: "
-                     f"net P&L {net_pnl:+,.2f}")
+        state.trades.append(
+            PaperTrade(
+                symbol=pos.symbol,
+                side=pos.side,
+                entry_session=pos.entry_session,
+                exit_session=session_ts.date(),
+                entry_price=pos.entry_price,
+                exit_price=fill.price,
+                quantity=pos.quantity,
+                net_pnl=net_pnl,
+                exit_reason=reason,
+                predicted_probability=pos.predicted_probability,
+                predicted_net_return=pos.predicted_net_return,
+                realized_net_return=realized_ret,
+            )
+        )
+        lines.append(f"closed {pos.symbol} {pos.side.value} via {reason}: net P&L {net_pnl:+,.2f}")
     state.positions = still_open
 
 
-def _process_entries(cfg: EdgeStackConfig, catalog: DataCatalog,
-                     calendar: TradingCalendar, state: PaperState,
-                     bars: dict[str, Bar], broker, session_ts: pd.Timestamp,
-                     lines: list[str]) -> None:
+def _process_entries(
+    cfg: EdgeStackConfig,
+    catalog: DataCatalog,
+    calendar: TradingCalendar,
+    state: PaperState,
+    bars: dict[str, Bar],
+    broker,
+    session_ts: pd.Timestamp,
+    lines: list[str],
+) -> None:
     prev_session = calendar.prev_session(session_ts.date())
     try:
         report = load_report(catalog, prev_session.date())
@@ -222,9 +265,12 @@ def _process_entries(cfg: EdgeStackConfig, catalog: DataCatalog,
 
     requests = [
         AllocationRequest(
-            symbol=c.symbol, side=Side.LONG, conviction=c.conviction_score,
-            annualized_vol=float(c.expected_volatility
-                                 * np.sqrt(252.0 / max(1, c.recommended_holding_sessions))),
+            symbol=c.symbol,
+            side=Side.LONG,
+            conviction=c.conviction_score,
+            annualized_vol=float(
+                c.expected_volatility * np.sqrt(252.0 / max(1, c.recommended_holding_sessions))
+            ),
         )
         for c in candidates
     ]
@@ -242,24 +288,35 @@ def _process_entries(cfg: EdgeStackConfig, catalog: DataCatalog,
         qty = int(weight * equity / bar.open)
         if qty < 1:
             continue
-        order = Order(symbol=candidate.symbol, quantity=qty,
-                      order_type=OrderType.MARKET_ON_OPEN,
-                      created_session=session_ts, tag="entry")
+        order = Order(
+            symbol=candidate.symbol,
+            quantity=qty,
+            order_type=OrderType.MARKET_ON_OPEN,
+            created_session=session_ts,
+            tag="entry",
+        )
         fill = broker.execute_against_bar(order, bar, at_open_phase=True)
         if fill is None:
             continue
         state.cash -= fill.quantity * fill.price + fill.cost
-        state.positions.append(PaperPosition(
-            symbol=candidate.symbol, side=Side.LONG, quantity=fill.quantity,
-            entry_price=fill.price, entry_session=session_ts.date(),
-            stop_price=candidate.risk.stop_price,
-            target_price=candidate.risk.target_1,
-            horizon=candidate.recommended_holding_sessions,
-            predicted_probability=candidate.calibrated_probability_of_positive_net_return,
-            predicted_net_return=candidate.expected_net_return,
-            entry_cost=fill.cost,
-        ))
-        lines.append(f"opened {candidate.symbol} LONG {fill.quantity:.0f} @ "
-                     f"{fill.price:.2f} (stop {candidate.risk.stop_price}, "
-                     f"target {candidate.risk.target_1}, "
-                     f"{candidate.recommended_holding_sessions} sessions)")
+        state.positions.append(
+            PaperPosition(
+                symbol=candidate.symbol,
+                side=Side.LONG,
+                quantity=fill.quantity,
+                entry_price=fill.price,
+                entry_session=session_ts.date(),
+                stop_price=candidate.risk.stop_price,
+                target_price=candidate.risk.target_1,
+                horizon=candidate.recommended_holding_sessions,
+                predicted_probability=candidate.calibrated_probability_of_positive_net_return,
+                predicted_net_return=candidate.expected_net_return,
+                entry_cost=fill.cost,
+            )
+        )
+        lines.append(
+            f"opened {candidate.symbol} LONG {fill.quantity:.0f} @ "
+            f"{fill.price:.2f} (stop {candidate.risk.stop_price}, "
+            f"target {candidate.risk.target_1}, "
+            f"{candidate.recommended_holding_sessions} sessions)"
+        )

@@ -11,9 +11,9 @@ import pandas as pd
 from edgestack.features.registry import feature
 from edgestack.types import Family
 
-_BODY_DOJI_MAX = 0.10      # body <= 10% of range
-_WICK_HAMMER_MIN = 2.0     # lower wick >= 2x body
-_WICK_OTHER_MAX = 0.30     # opposite wick <= 30% of body-adjusted range
+_BODY_DOJI_MAX = 0.10  # body <= 10% of range
+_WICK_HAMMER_MIN = 2.0  # lower wick >= 2x body
+_WICK_OTHER_MAX = 0.30  # opposite wick <= 30% of body-adjusted range
 
 
 def _parts(df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series]:

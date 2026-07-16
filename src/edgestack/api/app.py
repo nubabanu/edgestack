@@ -30,8 +30,7 @@ def create_app(cfg: EdgeStackConfig):
             "FastAPI is not installed; install the api extra: pip install edgestack[api]"
         ) from exc
 
-    app = FastAPI(title="EdgeStack API", version=__version__,
-                  description=DISCLAIMER)
+    app = FastAPI(title="EdgeStack API", version=__version__, description=DISCLAIMER)
     catalog = DataCatalog(cfg)
 
     def _report(as_of: date | None = None):
@@ -46,8 +45,7 @@ def create_app(cfg: EdgeStackConfig):
 
     @app.get("/version")
     def version() -> dict:
-        return {"version": __version__, "config_hash": cfg.config_hash(),
-                "disclaimer": DISCLAIMER}
+        return {"version": __version__, "config_hash": cfg.config_hash(), "disclaimer": DISCLAIMER}
 
     @app.get("/edges")
     def edges() -> list[dict]:
@@ -101,12 +99,10 @@ def create_app(cfg: EdgeStackConfig):
             for _, row in rows.iterrows():
                 detail = json.loads(row["detail"]) if row["detail"] else {}
                 if "equity" in detail:
-                    history.append({"date": str(row["reason"]),
-                                    "equity": detail["equity"]})
+                    history.append({"date": str(row["reason"]), "equity": detail["equity"]})
         except Exception:  # audit table is best-effort for the app
             pass
-        return {"state": state, "equity_history": history,
-                "disclaimer": DISCLAIMER}
+        return {"state": state, "equity_history": history, "disclaimer": DISCLAIMER}
 
     @app.get("/picks")
     def picks() -> dict:
@@ -152,20 +148,14 @@ def create_app(cfg: EdgeStackConfig):
     def backtests() -> list[dict]:
         with catalog.connect() as con:
             rows = con.execute(
-                "SELECT run_id, created_at, cost_scenario FROM backtests "
-                "ORDER BY created_at DESC"
+                "SELECT run_id, created_at, cost_scenario FROM backtests ORDER BY created_at DESC"
             ).fetchall()
-        return [
-            {"run_id": r[0], "created_at": str(r[1]), "cost_scenario": r[2]}
-            for r in rows
-        ]
+        return [{"run_id": r[0], "created_at": str(r[1]), "cost_scenario": r[2]} for r in rows]
 
     @app.get("/backtests/{run_id}")
     def backtest_detail(run_id: str) -> dict:
         with catalog.connect() as con:
-            row = con.execute(
-                "SELECT payload FROM backtests WHERE run_id = ?", [run_id]
-            ).fetchone()
+            row = con.execute("SELECT payload FROM backtests WHERE run_id = ?", [run_id]).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"unknown run {run_id}")
         return json.loads(row[0])

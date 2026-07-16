@@ -44,8 +44,7 @@ def build_matrices():
     cfg = load_config("configs/live.yaml")  # guard at 2026-12-31: full history
     catalog = DataCatalog(cfg)
     panel = catalog.load_panel()
-    px = panel.assign(p=panel["adj_close"].where(panel["adj_close"].notna(),
-                                                 panel["close"]))
+    px = panel.assign(p=panel["adj_close"].where(panel["adj_close"].notna(), panel["close"]))
     prices = px.pivot(index="date", columns="symbol", values="p").sort_index()
     closes = panel.pivot(index="date", columns="symbol", values="close").sort_index()
     rets = prices.pct_change()
@@ -57,14 +56,17 @@ def build_matrices():
         spans.setdefault(iv.symbol, []).append(iv)
     for symbol in prices.columns:
         for iv in spans.get(symbol, []):
-            member.loc[(member.index >= pd.Timestamp(iv.start))
-                       & (member.index < pd.Timestamp(iv.end)), symbol] = True
+            member.loc[
+                (member.index >= pd.Timestamp(iv.start)) & (member.index < pd.Timestamp(iv.end)),
+                symbol,
+            ] = True
     eligible = member & (closes >= 5.0) & prices.notna()
     return prices, rets, eligible
 
 
-def decile_weights(score: pd.DataFrame, eligible: pd.DataFrame,
-                   rebalance_every: int, top: bool, warmup: int) -> pd.DataFrame:
+def decile_weights(
+    score: pd.DataFrame, eligible: pd.DataFrame, rebalance_every: int, top: bool, warmup: int
+) -> pd.DataFrame:
     """Equal-weight decile portfolio, signals at close t -> held from t+1."""
     dates = score.index
     weights = pd.DataFrame(0.0, index=dates, columns=score.columns)
@@ -127,14 +129,14 @@ def main() -> int:
     spy200 = spy_ret.where(gate, 0.0)
 
     strategies = {
-        "MOM_top_decile": portfolio_returns(
-            decile_weights(mom, eligible, 21, True, 260), rets),
+        "MOM_top_decile": portfolio_returns(decile_weights(mom, eligible, 21, True, 260), rets),
         "LOWVOL_bottom_decile": portfolio_returns(
-            decile_weights(-vol, eligible, 21, True, 260), rets),
+            decile_weights(-vol, eligible, 21, True, 260), rets
+        ),
         "REV5_losers_weekly": portfolio_returns(
-            decile_weights(-rev5, eligible, 5, True, 260), rets),
-        "MOMLV_combined": portfolio_returns(
-            decile_weights(momlv, eligible, 21, True, 260), rets),
+            decile_weights(-rev5, eligible, 5, True, 260), rets
+        ),
+        "MOMLV_combined": portfolio_returns(decile_weights(momlv, eligible, 21, True, 260), rets),
         "SPY_buy_hold": spy_ret,
         "SPY_200dma_gate": spy200,
     }
@@ -152,25 +154,37 @@ def main() -> int:
             rows.append(summarize(series, spy_ret, name, lo, hi))
         out[period] = rows
         print(f"\n=== {period} ===")
-        print(f"{'strategy':<24}{'CAGR':>8}{'Sharpe':>8}{'maxDD':>8}"
-              f"{'NWalpha':>9}{'t':>6}{'beta':>6}")
+        print(
+            f"{'strategy':<24}{'CAGR':>8}{'Sharpe':>8}{'maxDD':>8}{'NWalpha':>9}{'t':>6}{'beta':>6}"
+        )
         for row in rows:
             if "cagr" not in row:
                 continue
-            print(f"{row['label']:<24}{row['cagr']:>8.1%}{row['sharpe']:>8.2f}"
-                  f"{row['maxdd']:>8.1%}{row['nw_alpha_ann']:>9.1%}"
-                  f"{row['alpha_t']:>6.2f}{row['beta']:>6.2f}")
+            print(
+                f"{row['label']:<24}{row['cagr']:>8.1%}{row['sharpe']:>8.2f}"
+                f"{row['maxdd']:>8.1%}{row['nw_alpha_ann']:>9.1%}"
+                f"{row['alpha_t']:>6.2f}{row['beta']:>6.2f}"
+            )
 
     # per-year table for the two leaders vs SPY
     yearly = {}
-    for name in ("MOM_top_decile", "MOMLV_combined", "LOWVOL_bottom_decile",
-                 "SPY_buy_hold", "SPY_200dma_gate"):
+    for name in (
+        "MOM_top_decile",
+        "MOMLV_combined",
+        "LOWVOL_bottom_decile",
+        "SPY_buy_hold",
+        "SPY_200dma_gate",
+    ):
         s = strategies[name]
-        yearly[name] = {str(y): round(float(np.prod(1 + s.loc[str(y)]) - 1), 4)
-                        for y in range(2013, 2027) if len(s.loc[str(y)]) > 30}
+        yearly[name] = {
+            str(y): round(float(np.prod(1 + s.loc[str(y)]) - 1), 4)
+            for y in range(2013, 2027)
+            if len(s.loc[str(y)]) > 30
+        }
     out["yearly"] = yearly
-    atomic_write_bytes(Path("artifacts") / "cross_sectional.json",
-                       json.dumps(out, indent=2).encode())
+    atomic_write_bytes(
+        Path("artifacts") / "cross_sectional.json", json.dumps(out, indent=2).encode()
+    )
     print("\nsaved -> artifacts/cross_sectional.json")
     return 0
 

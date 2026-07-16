@@ -13,7 +13,7 @@ from edgestack.execution.orders import Fill
 @dataclass
 class Position:
     symbol: str
-    quantity: float = 0.0          # negative = short
+    quantity: float = 0.0  # negative = short
     avg_price: float = 0.0
     realized_pnl: float = 0.0
     entry_session: pd.Timestamp | None = None
@@ -34,17 +34,15 @@ class PortfolioState:
 
     def apply_fill(self, fill: Fill, session: pd.Timestamp) -> None:
         pos = self.position(fill.symbol)
-        self.cash -= fill.quantity * fill.price   # buy consumes, sell releases
-        self.cash -= fill.cost                    # friction is explicit cash
+        self.cash -= fill.quantity * fill.price  # buy consumes, sell releases
+        self.cash -= fill.cost  # friction is explicit cash
 
         old_qty = pos.quantity
         new_qty = old_qty + fill.quantity
         if old_qty == 0 or (old_qty > 0) == (fill.quantity > 0):
             # opening or adding: weighted average entry
             total = abs(old_qty) + abs(fill.quantity)
-            pos.avg_price = (
-                (abs(old_qty) * pos.avg_price + abs(fill.quantity) * fill.price) / total
-            )
+            pos.avg_price = (abs(old_qty) * pos.avg_price + abs(fill.quantity) * fill.price) / total
             if old_qty == 0:
                 pos.entry_session = session
                 pos.sessions_held = 0
@@ -82,7 +80,8 @@ class PortfolioState:
     def gross_exposure(self, prices: dict[str, float]) -> float:
         return sum(
             abs(pos.quantity) * prices.get(pos.symbol, pos.avg_price)
-            for pos in self.positions.values() if pos.is_open
+            for pos in self.positions.values()
+            if pos.is_open
         )
 
     def open_positions(self) -> list[Position]:

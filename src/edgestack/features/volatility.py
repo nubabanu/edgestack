@@ -62,19 +62,20 @@ def squeeze_on(df: pd.DataFrame) -> pd.Series:
 @feature("vol_pctile_252", Family.VOLATILITY, min_history=150)
 def vol_pctile_252(df: pd.DataFrame) -> pd.Series:
     """Percentile of current realized vol within its trailing year."""
-    rv = np.log(df["close"] / df["close"].shift()).rolling(20).std() * ANN
+    log_return = pd.Series(np.log(df["close"] / df["close"].shift()), index=df.index)
+    rv = log_return.rolling(20).std() * ANN
     return rv.rolling(252, min_periods=126).rank(pct=True)
 
 
 @feature("parkinson_20", Family.VOLATILITY, inputs=("high", "low"), min_history=21)
 def parkinson_20(df: pd.DataFrame) -> pd.Series:
     """Annualized 20-session Parkinson (high-low) volatility."""
-    hl = np.log(df["high"] / df["low"]) ** 2
+    hl = pd.Series(np.log(df["high"] / df["low"]) ** 2, index=df.index)
     return np.sqrt(hl.rolling(20).mean() / (4.0 * np.log(2.0))) * ANN
 
 
 @feature("vol_ratio_5_60", Family.VOLATILITY, min_history=61)
 def vol_ratio_5_60(df: pd.DataFrame) -> pd.Series:
     """Short-term vs medium-term realized vol (expansion > 1, compression < 1)."""
-    r = np.log(df["close"] / df["close"].shift())
+    r = pd.Series(np.log(df["close"] / df["close"].shift()), index=df.index)
     return r.rolling(5).std() / r.rolling(60).std().where(lambda s: s > 0)

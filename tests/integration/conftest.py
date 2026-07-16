@@ -28,8 +28,10 @@ def signal_cfg(tmp_path_factory) -> EdgeStackConfig:
         {
             "paths": {"data_dir": str(tmp / "data"), "artifacts_dir": str(tmp / "artifacts")},
             "universe": {
-                "symbols": ["AAA", "BBB", "CCC"], "benchmark_symbol": "AAA",
-                "source": "synthetic", "min_price": 1.0,
+                "symbols": ["AAA", "BBB", "CCC"],
+                "benchmark_symbol": "AAA",
+                "source": "synthetic",
+                "min_price": 1.0,
                 "min_median_dollar_volume": 1000000,
             },
             "signals": {
@@ -41,8 +43,11 @@ def signal_cfg(tmp_path_factory) -> EdgeStackConfig:
                 "min_reward_to_risk": 1.0,
             },
             "validation": {
-                "n_folds": 3, "test_sessions": 250, "train_min_sessions": 750,
-                "embargo_sessions": 5, "final_test_start": "2022-01-01",
+                "n_folds": 3,
+                "test_sessions": 250,
+                "train_min_sessions": 750,
+                "embargo_sessions": 5,
+                "final_test_start": "2022-01-01",
                 "bootstrap_samples": 500,
             },
             "discovery": {"horizons": [1], "min_support": 50},
@@ -54,7 +59,8 @@ def signal_cfg(tmp_path_factory) -> EdgeStackConfig:
 def prepared(signal_cfg: EdgeStackConfig) -> EdgeStackConfig:
     """Run the whole research pipeline once for the test session."""
     market = SyntheticMarket(
-        seed=42, base=GBM(mu=0.0, sigma=0.05),
+        seed=42,
+        base=GBM(mu=0.0, sigma=0.05),
         effects=(CalendarEffect(facts_column="is_friday", drift_bps=60.0),),
     )
     panel = market.generate(("AAA", "BBB", "CCC"), date(2010, 1, 1), date(2020, 12, 31))
@@ -69,8 +75,7 @@ def prepared(signal_cfg: EdgeStackConfig) -> EdgeStackConfig:
         *[Predicate(feature="cal_weekday", op="==", value=float(wd)) for wd in range(5)],
         Predicate(feature="cal_turn_of_month", op="==", value=1.0),
     ]
-    batch = generate_candidates(features, labels, signal_cfg, experiment_id,
-                                conditions=conditions)
+    batch = generate_candidates(features, labels, signal_cfg, experiment_id, conditions=conditions)
     save_batch(catalog, batch)
     edges = validate_batch(batch, features, labels, signal_cfg)
     save_edges(catalog, edges)

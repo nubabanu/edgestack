@@ -32,13 +32,13 @@ _ids = itertools.count(1)
 @dataclass
 class Order:
     symbol: str
-    quantity: float               # positive = buy, negative = sell
+    quantity: float  # positive = buy, negative = sell
     order_type: OrderType
     created_session: pd.Timestamp
     limit_price: float | None = None
     stop_price: float | None = None
     expires_after_sessions: int | None = None
-    tag: str = ""                 # entry / stop_loss / target / time_exit
+    tag: str = ""  # entry / stop_loss / target / time_exit
     order_id: int = field(default_factory=lambda: next(_ids))
     status: OrderStatus = OrderStatus.NEW
     sessions_open: int = 0
@@ -53,7 +53,7 @@ class Fill:
     order_id: int
     symbol: str
     session: pd.Timestamp
-    quantity: float               # signed like the order
-    price: float                  # execution price, always within the bar range
-    cost: float                   # explicit cash cost of the leg (>= 0)
+    quantity: float  # signed like the order
+    price: float  # execution price, always within the bar range
+    cost: float  # explicit cash cost of the leg (>= 0)
     tag: str

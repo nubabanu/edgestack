@@ -23,8 +23,14 @@ SYMBOLS = ("AAA", "BBB", "CCC")
 START, END = date(2010, 1, 1), date(2020, 12, 31)
 
 FEATURES = (
-    "cal_weekday", "cal_is_monday", "cal_is_friday", "cal_turn_of_month",
-    "cal_pre_holiday", "bench_trend_200", "bench_vol_20", "above_sma200",
+    "cal_weekday",
+    "cal_is_monday",
+    "cal_is_friday",
+    "cal_turn_of_month",
+    "cal_pre_holiday",
+    "bench_trend_200",
+    "bench_vol_20",
+    "above_sma200",
     "rel_volume_20",
 )
 
@@ -70,7 +76,9 @@ def build_frames(
     specs = tuple(get_spec(name) for name in FEATURES)
     features = build_features(panel, cfg, specs)
     labels = forward_return_labels(
-        panel, (1, 5), benchmark_symbol="AAA",
+        panel,
+        (1, 5),
+        benchmark_symbol="AAA",
         execution_delay=cfg.signals.execution_delay_sessions,
     )
     return cfg, features, labels
@@ -94,9 +102,7 @@ def run_research(
 def validated_names(edges: list[Edge]) -> list[str]:
     from edgestack.types import EdgeStatus
 
-    return sorted(
-        e.identity.name for e in edges if e.lifecycle.status is EdgeStatus.VALIDATED
-    )
+    return sorted(e.identity.name for e in edges if e.lifecycle.status is EdgeStatus.VALIDATED)
 
 
 def edge_by_name_prefix(edges: list[Edge], prefix: str) -> Edge:
@@ -105,11 +111,12 @@ def edge_by_name_prefix(edges: list[Edge], prefix: str) -> Edge:
     return matches[0]
 
 
-def friday_effect(drift_bps: float, *, start: date | None = None,
-                  end: date | None = None):
+def friday_effect(drift_bps: float, *, start: date | None = None, end: date | None = None):
     from edgestack.data.providers.synthetic import CalendarEffect
 
     return CalendarEffect(
-        facts_column="is_friday", drift_bps=drift_bps,
-        active_start=start, active_end=end,
+        facts_column="is_friday",
+        drift_bps=drift_bps,
+        active_start=start,
+        active_end=end,
     )

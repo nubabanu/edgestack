@@ -8,6 +8,7 @@ approximate.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 import time
@@ -24,18 +25,45 @@ from edgestack.logging import configure
 
 MODULES = "financialData,defaultKeyStatistics,summaryDetail,price"
 FIELDS = {
-    "financialData": ["returnOnEquity", "profitMargins", "operatingMargins",
-                      "grossMargins", "revenueGrowth", "earningsGrowth",
-                      "freeCashflow", "totalCash", "totalDebt", "debtToEquity",
-                      "currentRatio", "targetMeanPrice", "recommendationMean",
-                      "numberOfAnalystOpinions", "returnOnAssets"],
-    "defaultKeyStatistics": ["forwardPE", "trailingEps", "forwardEps", "pegRatio",
-                             "priceToBook", "enterpriseToEbitda", "beta",
-                             "heldPercentInsiders", "heldPercentInstitutions",
-                             "shortPercentOfFloat", "shortRatio",
-                             "52WeekChange"],
-    "summaryDetail": ["trailingPE", "dividendYield", "marketCap",
-                      "fiftyTwoWeekHigh", "fiftyTwoWeekLow", "averageVolume"],
+    "financialData": [
+        "returnOnEquity",
+        "profitMargins",
+        "operatingMargins",
+        "grossMargins",
+        "revenueGrowth",
+        "earningsGrowth",
+        "freeCashflow",
+        "totalCash",
+        "totalDebt",
+        "debtToEquity",
+        "currentRatio",
+        "targetMeanPrice",
+        "recommendationMean",
+        "numberOfAnalystOpinions",
+        "returnOnAssets",
+    ],
+    "defaultKeyStatistics": [
+        "forwardPE",
+        "trailingEps",
+        "forwardEps",
+        "pegRatio",
+        "priceToBook",
+        "enterpriseToEbitda",
+        "beta",
+        "heldPercentInsiders",
+        "heldPercentInstitutions",
+        "shortPercentOfFloat",
+        "shortRatio",
+        "52WeekChange",
+    ],
+    "summaryDetail": [
+        "trailingPE",
+        "dividendYield",
+        "marketCap",
+        "fiftyTwoWeekHigh",
+        "fiftyTwoWeekLow",
+        "averageVolume",
+    ],
     "price": ["regularMarketPrice", "shortName"],
 }
 
@@ -46,12 +74,11 @@ def main() -> int:
     symbols = list(universe.members(date.today()))
     session = requests.Session()
     session.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    try:
+    with contextlib.suppress(requests.RequestException):
         session.get("https://fc.yahoo.com", timeout=15)
-    except requests.RequestException:
-        pass
-    crumb = session.get("https://query1.finance.yahoo.com/v1/test/getcrumb",
-                        timeout=15).text.strip()
+    crumb = session.get(
+        "https://query1.finance.yahoo.com/v1/test/getcrumb", timeout=15
+    ).text.strip()
     print(f"fetching fundamentals for {len(symbols)} current members")
 
     out: dict[str, dict] = {}
@@ -61,7 +88,9 @@ def main() -> int:
         try:
             r = session.get(
                 f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}",
-                params={"modules": MODULES, "crumb": crumb}, timeout=15)
+                params={"modules": MODULES, "crumb": crumb},
+                timeout=15,
+            )
             result = r.json()["quoteSummary"]["result"]
             if not result:
                 failed += 1
@@ -80,15 +109,17 @@ def main() -> int:
         except Exception:
             failed += 1
         if i % 60 == 59:
-            print(f"  {i+1}/{len(symbols)} ({failed} failed, {time.time()-t0:.0f}s)")
+            print(f"  {i + 1}/{len(symbols)} ({failed} failed, {time.time() - t0:.0f}s)")
         time.sleep(0.25)
 
-    payload = {"as_of": str(date.today()), "n": len(out), "failed": failed,
-               "data": out}
-    atomic_write_bytes(Path("artifacts") / "fundamentals_snapshot.json",
-                       json.dumps(payload).encode())
-    print(f"saved {len(out)} snapshots ({failed} failed, {time.time()-t0:.0f}s) "
-          f"-> artifacts/fundamentals_snapshot.json")
+    payload = {"as_of": str(date.today()), "n": len(out), "failed": failed, "data": out}
+    atomic_write_bytes(
+        Path("artifacts") / "fundamentals_snapshot.json", json.dumps(payload).encode()
+    )
+    print(
+        f"saved {len(out)} snapshots ({failed} failed, {time.time() - t0:.0f}s) "
+        f"-> artifacts/fundamentals_snapshot.json"
+    )
     return 0
 
 

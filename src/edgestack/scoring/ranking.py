@@ -19,9 +19,9 @@ from edgestack.types import Edge, EvidenceItem, Family
 @dataclass(frozen=True)
 class AggregatedEvidence:
     items: tuple[EvidenceItem, ...]
-    expected_net_return: float          # contribution-weighted mean of edge nets
-    total_contribution: float           # 0..1-ish aggregate evidence mass
-    stability: float                    # contribution-weighted stability
+    expected_net_return: float  # contribution-weighted mean of edge nets
+    total_contribution: float  # 0..1-ish aggregate evidence mass
+    stability: float  # contribution-weighted stability
     out_of_sample: float
     deflated_sharpe: float
     cost_survival: float
@@ -107,8 +107,9 @@ def aggregate_evidence(edges: list[Edge], scoring: ScoringConfig) -> AggregatedE
         deflated_sharpe=wmean([e.stats.deflated_sharpe_ratio for e in edges]),
         cost_survival=wmean([e.robustness.cost_robustness_score for e in edges]),
         effective_n=float(min(e.stats.effective_sample_size for e in edges)),
-        ci_width=float(np.average(ci_widths,
-                                  weights=[edge_contrib[e.identity.edge_id] for e in edges])),
+        ci_width=float(
+            np.average(ci_widths, weights=[edge_contrib[e.identity.edge_id] for e in edges])
+        ),
         tail_risk=float(min(e.stats.expected_shortfall for e in edges)),
         recommended_horizon=best_edge.identity.holding_horizon,
     )

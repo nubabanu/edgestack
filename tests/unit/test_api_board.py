@@ -38,8 +38,10 @@ def test_master_missing_is_404(client: TestClient) -> None:
 def test_master_served(client: TestClient, tmp_path: Path) -> None:
     art = tmp_path / "artifacts"
     art.mkdir(exist_ok=True)
-    payload = {"schema_version": 1, "instruments": {"SPY": {
-        "ensemble_exposure_next_session": 0.85}}}
+    payload = {
+        "schema_version": 1,
+        "instruments": {"SPY": {"ensemble_exposure_next_session": 0.85}},
+    }
     (art / "master_signal.json").write_text(json.dumps(payload), encoding="utf-8")
     resp = client.get("/master")
     assert resp.status_code == 200
@@ -52,9 +54,19 @@ def test_board_served_verbatim(client: TestClient, tmp_path: Path) -> None:
         "as_of": "2026-07-15",
         "disclaimer": "Research output only. Not investment advice.",
         "regime": {"trend": "UP", "vol": "MEDIUM"},
-        "rows": [{"symbol": "NRG", "close": 137.86, "conviction": 33.0,
-                  "e_net_10d": 0.0065, "hit": 0.54, "n_edges": 9,
-                  "families": 5, "stop": 126.75, "target": 151.75}],
+        "rows": [
+            {
+                "symbol": "NRG",
+                "close": 137.86,
+                "conviction": 33.0,
+                "e_net_10d": 0.0065,
+                "hit": 0.54,
+                "n_edges": 9,
+                "families": 5,
+                "stop": 126.75,
+                "target": 151.75,
+            }
+        ],
     }
     art = tmp_path / "artifacts"
     art.mkdir(exist_ok=True)

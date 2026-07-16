@@ -35,7 +35,7 @@ from edgestack.validation.advanced_tests import passes_cgs_hurdle
 log = get_logger("stability")
 
 DISCOVERY_FRACTION = 0.8
-WINDOW_FRACTIONS = (0.5, 0.65, 0.8)   # expanding, all inside the discovery region
+WINDOW_FRACTIONS = (0.5, 0.65, 0.8)  # expanding, all inside the discovery region
 SYMBOL_SUBSAMPLE = 0.7
 N_SUBSAMPLES = 3
 
@@ -44,15 +44,15 @@ N_SUBSAMPLES = 3
 class StableRule:
     signature: str
     condition: Condition
-    direction: int                 # +1 long-favorable, -1 avoid/short-research
+    direction: int  # +1 long-favorable, -1 avoid/short-research
     selection_freq: float
     sign_consistency: float
     n_runs_present: int
     mean_support: float
     inner_n: int
-    inner_mean_excess: float       # DEMEANED: mean(selected) - mean(all inner)
-    inner_abs_mean: float          # absolute mean of selected inner returns
-    inner_t: float                 # t-stat of the demeaned edge (coef semantics)
+    inner_mean_excess: float  # DEMEANED: mean(selected) - mean(all inner)
+    inner_abs_mean: float  # absolute mean of selected inner returns
+    inner_t: float  # t-stat of the demeaned edge (coef semantics)
     inner_mean_mae: float | None
     passes: bool
     fail_reasons: tuple[str, ...]
@@ -63,8 +63,11 @@ def _median_condition(occurrences: list[DiscoveredRule]) -> Condition:
     thresholds: dict[tuple[str, str], list[float]] = defaultdict(list)
     ops: dict[tuple[str, str], str] = {}
     for rule in occurrences:
-        preds = (rule.condition,) if isinstance(rule.condition, Predicate) \
+        preds = (
+            (rule.condition,)
+            if isinstance(rule.condition, Predicate)
             else rule.condition.conditions
+        )
         for p in preds:
             if not isinstance(p, Predicate):  # rules are flat conjunctions
                 continue
@@ -72,8 +75,11 @@ def _median_condition(occurrences: list[DiscoveredRule]) -> Condition:
             thresholds[(p.feature, direction)].append(float(p.value))  # type: ignore[arg-type]
             ops[(p.feature, direction)] = p.op
     preds_out = tuple(
-        Predicate(feature=f, op=ops[(f, d)],  # type: ignore[arg-type]
-                  value=float(np.median(vals)))
+        Predicate(
+            feature=f,
+            op=ops[(f, d)],  # type: ignore[arg-type]
+            value=float(np.median(vals)),
+        )
         for (f, d), vals in sorted(thresholds.items())
     )
     return preds_out[0] if len(preds_out) == 1 else AllOf(conditions=preds_out)
@@ -112,15 +118,18 @@ def stability_select(
         window_end = disc_sessions[int(len(disc_sessions) * frac) - 1]
         window = discovery.loc[discovery["date"] <= window_end]
         for s in range(N_SUBSAMPLES):
-            keep = rng.choice(symbols, size=int(len(symbols) * SYMBOL_SUBSAMPLE),
-                              replace=False)
+            keep = rng.choice(symbols, size=int(len(symbols) * SYMBOL_SUBSAMPLE), replace=False)
             sub = window.loc[window["symbol"].isin(keep)]
             try:
                 rules, generated = discover_rules(
-                    sub, sub[target_col], feature_cols,
-                    seed=seed + 1000 * n_runs + s, max_rules=max_rules,
+                    sub,
+                    sub[target_col],
+                    feature_cols,
+                    seed=seed + 1000 * n_runs + s,
+                    max_rules=max_rules,
                     max_fit_rows=max_fit_rows,
-                    min_support=min_support, min_symbols=min_symbols,
+                    min_support=min_support,
+                    min_symbols=min_symbols,
                 )
             except ValidationError:
                 continue
@@ -130,19 +139,23 @@ def stability_select(
                 occurrences[rule.signature].append(rule)
     if n_runs == 0:
         raise ValidationError("no successful discovery runs")
-    log_event(log, 20, "stability runs complete", runs=n_runs,
-              structural_rules=len(occurrences), trials=trials)
+    log_event(
+        log,
+        20,
+        "stability runs complete",
+        runs=n_runs,
+        structural_rules=len(occurrences),
+        trials=trials,
+    )
 
     out: list[StableRule] = []
     inner_y = inner[target_col].to_numpy(dtype=float)
     inner_base = float(np.nanmean(inner_y))  # unconditional inner mean
-    inner_mae = inner[mae_col].to_numpy(dtype=float) if mae_col and mae_col in inner \
-        else None
+    inner_mae = inner[mae_col].to_numpy(dtype=float) if mae_col and mae_col in inner else None
     inner_feats = inner[list(feature_cols)].astype(np.float64)
     inner_feats = inner_feats.fillna(discovery[list(feature_cols)].median(numeric_only=True))
 
-    for signature, occ in sorted(occurrences.items(),
-                                 key=lambda kv: -len(kv[1])):
+    for signature, occ in sorted(occurrences.items(), key=lambda kv: -len(kv[1])):
         freq = len(occ) / n_runs
         signs = np.sign([r.coef for r in occ])
         sign_consistency = float(max((signs > 0).mean(), (signs < 0).mean()))
@@ -160,7 +173,7 @@ def stability_select(
         sel = inner_y[mask & np.isfinite(inner_y)]
         if len(sel) >= 2:
             abs_mean = float(sel.mean())
-            edge = abs_mean - inner_base       # relative edge = coef semantics
+            edge = abs_mean - inner_base  # relative edge = coef semantics
             sd = float(sel.std(ddof=1))
             t = edge / (sd / np.sqrt(len(sel))) if sd > 0 else 0.0
         else:
@@ -171,17 +184,28 @@ def stability_select(
             reasons.append(f"inner t {t:.2f} below CGS hurdle")
         if np.sign(t) != direction and len(sel) >= min_inner_n:
             reasons.append("inner direction contradicts discovery sign")
-        mae_mean = (float(inner_mae[mask & np.isfinite(inner_mae)].mean())
-                    if inner_mae is not None and mask.any() else None)
+        mae_mean = (
+            float(inner_mae[mask & np.isfinite(inner_mae)].mean())
+            if inner_mae is not None and mask.any()
+            else None
+        )
 
-        out.append(StableRule(
-            signature=signature, condition=condition, direction=direction,
-            selection_freq=freq, sign_consistency=sign_consistency,
-            n_runs_present=len(occ),
-            mean_support=float(np.mean([r.support for r in occ])),
-            inner_n=len(sel), inner_mean_excess=edge,
-            inner_abs_mean=abs_mean, inner_t=float(t),
-            inner_mean_mae=mae_mean, passes=not reasons,
-            fail_reasons=tuple(reasons),
-        ))
+        out.append(
+            StableRule(
+                signature=signature,
+                condition=condition,
+                direction=direction,
+                selection_freq=freq,
+                sign_consistency=sign_consistency,
+                n_runs_present=len(occ),
+                mean_support=float(np.mean([r.support for r in occ])),
+                inner_n=len(sel),
+                inner_mean_excess=edge,
+                inner_abs_mean=abs_mean,
+                inner_t=float(t),
+                inner_mean_mae=mae_mean,
+                passes=not reasons,
+                fail_reasons=tuple(reasons),
+            )
+        )
     return out, trials

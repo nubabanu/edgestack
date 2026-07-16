@@ -20,8 +20,14 @@ import pandas as pd
 from edgestack.exceptions import DataError
 
 LABEL_COLUMNS = (
-    "symbol", "date", "horizon", "entry_date", "label_end",
-    "gross_ret", "bench_ret", "excess_ret",
+    "symbol",
+    "date",
+    "horizon",
+    "entry_date",
+    "label_end",
+    "gross_ret",
+    "bench_ret",
+    "excess_ret",
 )
 
 

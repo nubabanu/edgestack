@@ -20,8 +20,10 @@ def main() -> None:  # pragma: no cover - interactive UI
 
     st.set_page_config(page_title="EdgeStack", layout="wide")
     st.title("EdgeStack — research dashboard")
-    st.warning("Research / paper-trading output only. Nothing here is investment "
-               "advice; free data sources carry survivorship bias.")
+    st.warning(
+        "Research / paper-trading output only. Nothing here is investment "
+        "advice; free data sources carry survivorship bias."
+    )
 
     cfg = load_config()
     catalog = DataCatalog(cfg)
@@ -63,10 +65,18 @@ def main() -> None:  # pragma: no cover - interactive UI
             st.dataframe(_frame(report.short_candidates))
 
         st.subheader(f"Abstentions ({len(report.abstentions)})")
-        st.dataframe(pd.DataFrame(
-            [{"symbol": a.symbol, "side": a.side.value if a.side else "",
-              "reasons": "; ".join(a.reasons)} for a in report.abstentions]
-        ))
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "symbol": a.symbol,
+                        "side": a.side.value if a.side else "",
+                        "reasons": "; ".join(a.reasons),
+                    }
+                    for a in report.abstentions
+                ]
+            )
+        )
         if report.long_candidates:
             st.subheader("Top candidate explanation")
             st.text(report.long_candidates[0].explanation)
@@ -75,21 +85,22 @@ def main() -> None:  # pragma: no cover - interactive UI
     edges = load_edges(catalog, statuses=tuple(EdgeStatus))
     if edges:
         statuses = current_statuses(catalog).set_index("edge_id")["status"].to_dict()
-        st.dataframe(pd.DataFrame(
-            [
-                {
-                    "name": e.identity.name,
-                    "status": statuses.get(e.identity.edge_id,
-                                           e.lifecycle.status.value),
-                    "net/trade": e.stats.net_mean_return,
-                    "q": e.stats.q_value,
-                    "DSR": e.stats.deflated_sharpe_ratio,
-                    "n": e.stats.sample_size,
-                    "folds+": e.robustness.stability_score,
-                }
-                for e in edges
-            ]
-        ))
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "name": e.identity.name,
+                        "status": statuses.get(e.identity.edge_id, e.lifecycle.status.value),
+                        "net/trade": e.stats.net_mean_return,
+                        "q": e.stats.q_value,
+                        "DSR": e.stats.deflated_sharpe_ratio,
+                        "n": e.stats.sample_size,
+                        "folds+": e.robustness.stability_score,
+                    }
+                    for e in edges
+                ]
+            )
+        )
     else:
         st.info("No edges yet — run discovery and validation.")
 

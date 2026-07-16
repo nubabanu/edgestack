@@ -41,8 +41,7 @@ def clean_fundamentals(row: dict) -> tuple[bool, str]:
 def main() -> int:
     board = json.loads((ART / "live_board.json").read_text(encoding="utf-8"))
     vqm = json.loads((ART / "vqm_rank.json").read_text(encoding="utf-8"))
-    funda = json.loads((ART / "fundamentals_snapshot.json")
-                       .read_text(encoding="utf-8"))["data"]
+    funda = json.loads((ART / "fundamentals_snapshot.json").read_text(encoding="utf-8"))["data"]
 
     rows = board["rows"]
     week = rows[0]
@@ -51,13 +50,14 @@ def main() -> int:
         "symbol": week["symbol"],
         "close": week["close"],
         "buy": "next session at the OPEN (validated execution); cancel if it "
-               "gaps more than +1.5% above this close",
+        "gaps more than +1.5% above this close",
         "sell": "close of the 10th session, or stop/target first",
-        "stop": week["stop"], "target": week["target"],
+        "stop": week["stop"],
+        "target": week["target"],
         "rationale": f"top frozen-system tilt: conviction "
-                     f"{week['conviction']:.0f}/100, E[net] "
-                     f"{week['e_net_10d']:+.2%}/10d, hit {week['hit']:.0%} "
-                     f"({week['n_edges']} edges, {week['families']} families)",
+        f"{week['conviction']:.0f}/100, E[net] "
+        f"{week['e_net_10d']:+.2%}/10d, hit {week['hit']:.0%} "
+        f"({week['n_edges']} edges, {week['families']} families)",
         "validated": True,
     }
 
@@ -67,16 +67,18 @@ def main() -> int:
         if ok:
             month_pick = {
                 "horizon": "month",
-                "symbol": r["symbol"], "close": r["close"],
+                "symbol": r["symbol"],
+                "close": r["close"],
                 "buy": "next session at the OPEN; a turn-of-month entry "
-                       "(last session of the month, at the close) adds the "
-                       "validated ToM tailwind",
+                "(last session of the month, at the close) adds the "
+                "validated ToM tailwind",
                 "sell": "~21 sessions, or stop first; re-check the board weekly",
-                "stop": r["stop"], "target": r["target"],
+                "stop": r["stop"],
+                "target": r["target"],
                 "rationale": f"board tilt (conviction {r['conviction']:.0f}) "
-                             f"with clean fundamentals ({verdict}); 1-month "
-                             f"hold extends the validated 10-session horizon "
-                             f"— extension itself is unvalidated",
+                f"with clean fundamentals ({verdict}); 1-month "
+                f"hold extends the validated 10-session horizon "
+                f"— extension itself is unvalidated",
                 "validated": False,
             }
             break
@@ -87,15 +89,15 @@ def main() -> int:
         "symbol": top["symbol"],
         "name": top.get("shortName", ""),
         "buy": "timing is statistically irrelevant at 12 months; if choosing, "
-               "buy at the close of the last session of a month (turn-of-"
-               "month) — never on leverage",
+        "buy at the close of the last session of a month (turn-of-"
+        "month) — never on leverage",
         "sell": "review quarterly; exit if composite rank falls out of the "
-                "top decile or SPY closes below its 200-DMA for two weeks",
+        "top decile or SPY closes below its 200-DMA for two weeks",
         "rationale": f"#1 of 503 on the value-quality-momentum composite "
-                     f"(V {top['VALUE']:.2f} / Q {top['QUALITY']:.2f} / "
-                     f"G {top['GROWTH']:.2f} / M {top['MOMENTUM']:.2f} / "
-                     f"S {top['SENTIMENT']:.2f}). CURRENT-snapshot ranking — "
-                     f"informed judgment, NOT a backtested edge",
+        f"(V {top['VALUE']:.2f} / Q {top['QUALITY']:.2f} / "
+        f"G {top['GROWTH']:.2f} / M {top['MOMENTUM']:.2f} / "
+        f"S {top['SENTIMENT']:.2f}). CURRENT-snapshot ranking — "
+        f"informed judgment, NOT a backtested edge",
         "validated": False,
     }
 

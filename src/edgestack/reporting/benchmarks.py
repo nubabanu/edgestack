@@ -28,8 +28,7 @@ def daily_total_returns(panel: pd.DataFrame, symbol: str) -> pd.Series:
     return out.dropna()
 
 
-def equal_weight_pit_returns(panel: pd.DataFrame,
-                             member_mask: pd.Series) -> pd.Series:
+def equal_weight_pit_returns(panel: pd.DataFrame, member_mask: pd.Series) -> pd.Series:
     """Equal-weighted daily total return of point-in-time-eligible rows."""
     df = panel.loc[member_mask.to_numpy(), ["symbol", "date", "adj_close", "close"]].copy()
     df["px"] = df["adj_close"].where(df["adj_close"].notna(), df["close"])
@@ -49,14 +48,16 @@ class AlphaReport:
     n_days: int
 
 
-def alpha_regression(strategy: pd.Series, market: pd.Series,
-                     *, rng: np.random.Generator, n_boot: int = 500) -> AlphaReport:
+def alpha_regression(
+    strategy: pd.Series, market: pd.Series, *, rng: np.random.Generator, n_boot: int = 500
+) -> AlphaReport:
     """OLS of strategy on market daily returns; alpha CI via paired block bootstrap."""
     joined = pd.concat([strategy.rename("s"), market.rename("m")], axis=1).dropna()
     s, m = joined["s"].to_numpy(), joined["m"].to_numpy()
     if len(s) < 60:
-        return AlphaReport(float("nan"), float("nan"),
-                           (float("nan"), float("nan")), float("nan"), len(s))
+        return AlphaReport(
+            float("nan"), float("nan"), (float("nan"), float("nan")), float("nan"), len(s)
+        )
 
     def fit_alpha(idx: np.ndarray) -> tuple[float, float]:
         mm, ss = m[idx], s[idx]
@@ -83,14 +84,18 @@ def alpha_regression(strategy: pd.Series, market: pd.Series,
     )
 
 
-def summarize_returns(rets: pd.Series | np.ndarray, *,
-                      rng: np.random.Generator, label: str) -> dict:
+def summarize_returns(
+    rets: pd.Series | np.ndarray, *, rng: np.random.Generator, label: str
+) -> dict:
     arr = np.asarray(rets, dtype=float)
     arr = arr[np.isfinite(arr)]
     if len(arr) < 30:
         return {"label": label, "n_days": len(arr)}
     sr_ci = block_bootstrap_ci(
-        arr, rng=rng, block_length=20, n_boot=500,
+        arr,
+        rng=rng,
+        block_length=20,
+        n_boot=500,
         stat=lambda x: float(x.mean() / x.std(ddof=1)) if x.std(ddof=1) > 0 else 0.0,
     )
     ann = np.sqrt(SESSIONS)

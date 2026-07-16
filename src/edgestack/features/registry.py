@@ -98,8 +98,15 @@ def _ensure_loaded() -> None:
     import importlib
 
     for module in (
-        "price", "trend", "momentum", "volatility", "volume",
-        "structure", "candles", "calendar", "market",
+        "price",
+        "trend",
+        "momentum",
+        "volatility",
+        "volume",
+        "structure",
+        "candles",
+        "calendar",
+        "market",
     ):
         importlib.import_module(f"edgestack.features.{module}")
     _LOADED = True
@@ -155,9 +162,7 @@ def build_features(
         # silently be NaN; fall back to the first symbol but say so loudly.
         bench_symbol = str(sorted(symbols)[0])
     bench_close = (
-        panel.loc[panel["symbol"] == bench_symbol]
-        .set_index("date")["close"]
-        .rename("bench_close")
+        panel.loc[panel["symbol"] == bench_symbol].set_index("date")["close"].rename("bench_close")
     )
 
     outputs = []

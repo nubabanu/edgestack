@@ -136,9 +136,7 @@ class PurgedWalkForwardSplitter:
     def split(self, X, y=None, groups=None):
         """Yield (train_idx, test_idx); X must carry `date` and `label_end` columns."""
         if not isinstance(X, pd.DataFrame) or "date" not in X or "label_end" not in X:
-            raise ValidationError(
-                "sklearn facade requires a DataFrame with `date` and `label_end`"
-            )
+            raise ValidationError("sklearn facade requires a DataFrame with `date` and `label_end`")
         for fold in self.split_frame(X["date"], X["label_end"]):
             yield fold.train_idx, fold.test_idx
 

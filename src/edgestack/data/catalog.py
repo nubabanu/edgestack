@@ -312,8 +312,14 @@ class DataCatalog:
                 [trial_count, experiment_id],
             )
 
-    def audit(self, event: str, *, reason: str | None = None,
-              experiment_id: str | None = None, **detail: Any) -> None:
+    def audit(
+        self,
+        event: str,
+        *,
+        reason: str | None = None,
+        experiment_id: str | None = None,
+        **detail: Any,
+    ) -> None:
         with self.connect() as con:
             con.execute(
                 "INSERT INTO audit_log VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -330,9 +336,7 @@ class DataCatalog:
 
     def audit_events(self, event: str) -> pd.DataFrame:
         with self.connect() as con:
-            return con.execute(
-                "SELECT * FROM audit_log WHERE event = ? ORDER BY ts", [event]
-            ).df()
+            return con.execute("SELECT * FROM audit_log WHERE event = ? ORDER BY ts", [event]).df()
 
 
 def _git_head() -> str | None:
@@ -341,7 +345,10 @@ def _git_head() -> str | None:
 
     try:
         out = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5,
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
             check=False,
         )
         return out.stdout.strip() or None

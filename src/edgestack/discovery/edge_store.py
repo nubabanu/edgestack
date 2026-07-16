@@ -20,8 +20,7 @@ def save_batch(catalog: DataCatalog, batch: DiscoveryBatch) -> None:
         con.executemany(
             "INSERT OR REPLACE INTO candidates VALUES (?, ?, ?, ?, ?)",
             [
-                [c.candidate_id, batch.batch_id, batch.experiment_id, now,
-                 c.model_dump_json()]
+                [c.candidate_id, batch.batch_id, batch.experiment_id, now, c.model_dump_json()]
                 for c in batch.candidates
             ],
         )
@@ -47,9 +46,7 @@ def load_batch(catalog: DataCatalog, batch_id: str | None = None) -> DiscoveryBa
     if not rows:
         raise ValidationError(f"unknown discovery batch: {batch_id}")
     candidates = tuple(CandidateEdge.model_validate_json(payload) for _, _, payload in rows)
-    return DiscoveryBatch(
-        batch_id=batch_id, experiment_id=rows[0][1], candidates=candidates
-    )
+    return DiscoveryBatch(batch_id=batch_id, experiment_id=rows[0][1], candidates=candidates)
 
 
 def save_edges(catalog: DataCatalog, edges: list[Edge]) -> None:
@@ -89,15 +86,25 @@ def save_edges(catalog: DataCatalog, edges: list[Edge]) -> None:
 
 
 def record_edge_event(
-    catalog: DataCatalog, edge_id: str, from_status: EdgeStatus | None,
-    to_status: EdgeStatus, rule_fired: str, metrics_json: str = "{}",
+    catalog: DataCatalog,
+    edge_id: str,
+    from_status: EdgeStatus | None,
+    to_status: EdgeStatus,
+    rule_fired: str,
+    metrics_json: str = "{}",
 ) -> None:
     with catalog.connect() as con:
         con.execute(
             "INSERT INTO edge_events VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [uuid.uuid4().hex, edge_id, datetime.now(UTC),
-             from_status.value if from_status else None, to_status.value,
-             rule_fired, metrics_json],
+            [
+                uuid.uuid4().hex,
+                edge_id,
+                datetime.now(UTC),
+                from_status.value if from_status else None,
+                to_status.value,
+                rule_fired,
+                metrics_json,
+            ],
         )
 
 
@@ -118,8 +125,8 @@ def current_statuses(catalog: DataCatalog) -> pd.DataFrame:
 
 
 def load_edges(
-    catalog: DataCatalog, statuses: tuple[EdgeStatus, ...] = (EdgeStatus.VALIDATED,
-                                                              EdgeStatus.ACTIVE)
+    catalog: DataCatalog,
+    statuses: tuple[EdgeStatus, ...] = (EdgeStatus.VALIDATED, EdgeStatus.ACTIVE),
 ) -> list[Edge]:
     """Load full Edge payloads whose CURRENT status is one of ``statuses``."""
     wanted = {s.value for s in statuses}

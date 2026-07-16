@@ -42,38 +42,46 @@ def main() -> int:
     catalog = DataCatalog(cfg)  # guard truncates before 2024
     panel = catalog.load_panel()
     merged = pd.read_parquet("data/features/rules_merged.parquet")
-    features = merged.drop(columns=["label_end", "gross_ret", "excess_net_ret",
-                                    "mae", "close"])
+    features = merged.drop(columns=["label_end", "gross_ret", "excess_net_ret", "mae", "close"])
     features = features.loc[features["date"] < pd.Timestamp("2024-01-01")]
     if len(features) > MAX_ROWS:
         rng = np.random.default_rng(cfg.project.random_seed)
         idx = np.sort(rng.choice(len(features), size=MAX_ROWS, replace=False))
         features = features.iloc[idx].reset_index(drop=True)
     labels = forward_return_labels(panel, HORIZONS, benchmark_symbol="SPY")
-    print(f"features: {len(features):,} rows (subsampled), "
-          f"labels: {len(labels):,} ({time.time()-t0:.0f}s)")
+    print(
+        f"features: {len(features):,} rows (subsampled), "
+        f"labels: {len(labels):,} ({time.time() - t0:.0f}s)"
+    )
 
     models = train_models(features, labels, cfg, sides=(Side.LONG,))
     rows = []
     for m in models:
         edge = m.metrics["base_rate_log_loss"] - m.metrics["oof_log_loss"]
-        rows.append({
-            "horizon": m.horizon, "selected_model": m.name,
-            "oof_log_loss": round(m.metrics["oof_log_loss"], 5),
-            "base_rate_log_loss": round(m.metrics["base_rate_log_loss"], 5),
-            "improvement": round(edge, 5),
-            "oof_ece": round(m.metrics["oof_ece"], 4),
-            "oof_n": int(m.metrics["oof_n"]),
-        })
-    print(f"\n{'horizon':>7} {'selected':>18} {'OOF ll':>9} {'base ll':>9} "
-          f"{'improve':>9} {'ECE':>7}")
+        rows.append(
+            {
+                "horizon": m.horizon,
+                "selected_model": m.name,
+                "oof_log_loss": round(m.metrics["oof_log_loss"], 5),
+                "base_rate_log_loss": round(m.metrics["base_rate_log_loss"], 5),
+                "improvement": round(edge, 5),
+                "oof_ece": round(m.metrics["oof_ece"], 4),
+                "oof_n": int(m.metrics["oof_n"]),
+            }
+        )
+    print(
+        f"\n{'horizon':>7} {'selected':>18} {'OOF ll':>9} {'base ll':>9} {'improve':>9} {'ECE':>7}"
+    )
     for r in rows:
-        print(f"{r['horizon']:>7} {r['selected_model']:>18} "
-              f"{r['oof_log_loss']:>9.4f} {r['base_rate_log_loss']:>9.4f} "
-              f"{r['improvement']:>9.5f} {r['oof_ece']:>7.3f}")
-    atomic_write_bytes(Path("artifacts") / "horizon_sweep.json",
-                       json.dumps(rows, indent=2).encode())
-    print(f"\nsaved -> artifacts/horizon_sweep.json ({time.time()-t0:.0f}s)")
+        print(
+            f"{r['horizon']:>7} {r['selected_model']:>18} "
+            f"{r['oof_log_loss']:>9.4f} {r['base_rate_log_loss']:>9.4f} "
+            f"{r['improvement']:>9.5f} {r['oof_ece']:>7.3f}"
+        )
+    atomic_write_bytes(
+        Path("artifacts") / "horizon_sweep.json", json.dumps(rows, indent=2).encode()
+    )
+    print(f"\nsaved -> artifacts/horizon_sweep.json ({time.time() - t0:.0f}s)")
     return 0
 
 

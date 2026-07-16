@@ -27,8 +27,7 @@ from edgestack.validation.advanced_tests import (
 
 
 def test_parse_rule_string_round_trip() -> None:
-    preds = parse_rule_string("mom_60 <= 0.08 and natr_14 > 0.02",
-                              {"mom_60", "natr_14"})
+    preds = parse_rule_string("mom_60 <= 0.08 and natr_14 > 0.02", {"mom_60", "natr_14"})
     assert preds is not None and len(preds) == 2
     assert preds[0].feature == "mom_60" and preds[0].op == "<=" and preds[0].value == 0.08
     assert parse_rule_string("ghost <= 1", {"mom_60"}) is None
@@ -39,10 +38,10 @@ def test_signature_merges_nearby_thresholds() -> None:
     a = rule_signature([Predicate(feature="vol", op="<", value=0.22)], deciles, 1.0)
     b = rule_signature([Predicate(feature="vol", op="<=", value=0.24)], deciles, 1.0)
     far = rule_signature([Predicate(feature="vol", op="<", value=0.85)], deciles, 1.0)
-    assert a == b            # 0.22 and 0.24 share a decile bucket and direction
-    assert a != far          # a genuinely different threshold does not merge
+    assert a == b  # 0.22 and 0.24 share a decile bucket and direction
+    assert a != far  # a genuinely different threshold does not merge
     neg = rule_signature([Predicate(feature="vol", op="<", value=0.22)], deciles, -1.0)
-    assert neg != a          # opposite predicted direction is a different rule
+    assert neg != a  # opposite predicted direction is a different rule
 
 
 def test_prune_vacuous_drops_always_true_conditions() -> None:
@@ -58,15 +57,16 @@ def test_prune_vacuous_drops_always_true_conditions() -> None:
 def test_discover_rules_finds_planted_signal_and_counts_trials() -> None:
     rng = np.random.default_rng(0)
     n = 20_000
-    frame = pd.DataFrame({
-        "symbol": rng.choice([f"S{i}" for i in range(40)], n),
-        "signal_feat": rng.normal(0, 1, n),
-        "noise_feat": rng.normal(0, 1, n),
-    })
+    frame = pd.DataFrame(
+        {
+            "symbol": rng.choice([f"S{i}" for i in range(40)], n),
+            "signal_feat": rng.normal(0, 1, n),
+            "noise_feat": rng.normal(0, 1, n),
+        }
+    )
     y = pd.Series(0.02 * (frame["signal_feat"] > 1.0) + rng.normal(0, 0.01, n))
-    rules, trials = discover_rules(frame, y, ("signal_feat", "noise_feat"),
-                                   seed=1, min_symbols=5)
-    assert trials > len(rules) > 0   # trial count includes everything generated
+    rules, trials = discover_rules(frame, y, ("signal_feat", "noise_feat"), seed=1, min_symbols=5)
+    assert trials > len(rules) > 0  # trial count includes everything generated
     top = max(rules, key=lambda r: abs(r.coef))
     assert "signal_feat" in top.signature
     assert top.coef > 0
@@ -77,19 +77,24 @@ def test_discover_rules_finds_planted_signal_and_counts_trials() -> None:
 
 def _mini_panel() -> pd.DataFrame:
     dates = pd.bdate_range("2020-01-01", periods=12)
-    opens = np.array([100, 100, 100, 95, 110, 100, 100, 100, 100, 100, 100, 100],
-                     dtype=float)
-    return pd.DataFrame({
-        "symbol": "TST", "date": dates, "open": opens,
-        "high": opens + 2, "low": opens - 2, "close": opens,
-        "volume": 1e6, "adj_close": opens,
-    })
+    opens = np.array([100, 100, 100, 95, 110, 100, 100, 100, 100, 100, 100, 100], dtype=float)
+    return pd.DataFrame(
+        {
+            "symbol": "TST",
+            "date": dates,
+            "open": opens,
+            "high": opens + 2,
+            "low": opens - 2,
+            "close": opens,
+            "volume": 1e6,
+            "adj_close": opens,
+        }
+    )
 
 
 def test_excess_net_target_arithmetic() -> None:
     panel = _mini_panel()
-    labels = forward_return_labels(panel, (5,), benchmark_symbol="TST",
-                                   roundtrip_cost=0.003)
+    labels = forward_return_labels(panel, (5,), benchmark_symbol="TST", roundtrip_cost=0.003)
     # Self-benchmark => excess_ret == 0 => excess_net == -cost everywhere.
     assert np.allclose(labels["excess_net_ret"], -0.003)
 
@@ -100,8 +105,8 @@ def test_adverse_excursion_exact() -> None:
     row = mae.loc[mae["date"] == panel["date"].iloc[1]].iloc[0]
     # Signal at t=1: entry open t=2 (100); window t=2..4 lows = 98, 93, 108.
     assert row["mae"] == pytest.approx(93 / 100 - 1)
-    assert row["mfe"] == pytest.approx(112 / 100 - 1)   # highs: 102, 97, 112
-    assert row["label_end"] == panel["date"].iloc[5]    # same exit as fwd labels
+    assert row["mfe"] == pytest.approx(112 / 100 - 1)  # highs: 102, 97, 112
+    assert row["label_end"] == panel["date"].iloc[5]  # same exit as fwd labels
 
 
 # --- advanced statistics -------------------------------------------------------
@@ -128,8 +133,9 @@ def test_sharpe_difference_test_directions() -> None:
     res = sharpe_difference_test(strong, weak, n_boot=500)
     assert res["delta_sharpe_ann"] > 0.5
     assert res["p_two_sided"] < 0.1
-    same = sharpe_difference_test(weak, weak.sample(frac=1.0, random_state=1)
-                                  .set_axis(idx), n_boot=500)
+    same = sharpe_difference_test(
+        weak, weak.sample(frac=1.0, random_state=1).set_axis(idx), n_boot=500
+    )
     assert same["p_two_sided"] > 0.05
 
 
@@ -161,8 +167,7 @@ def test_distill_policy_learns_and_reports_distiller() -> None:
     indicators = pd.DataFrame({"good_rule|+": good, "noise_rule|+": other})
     y = np.where(good, 0.01, -0.002) + rng.normal(0, 0.004, n)
     policy = distill_policy(indicators, y, seed=0)
-    assert policy.distiller in ("gosdt", "corels", "greedy_rule_list",
-                                "sklearn_tree_d3")
+    assert policy.distiller in ("gosdt", "corels", "greedy_rule_list", "sklearn_tree_d3")
     tiers = policy.tier(indicators)
     assert set(np.unique(tiers)) <= {0.0, 0.5, 1.0}
     # The policy must allocate more when the informative rule fires.

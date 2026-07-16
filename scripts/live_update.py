@@ -28,7 +28,7 @@ def main() -> int:
     got, failed = 0, 0
     chunk = 25
     for i in range(0, len(symbols), chunk):
-        batch = tuple(symbols[i:i + chunk])
+        batch = tuple(symbols[i : i + chunk])
         try:
             bars = provider.fetch_daily_bars(batch, start, end)
             written = catalog.write_bars(bars, provider="yahoo")
@@ -37,8 +37,8 @@ def main() -> int:
         except ProviderError:
             failed += len(batch)
         if (i // chunk) % 5 == 4:
-            print(f"  {i + len(batch)}/{len(symbols)} ({time.time()-t0:.0f}s)")
-    print(f"updated {got}, unavailable {failed} ({time.time()-t0:.0f}s)")
+            print(f"  {i + len(batch)}/{len(symbols)} ({time.time() - t0:.0f}s)")
+    print(f"updated {got}, unavailable {failed} ({time.time() - t0:.0f}s)")
     catalog.audit("live_update", reason=str(end), updated=got)
     return 0
 

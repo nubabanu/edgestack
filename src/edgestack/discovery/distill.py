@@ -71,14 +71,17 @@ def distill_policy(
     try:
         import gosdt as _gosdt_mod
 
-        _Gosdt = (getattr(_gosdt_mod, "GOSDTClassifier", None)
-                  or getattr(_gosdt_mod, "GOSDT"))  # noqa: B009 - older API name
+        _Gosdt = getattr(_gosdt_mod, "GOSDTClassifier", None) or getattr(_gosdt_mod, "GOSDT")  # noqa: B009 - older API name
         model = _Gosdt(regularization=0.01, depth_budget=4, time_limit=60)
         model.fit(x_frame, pd.Series(y))
         text = getattr(model, "tree_", None)
-        policy = PositionPolicy("gosdt", signatures, model,
-                                text=str(text) if text is not None else str(model),
-                                fallback_notes=tuple(notes))
+        policy = PositionPolicy(
+            "gosdt",
+            signatures,
+            model,
+            text=str(text) if text is not None else str(model),
+            fallback_notes=tuple(notes),
+        )
         policy.tier(indicators.head(5))  # smoke: predictions must work
         log_event(log, 20, "distilled with GOSDT", rules=len(signatures))
         return policy
@@ -91,8 +94,9 @@ def distill_policy(
 
         model = CorelsClassifier(max_card=2, c=0.01, n_iter=100_000)
         model.fit(x_frame.to_numpy(), y, features=list(signatures))
-        policy = PositionPolicy("corels", signatures, model, text=str(model.rl()),
-                                fallback_notes=tuple(notes))
+        policy = PositionPolicy(
+            "corels", signatures, model, text=str(model.rl()), fallback_notes=tuple(notes)
+        )
         policy.tier(indicators.head(5))
         log_event(log, 20, "distilled with CORELS", rules=len(signatures))
         return policy
@@ -105,8 +109,9 @@ def distill_policy(
 
         model = GreedyRuleListClassifier(max_depth=3)
         model.fit(x_frame.to_numpy(), y, feature_names=list(signatures))
-        policy = PositionPolicy("greedy_rule_list", signatures, model,
-                                text=str(model), fallback_notes=tuple(notes))
+        policy = PositionPolicy(
+            "greedy_rule_list", signatures, model, text=str(model), fallback_notes=tuple(notes)
+        )
         policy.tier(indicators.head(5))
         log_event(log, 20, "distilled with greedy rule list", rules=len(signatures))
         return policy
@@ -116,10 +121,12 @@ def distill_policy(
     # --- sklearn pruned tree (always available) --------------------------------
     from sklearn.tree import DecisionTreeClassifier, export_text
 
-    model = DecisionTreeClassifier(max_depth=3, min_samples_leaf=200,
-                                   ccp_alpha=1e-4, random_state=seed)
+    model = DecisionTreeClassifier(
+        max_depth=3, min_samples_leaf=200, ccp_alpha=1e-4, random_state=seed
+    )
     model.fit(x_frame.to_numpy(), y)
     text = export_text(model, feature_names=list(signatures))
     log_event(log, 20, "distilled with sklearn tree", rules=len(signatures))
-    return PositionPolicy("sklearn_tree_d3", signatures, model, text=text,
-                          fallback_notes=tuple(notes))
+    return PositionPolicy(
+        "sklearn_tree_d3", signatures, model, text=text, fallback_notes=tuple(notes)
+    )

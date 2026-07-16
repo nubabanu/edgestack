@@ -27,9 +27,7 @@ def log_loss_score(y_true: np.ndarray, p: np.ndarray, eps: float = 1e-12) -> flo
     return float(-np.mean(y * np.log(q) + (1.0 - y) * np.log(1.0 - q)))
 
 
-def expected_calibration_error(
-    y_true: np.ndarray, p: np.ndarray, n_bins: int = 10
-) -> float:
+def expected_calibration_error(y_true: np.ndarray, p: np.ndarray, n_bins: int = 10) -> float:
     """ECE: |mean predicted - observed frequency| weighted by bin population."""
     y = np.asarray(y_true, dtype=float)
     q = np.asarray(p, dtype=float)
@@ -43,9 +41,7 @@ def expected_calibration_error(
     return float(ece)
 
 
-def reliability_bins(
-    y_true: np.ndarray, p: np.ndarray, n_bins: int = 10
-) -> list[dict[str, float]]:
+def reliability_bins(y_true: np.ndarray, p: np.ndarray, n_bins: int = 10) -> list[dict[str, float]]:
     """Reliability-diagram data: per bin, predicted vs observed frequency."""
     y = np.asarray(y_true, dtype=float)
     q = np.asarray(p, dtype=float)

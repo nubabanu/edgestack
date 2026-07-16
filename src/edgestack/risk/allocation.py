@@ -29,8 +29,8 @@ SESSIONS_PER_YEAR = 252
 class AllocationRequest:
     symbol: str
     side: Side
-    conviction: float              # 0..100
-    annualized_vol: float          # stock's annualized volatility estimate
+    conviction: float  # 0..100
+    annualized_vol: float  # stock's annualized volatility estimate
 
 
 def allocate(
@@ -70,10 +70,7 @@ def allocate(
     if method != "vol_target":
         raw = raw / raw.sum()  # normalize to full gross budget, capped below
 
-    weights = {
-        r.symbol: float(w if r.side is Side.LONG else -w)
-        for r, w in zip(kept, raw)
-    }
+    weights = {r.symbol: float(w if r.side is Side.LONG else -w) for r, w in zip(kept, raw)}
     return _enforce_limits(weights, risk)
 
 

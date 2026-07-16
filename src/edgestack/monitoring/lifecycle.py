@@ -33,8 +33,7 @@ from edgestack.types import Edge, EdgeStatus, Side
 from edgestack.validation.bayes import prob_mean_positive
 
 MIN_RECENT = 5
-MONITORABLE = (EdgeStatus.VALIDATED, EdgeStatus.ACTIVE, EdgeStatus.DEGRADED,
-               EdgeStatus.SUSPENDED)
+MONITORABLE = (EdgeStatus.VALIDATED, EdgeStatus.ACTIVE, EdgeStatus.DEGRADED, EdgeStatus.SUSPENDED)
 
 
 @dataclass(frozen=True)
@@ -43,7 +42,7 @@ class EdgeHealth:
     n_recent: int
     recent_net_mean: float
     recent_hit_rate: float
-    recent_posterior: float        # P(true mean > 0 | recent trades), shrunk
+    recent_posterior: float  # P(true mean > 0 | recent trades), shrunk
     max_feature_psi: float
     sessions_since_status: int
 
@@ -60,11 +59,15 @@ def assess_edge(
     """Health of one edge from its most recent out-of-window signals."""
     window = window or cfg.monitoring.rolling_window_signals
     horizon = edge.identity.holding_horizon
-    merged = features.merge(
-        labels.loc[labels["horizon"] == horizon,
-                   ["symbol", "date", "label_end", "gross_ret"]],
-        on=["symbol", "date"], how="inner",
-    ).sort_values("date").reset_index(drop=True)
+    merged = (
+        features.merge(
+            labels.loc[labels["horizon"] == horizon, ["symbol", "date", "label_end", "gross_ret"]],
+            on=["symbol", "date"],
+            how="inner",
+        )
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
 
     # Reference = first 70% of history (fits thresholds and PSI baselines);
     # recent behavior is judged on the remaining 30%.
@@ -72,7 +75,8 @@ def assess_edge(
     reference, live = merged.iloc[:split], merged.iloc[split:]
 
     binnable = tuple(
-        c for c in (*CONTINUOUS_RULE_FEATURES, "bench_trend_200", "bench_vol_20")
+        c
+        for c in (*CONTINUOUS_RULE_FEATURES, "bench_trend_200", "bench_vol_20")
         if c in merged.columns
     )
     binner = QuantileBinner(quantiles=cfg.discovery.quantile_bins).fit(reference, binnable)
@@ -88,9 +92,11 @@ def assess_edge(
     for feature_name in edge.identity.feature_dependencies:
         if feature_name in merged.columns:
             try:
-                psi_values.append(population_stability_index(
-                    reference[feature_name].to_numpy(), live[feature_name].to_numpy()
-                ))
+                psi_values.append(
+                    population_stability_index(
+                        reference[feature_name].to_numpy(), live[feature_name].to_numpy()
+                    )
+                )
             except Exception:
                 continue
     max_psi = max(psi_values) if psi_values else 0.0
@@ -134,9 +140,11 @@ def decide_transition(
         if posterior < m.suspend_posterior_threshold:
             return EdgeStatus.SUSPENDED, f"posterior {posterior:.2f} below suspend threshold"
         if posterior < m.degrade_posterior_threshold or drifted:
-            reason = (f"posterior {posterior:.2f} below degrade threshold"
-                      if posterior < m.degrade_posterior_threshold
-                      else f"feature drift PSI {health.max_feature_psi:.2f}")
+            reason = (
+                f"posterior {posterior:.2f} below degrade threshold"
+                if posterior < m.degrade_posterior_threshold
+                else f"feature drift PSI {health.max_feature_psi:.2f}"
+            )
             return EdgeStatus.DEGRADED, reason
         if status is EdgeStatus.VALIDATED:
             return EdgeStatus.ACTIVE, f"monitoring confirms health (posterior {posterior:.2f})"
@@ -167,9 +175,11 @@ def run_monitoring(
     statuses = current_statuses(catalog).set_index("edge_id")["status"]
 
     with catalog.connect() as con:
-        last_events = con.execute(
-            "SELECT edge_id, max(ts) AS ts FROM edge_events GROUP BY edge_id"
-        ).df().set_index("edge_id")["ts"]
+        last_events = (
+            con.execute("SELECT edge_id, max(ts) AS ts FROM edge_events GROUP BY edge_id")
+            .df()
+            .set_index("edge_id")["ts"]
+        )
 
     sessions = pd.DatetimeIndex(sorted(pd.to_datetime(features["date"]).unique()))
     latest = sessions[-1]
@@ -180,18 +190,24 @@ def run_monitoring(
         status = EdgeStatus(statuses.get(edge_id, EdgeStatus.VALIDATED.value))
         last_ts = last_events.get(edge_id)
         since = (
-            int(np.searchsorted(sessions.values, np.datetime64(latest))
-                - np.searchsorted(sessions.values, np.datetime64(pd.Timestamp(last_ts))))
-            if last_ts is not None else 0
+            int(
+                np.searchsorted(sessions.values, np.datetime64(latest))
+                - np.searchsorted(sessions.values, np.datetime64(pd.Timestamp(last_ts)))
+            )
+            if last_ts is not None
+            else 0
         )
-        health = assess_edge(edge, features, labels, cfg,
-                             sessions_since_status=max(0, since))
+        health = assess_edge(edge, features, labels, cfg, sessions_since_status=max(0, since))
         decision = decide_transition(status, health, cfg)
         if decision is None:
             continue
         new_status, rule = decision
         record_edge_event(
-            catalog, edge_id, status, new_status, rule,
+            catalog,
+            edge_id,
+            status,
+            new_status,
+            rule,
             metrics_json=pd.Series(health.__dict__).to_json(),
         )
         transitions.append((edge_id, status, new_status, rule))

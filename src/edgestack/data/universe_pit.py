@@ -38,8 +38,8 @@ _FAR_FUTURE = date(2100, 1, 1)
 @dataclass(frozen=True)
 class MembershipInterval:
     symbol: str
-    start: date          # first date the symbol is known to be a member
-    end: date            # exclusive: removed on this date (or far future)
+    start: date  # first date the symbol is known to be a member
+    end: date  # exclusive: removed on this date (or far future)
 
 
 def _norm(symbol: str) -> str:
@@ -55,14 +55,15 @@ def fetch_change_log(cache_dir: Path, *, max_age_days: int = 7) -> dict:
         if (datetime.now() - fetched).days < max_age_days:
             return payload
 
-    resp = requests.get(WIKI_URL, timeout=30,
-                        headers={"User-Agent": "edgestack-research/0.1"})
+    resp = requests.get(WIKI_URL, timeout=30, headers={"User-Agent": "edgestack-research/0.1"})
     resp.raise_for_status()
     tables = pd.read_html(io.StringIO(resp.text))
     current = tables[0]
     changes = tables[1]
-    changes.columns = ["_".join(str(c) for c in col).lower() if isinstance(col, tuple)
-                       else str(col).lower() for col in changes.columns]
+    changes.columns = [
+        "_".join(str(c) for c in col).lower() if isinstance(col, tuple) else str(col).lower()
+        for col in changes.columns
+    ]
 
     def col(frame: pd.DataFrame, *needles: str) -> str:
         for c in frame.columns:
@@ -86,9 +87,13 @@ def fetch_change_log(cache_dir: Path, *, max_age_days: int = 7) -> dict:
         when = datetime.strptime(m.group(1), "%B %d, %Y").date()
         added = str(vals[add_col]) if pd.notna(vals[add_col]) else ""
         removed = str(vals[rem_col]) if pd.notna(vals[rem_col]) else ""
-        change_rows.append({"date": when.isoformat(),
-                            "added": _norm(added) if added and added != "nan" else "",
-                            "removed": _norm(removed) if removed and removed != "nan" else ""})
+        change_rows.append(
+            {
+                "date": when.isoformat(),
+                "added": _norm(added) if added and added != "nan" else "",
+                "removed": _norm(removed) if removed and removed != "nan" else "",
+            }
+        )
 
     sym_col = col(current, "symbol")
     payload = {
@@ -98,16 +103,23 @@ def fetch_change_log(cache_dir: Path, *, max_age_days: int = 7) -> dict:
     }
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_file.write_text(json.dumps(payload, indent=1), encoding="utf-8")
-    log_event(log, 20, "sp500 change log fetched",
-              current=len(payload["current"]), changes=len(change_rows))
+    log_event(
+        log,
+        20,
+        "sp500 change log fetched",
+        current=len(payload["current"]),
+        changes=len(change_rows),
+    )
     return payload
 
 
 def build_membership(payload: dict, *, earliest: date) -> list[MembershipInterval]:
     """Walk the change log backwards from today's membership."""
-    changes = sorted((c for c in payload["changes"]
-                      if date.fromisoformat(c["date"]) >= earliest),
-                     key=lambda c: c["date"], reverse=True)
+    changes = sorted(
+        (c for c in payload["changes"] if date.fromisoformat(c["date"]) >= earliest),
+        key=lambda c: c["date"],
+        reverse=True,
+    )
     intervals: list[MembershipInterval] = []
     open_since: dict[str, date] = dict.fromkeys(payload["current"], _FAR_FUTURE)
     # open_since[s] holds the (exclusive) END of the currently-open interval
@@ -133,14 +145,10 @@ class PitSP500Universe:
         self.earliest = earliest
 
     def members(self, as_of: date) -> tuple[str, ...]:
-        return tuple(sorted({
-            i.symbol for i in self.intervals if i.start <= as_of < i.end
-        }))
+        return tuple(sorted({i.symbol for i in self.intervals if i.start <= as_of < i.end}))
 
     def ever_members(self, start: date, end: date) -> tuple[str, ...]:
-        return tuple(sorted({
-            i.symbol for i in self.intervals if i.start < end and i.end > start
-        }))
+        return tuple(sorted({i.symbol for i in self.intervals if i.start < end and i.end > start}))
 
     def membership_mask(self, symbols: pd.Index, dates: pd.Series) -> pd.Series:
         """Vectorized point-in-time membership for (symbol, date) rows."""

@@ -11,14 +11,22 @@ from hypothesis import strategies as st
 from edgestack.execution.costs import SCENARIO_MULTIPLIER, CostModel
 from edgestack.types import CostScenario, Side
 
-_ORDER = [CostScenario.OPTIMISTIC, CostScenario.BASE,
-          CostScenario.CONSERVATIVE, CostScenario.STRESS]
+_ORDER = [
+    CostScenario.OPTIMISTIC,
+    CostScenario.BASE,
+    CostScenario.CONSERVATIVE,
+    CostScenario.STRESS,
+]
 
 
 def _model(scenario: CostScenario, **overrides: float) -> CostModel:
     params: dict[str, float] = {
-        "commission_bps": 1.0, "half_spread_bps": 5.0, "base_slippage_bps": 5.0,
-        "impact_coeff_bps": 10.0, "short_borrow_annualized": 0.05, "sec_fee_bps": 0.03,
+        "commission_bps": 1.0,
+        "half_spread_bps": 5.0,
+        "base_slippage_bps": 5.0,
+        "impact_coeff_bps": 10.0,
+        "short_borrow_annualized": 0.05,
+        "sec_fee_bps": 0.03,
     }
     params.update(overrides)
     return CostModel(scenario=scenario, **params)
@@ -62,15 +70,26 @@ def test_short_net_return_flips_direction() -> None:
     side=st.sampled_from([Side.LONG, Side.SHORT]),
 )
 def test_property_increasing_costs_never_increase_net_returns(
-    commission: float, spread: float, slippage: float, impact: float,
-    borrow: float, gross: float, holding: int, participation: float, side: Side,
+    commission: float,
+    spread: float,
+    slippage: float,
+    impact: float,
+    borrow: float,
+    gross: float,
+    holding: int,
+    participation: float,
+    side: Side,
 ) -> None:
     nets = []
     for scenario in _ORDER:
         m = CostModel(
-            scenario=scenario, commission_bps=commission, half_spread_bps=spread,
-            base_slippage_bps=slippage, impact_coeff_bps=impact,
-            short_borrow_annualized=borrow, sec_fee_bps=0.03,
+            scenario=scenario,
+            commission_bps=commission,
+            half_spread_bps=spread,
+            base_slippage_bps=slippage,
+            impact_coeff_bps=impact,
+            short_borrow_annualized=borrow,
+            sec_fee_bps=0.03,
         )
         nets.append(m.net_return(gross, side, holding, participation))
     assert all(a >= b - 1e-12 for a, b in itertools.pairwise(nets))

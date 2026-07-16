@@ -68,8 +68,9 @@ def test_session_return_decomposition() -> None:
     assert out["close_to_close"].iloc[1] == pytest.approx(103 / 102 - 1)
 
 
-def _tb_panel(closes: np.ndarray, opens: np.ndarray | None = None,
-              spread: float = 1.0) -> pd.DataFrame:
+def _tb_panel(
+    closes: np.ndarray, opens: np.ndarray | None = None, spread: float = 1.0
+) -> pd.DataFrame:
     n = len(closes)
     opens_arr = closes.copy() if opens is None else opens
     dates = pd.bdate_range("2020-01-01", periods=n)

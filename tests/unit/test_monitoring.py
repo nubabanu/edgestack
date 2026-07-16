@@ -31,11 +31,14 @@ def test_psi_requires_enough_data() -> None:
         population_stability_index(np.arange(5.0), np.arange(5.0))
 
 
-def _health(posterior: float, *, n: int = 30, psi: float = 0.0,
-            since: int = 0) -> EdgeHealth:
+def _health(posterior: float, *, n: int = 30, psi: float = 0.0, since: int = 0) -> EdgeHealth:
     return EdgeHealth(
-        edge_id="e1", n_recent=n, recent_net_mean=0.001, recent_hit_rate=0.55,
-        recent_posterior=posterior, max_feature_psi=psi,
+        edge_id="e1",
+        n_recent=n,
+        recent_net_mean=0.001,
+        recent_hit_rate=0.55,
+        recent_posterior=posterior,
+        max_feature_psi=psi,
         sessions_since_status=since,
     )
 

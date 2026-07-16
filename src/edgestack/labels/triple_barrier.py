@@ -105,7 +105,12 @@ def _one_symbol(symbol: str, df: pd.DataFrame, cfg: TripleBarrierConfig) -> pd.D
     return pd.DataFrame(
         rows,
         columns=[
-            "symbol", "date", "entry_date", "label_end",
-            "outcome", "gross_ret", "holding_sessions",
+            "symbol",
+            "date",
+            "entry_date",
+            "label_end",
+            "outcome",
+            "gross_ret",
+            "holding_sessions",
         ],
     )

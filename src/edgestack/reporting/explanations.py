@@ -26,8 +26,11 @@ def explain_candidate(candidate: SignalCandidate) -> str:
         f"Similar historical states produced a positive net return in "
         f"{candidate.calibrated_probability_of_positive_net_return:.0%} of validated "
         f"cases over a {candidate.recommended_holding_sessions}-session horizon"
-        + (" (calibrated probability)." if candidate.probability_is_calibrated
-           else " (NOT independently calibrated — treat as approximate).")
+        + (
+            " (calibrated probability)."
+            if candidate.probability_is_calibrated
+            else " (NOT independently calibrated — treat as approximate)."
+        )
     )
     lines.append(_regime_line(candidate.regime))
     if candidate.warnings:
@@ -36,10 +39,7 @@ def explain_candidate(candidate: SignalCandidate) -> str:
         for warning in candidate.warnings:
             lines.append(f"- {warning}")
     lines.append("")
-    lines.append(
-        "These are historical associations, not causal claims, and not "
-        "investment advice."
-    )
+    lines.append("These are historical associations, not causal claims, and not investment advice.")
     return "\n".join(lines)
 
 

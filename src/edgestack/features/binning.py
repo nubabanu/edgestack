@@ -41,9 +41,7 @@ class QuantileBinner:
         try:
             idx = self.quantiles.index(quantile)
         except ValueError:
-            raise LeakageError(
-                f"quantile {quantile} not in fitted grid {self.quantiles}"
-            ) from None
+            raise LeakageError(f"quantile {quantile} not in fitted grid {self.quantiles}") from None
         return float(self._edges[column][idx])
 
     @property

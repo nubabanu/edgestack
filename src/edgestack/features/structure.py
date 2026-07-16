@@ -73,9 +73,7 @@ def days_since_high_20(df: pd.DataFrame) -> pd.Series:
 )
 def pivot_high_2(df: pd.DataFrame) -> pd.Series:
     h = df["high"]
-    is_pivot = (
-        (h > h.shift(1)) & (h > h.shift(2)) & (h > h.shift(-1)) & (h > h.shift(-2))
-    )
+    is_pivot = (h > h.shift(1)) & (h > h.shift(2)) & (h > h.shift(-1)) & (h > h.shift(-2))
     return is_pivot.astype(float).where(h.shift(-2).notna())
 
 
@@ -90,7 +88,6 @@ def pivot_high_2(df: pd.DataFrame) -> pd.Series:
 def pivot_low_2(df: pd.DataFrame) -> pd.Series:
     low = df["low"]
     is_pivot = (
-        (low < low.shift(1)) & (low < low.shift(2))
-        & (low < low.shift(-1)) & (low < low.shift(-2))
+        (low < low.shift(1)) & (low < low.shift(2)) & (low < low.shift(-1)) & (low < low.shift(-2))
     )
     return is_pivot.astype(float).where(low.shift(-2).notna())

@@ -26,11 +26,14 @@ def _series(rng, mean=0.0, sd=0.01, n=N):
 def test_spa_detects_genuine_outperformance() -> None:
     rng = np.random.default_rng(0)
     bench = _series(rng, 0.0)
-    models = pd.DataFrame({
-        "noise1": _series(rng, 0.0).to_numpy(),
-        "good": _series(rng, 0.002).to_numpy(),   # real daily edge
-        "noise2": _series(rng, 0.0).to_numpy(),
-    }, index=bench.index)
+    models = pd.DataFrame(
+        {
+            "noise1": _series(rng, 0.0).to_numpy(),
+            "good": _series(rng, 0.002).to_numpy(),  # real daily edge
+            "noise2": _series(rng, 0.0).to_numpy(),
+        },
+        index=bench.index,
+    )
     result = spa_test(bench, models, reps=300, seed=1)
     assert result["p_consistent"] < 0.05
     assert result["best_model"] == "good"
@@ -39,8 +42,9 @@ def test_spa_detects_genuine_outperformance() -> None:
 def test_spa_does_not_reject_on_pure_noise() -> None:
     rng = np.random.default_rng(2)
     bench = _series(rng, 0.0)
-    models = pd.DataFrame({f"m{i}": _series(rng, 0.0).to_numpy() for i in range(6)},
-                          index=bench.index)
+    models = pd.DataFrame(
+        {f"m{i}": _series(rng, 0.0).to_numpy() for i in range(6)}, index=bench.index
+    )
     result = spa_test(bench, models, reps=300, seed=3)
     assert result["p_consistent"] > 0.05
 
@@ -48,10 +52,13 @@ def test_spa_does_not_reject_on_pure_noise() -> None:
 def test_stepm_identifies_only_the_superior_model() -> None:
     rng = np.random.default_rng(4)
     bench = _series(rng, 0.0)
-    models = pd.DataFrame({
-        "flat": _series(rng, 0.0).to_numpy(),
-        "strong": _series(rng, 0.003).to_numpy(),
-    }, index=bench.index)
+    models = pd.DataFrame(
+        {
+            "flat": _series(rng, 0.0).to_numpy(),
+            "strong": _series(rng, 0.003).to_numpy(),
+        },
+        index=bench.index,
+    )
     superior = stepm_superior(bench, models, reps=300, seed=5)
     assert "strong" in superior
     assert "flat" not in superior

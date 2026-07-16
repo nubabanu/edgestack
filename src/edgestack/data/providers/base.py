@@ -36,9 +36,7 @@ class PriceDataProvider(abc.ABC):
     metadata: ProviderMetadata
 
     @abc.abstractmethod
-    def fetch_daily_bars(
-        self, symbols: tuple[str, ...], start: date, end: date
-    ) -> pd.DataFrame:
+    def fetch_daily_bars(self, symbols: tuple[str, ...], start: date, end: date) -> pd.DataFrame:
         """Return a canonical bar frame (see :mod:`edgestack.data.schemas`).
 
         Symbols with no data are simply absent from the result; callers decide
@@ -59,9 +57,7 @@ class CorporateActionsProvider(abc.ABC):
     metadata: ProviderMetadata
 
     @abc.abstractmethod
-    def fetch_actions(
-        self, symbols: tuple[str, ...], start: date, end: date
-    ) -> pd.DataFrame: ...
+    def fetch_actions(self, symbols: tuple[str, ...], start: date, end: date) -> pd.DataFrame: ...
 
 
 class _UnavailableProvider(abc.ABC):
@@ -107,9 +103,7 @@ class OptionsDataProvider(_UnavailableProvider):
 
 class SentimentDataProvider(_UnavailableProvider):
     @abc.abstractmethod
-    def fetch_sentiment(
-        self, symbols: tuple[str, ...], start: date, end: date
-    ) -> pd.DataFrame: ...
+    def fetch_sentiment(self, symbols: tuple[str, ...], start: date, end: date) -> pd.DataFrame: ...
 
 
 class NewsDataProvider(_UnavailableProvider):

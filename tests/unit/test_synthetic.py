@@ -51,9 +51,7 @@ def test_deterministic_per_seed_and_symbol() -> None:
 def test_adding_symbol_does_not_change_existing_path() -> None:
     solo = SyntheticMarket(seed=7).generate(("AAA",), START, END)
     both = SyntheticMarket(seed=7).generate(("AAA", "ZZZ"), START, END)
-    pd.testing.assert_frame_equal(
-        solo, both.loc[both["symbol"] == "AAA"].reset_index(drop=True)
-    )
+    pd.testing.assert_frame_equal(solo, both.loc[both["symbol"] == "AAA"].reset_index(drop=True))
 
 
 def test_calendar_effect_shifts_selected_sessions() -> None:
@@ -72,8 +70,10 @@ def test_calendar_effect_shifts_selected_sessions() -> None:
 
 def test_time_boxed_effect_is_inactive_outside_window() -> None:
     effect = CalendarEffect(
-        facts_column="is_friday", drift_bps=80.0,
-        active_start=date(2018, 1, 1), active_end=date(2018, 12, 31),
+        facts_column="is_friday",
+        drift_bps=80.0,
+        active_start=date(2018, 1, 1),
+        active_end=date(2018, 12, 31),
     )
     with_box = SyntheticMarket(seed=11, base=GBM(mu=0.0), effects=(effect,))
     plain = SyntheticMarket(seed=11, base=GBM(mu=0.0))
@@ -86,12 +86,8 @@ def test_time_boxed_effect_is_inactive_outside_window() -> None:
 def test_momentum_effect_induces_autocorrelation() -> None:
     plain = SyntheticMarket(seed=3, base=GBM(mu=0.0))
     trending = SyntheticMarket(seed=3, base=GBM(mu=0.0), effects=(Momentum(rho=0.5, lookback=5),))
-    r_plain = np.log(
-        plain.generate(("MOM",), date(2010, 1, 1), END)["close"]
-    ).diff().dropna()
-    r_trend = np.log(
-        trending.generate(("MOM",), date(2010, 1, 1), END)["close"]
-    ).diff().dropna()
+    r_plain = np.log(plain.generate(("MOM",), date(2010, 1, 1), END)["close"]).diff().dropna()
+    r_trend = np.log(trending.generate(("MOM",), date(2010, 1, 1), END)["close"]).diff().dropna()
     assert r_trend.autocorr(1) > r_plain.autocorr(1) + 0.02
 
 
@@ -99,8 +95,7 @@ def test_decaying_edge_fades() -> None:
     market = SyntheticMarket(
         seed=5,
         base=GBM(mu=0.0, sigma=0.08),
-        effects=(DecayingEdge(facts_column="is_monday", initial_bps=60.0,
-                              half_life_sessions=200),),
+        effects=(DecayingEdge(facts_column="is_monday", initial_bps=60.0, half_life_sessions=200),),
     )
     bars = market.generate(("DEC",), date(2010, 1, 1), date(2019, 12, 31))
     rets = np.log(bars["close"] / bars["close"].shift())

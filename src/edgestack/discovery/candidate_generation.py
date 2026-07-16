@@ -33,21 +33,52 @@ from edgestack.validation.splits import PurgedWalkForwardSplitter
 
 # Continuous features searched with outer-quantile predicates.
 CONTINUOUS_RULE_FEATURES: tuple[str, ...] = (
-    "rsi_14_pctile", "bb_pctb_20", "stoch_k_14", "mom_60", "mom_12_1", "ret_5d",
-    "dist_from_high_252", "vol_pctile_252", "vol_ratio_5_60", "rel_volume_20",
-    "volume_z_60", "close_vs_sma20", "close_vs_sma200", "trend_slope_60",
-    "di_diff_14", "rel_strength_60", "cs_rank_mom_60", "overnight_gap",
+    "rsi_14_pctile",
+    "bb_pctb_20",
+    "stoch_k_14",
+    "mom_60",
+    "mom_12_1",
+    "ret_5d",
+    "dist_from_high_252",
+    "vol_pctile_252",
+    "vol_ratio_5_60",
+    "rel_volume_20",
+    "volume_z_60",
+    "close_vs_sma20",
+    "close_vs_sma200",
+    "trend_slope_60",
+    "di_diff_14",
+    "rel_strength_60",
+    "cs_rank_mom_60",
+    "overnight_gap",
     "donchian_pos_55",
 )
 
 # Binary event features searched as `feature == 1`.
 BINARY_RULE_FEATURES: tuple[str, ...] = (
-    "cal_is_friday", "cal_is_monday", "cal_pre_holiday", "cal_post_holiday",
-    "cal_turn_of_month", "cal_opex_week", "cal_year_end", "cal_santa_window",
-    "breakout_20", "breakdown_20", "false_breakout_20", "squeeze_on",
-    "candle_hammer", "candle_bull_engulf", "candle_bear_engulf",
-    "candle_inside_bar", "candle_doji", "candle_nr7",
-    "above_sma200", "golden_state", "macd_state", "pivot_high_2", "pivot_low_2",
+    "cal_is_friday",
+    "cal_is_monday",
+    "cal_pre_holiday",
+    "cal_post_holiday",
+    "cal_turn_of_month",
+    "cal_opex_week",
+    "cal_year_end",
+    "cal_santa_window",
+    "breakout_20",
+    "breakdown_20",
+    "false_breakout_20",
+    "squeeze_on",
+    "candle_hammer",
+    "candle_bull_engulf",
+    "candle_bear_engulf",
+    "candle_inside_bar",
+    "candle_doji",
+    "candle_nr7",
+    "above_sma200",
+    "golden_state",
+    "macd_state",
+    "pivot_high_2",
+    "pivot_low_2",
 )
 
 # Depth-2 context predicates conjoined with promising singles.
@@ -90,9 +121,7 @@ def _describe(cond: Condition, side: Side, horizon: int) -> str:
     return f"{side.value.lower()}_h{horizon}: {cond.describe()}"
 
 
-def enumerate_conditions(
-    cfg: EdgeStackConfig, available_columns: set[str]
-) -> list[Condition]:
+def enumerate_conditions(cfg: EdgeStackConfig, available_columns: set[str]) -> list[Condition]:
     """All rule conditions in scope for a discovery batch (deterministic order)."""
     lo_q, hi_q = cfg.discovery.quantile_bins[0], cfg.discovery.quantile_bins[-1]
     singles: list[Condition] = []
@@ -152,7 +181,8 @@ def generate_candidates(
         train = merged.iloc[folds[0].train_idx]
 
         continuous = tuple(
-            c for c in (*CONTINUOUS_RULE_FEATURES, "bench_trend_200", "bench_vol_20")
+            c
+            for c in (*CONTINUOUS_RULE_FEATURES, "bench_trend_200", "bench_vol_20")
             if c in available
         )
         binner = QuantileBinner(quantiles=cfg.discovery.quantile_bins).fit(train, continuous)

@@ -51,10 +51,7 @@ def parse_chart_payload(symbol: str, payload: dict[str, Any]) -> pd.DataFrame:
 
     tz = result.get("meta", {}).get("exchangeTimezoneName", "America/New_York")
     dates = (
-        pd.to_datetime(timestamps, unit="s", utc=True)
-        .tz_convert(tz)
-        .tz_localize(None)
-        .normalize()
+        pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(tz).tz_localize(None).normalize()
     )
     df = pd.DataFrame(
         {
@@ -79,14 +76,14 @@ def parse_chart_payload(symbol: str, payload: dict[str, Any]) -> pd.DataFrame:
         & (df["low"] <= df[["open", "close", "high"]].min(axis=1))
     )
     if (~ok).any():
-        log_event(log, 30, "malformed bars dropped", symbol=symbol,
-                  count=int((~ok).sum()))
+        log_event(log, 30, "malformed bars dropped", symbol=symbol, count=int((~ok).sum()))
     return df.loc[ok]
 
 
 class YahooProvider(PriceDataProvider):
-    def __init__(self, cache_dir: Path, *, timeout: float, max_retries: int,
-                 cache_ttl_days: int) -> None:
+    def __init__(
+        self, cache_dir: Path, *, timeout: float, max_retries: int, cache_ttl_days: int
+    ) -> None:
         self.cache_dir = cache_dir
         self.timeout = timeout
         self.max_retries = max_retries
@@ -106,9 +103,7 @@ class YahooProvider(PriceDataProvider):
             ),
         )
 
-    def fetch_daily_bars(
-        self, symbols: tuple[str, ...], start: date, end: date
-    ) -> pd.DataFrame:
+    def fetch_daily_bars(self, symbols: tuple[str, ...], start: date, end: date) -> pd.DataFrame:
         frames = []
         for i, symbol in enumerate(symbols):
             if i:
@@ -168,8 +163,14 @@ class YahooProvider(PriceDataProvider):
                 if isinstance(exc, ProviderError) and "unknown symbol" in str(exc):
                     break
                 if attempt < self.max_retries:
-                    log_event(log, 30, "retrying yahoo request", symbol=symbol,
-                              attempt=attempt + 1, error=str(exc))
+                    log_event(
+                        log,
+                        30,
+                        "retrying yahoo request",
+                        symbol=symbol,
+                        attempt=attempt + 1,
+                        error=str(exc),
+                    )
                     time.sleep(delay)
                     delay *= 2
         raise ProviderError(f"yahoo request failed for {symbol}: {last_error}")

@@ -21,7 +21,14 @@ import pyarrow as pa
 from edgestack.exceptions import SchemaError
 
 BAR_COLUMNS: tuple[str, ...] = (
-    "symbol", "date", "open", "high", "low", "close", "volume", "adj_close",
+    "symbol",
+    "date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "adj_close",
 )
 
 BAR_SCHEMA = pa.schema(

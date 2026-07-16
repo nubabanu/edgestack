@@ -34,25 +34,50 @@ class Ledger:
     def record_fill(self, fill: Fill) -> None:
         self.fills.append(fill)
 
-    def record_equity(self, session: pd.Timestamp, cash: float, equity: float,
-                      gross: float, n_positions: int, borrow_paid: float) -> None:
+    def record_equity(
+        self,
+        session: pd.Timestamp,
+        cash: float,
+        equity: float,
+        gross: float,
+        n_positions: int,
+        borrow_paid: float,
+    ) -> None:
         self.equity_rows.append(
             {
-                "session": session, "cash": cash, "equity": equity,
-                "gross_exposure": gross, "n_positions": n_positions,
+                "session": session,
+                "cash": cash,
+                "equity": equity,
+                "gross_exposure": gross,
+                "n_positions": n_positions,
                 "borrow_paid": borrow_paid,
             }
         )
 
-    def record_trade(self, *, symbol: str, side: str, entry_session: pd.Timestamp,
-                     exit_session: pd.Timestamp, entry_price: float, exit_price: float,
-                     quantity: float, net_pnl: float, exit_reason: str) -> None:
+    def record_trade(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        entry_session: pd.Timestamp,
+        exit_session: pd.Timestamp,
+        entry_price: float,
+        exit_price: float,
+        quantity: float,
+        net_pnl: float,
+        exit_reason: str,
+    ) -> None:
         self.trade_rows.append(
             {
-                "symbol": symbol, "side": side,
-                "entry_session": entry_session, "exit_session": exit_session,
-                "entry_price": entry_price, "exit_price": exit_price,
-                "quantity": quantity, "net_pnl": net_pnl, "exit_reason": exit_reason,
+                "symbol": symbol,
+                "side": side,
+                "entry_session": entry_session,
+                "exit_session": exit_session,
+                "entry_price": entry_price,
+                "exit_price": exit_price,
+                "quantity": quantity,
+                "net_pnl": net_pnl,
+                "exit_reason": exit_reason,
             }
         )
 

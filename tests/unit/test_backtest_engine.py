@@ -14,14 +14,19 @@ from edgestack.types import CostScenario, Side
 
 
 def _cfg(**risk_overrides) -> EdgeStackConfig:
-    risk = {"max_position_weight": 0.10, "max_positions": 5,
-            "max_gross_exposure": 1.0, "max_net_exposure": 1.0}
+    risk = {
+        "max_position_weight": 0.10,
+        "max_positions": 5,
+        "max_gross_exposure": 1.0,
+        "max_net_exposure": 1.0,
+    }
     risk.update(risk_overrides)
     return EdgeStackConfig.model_validate({"risk": risk})
 
 
-def _panel(opens: list[float], lows: list[float] | None = None,
-           highs: list[float] | None = None) -> pd.DataFrame:
+def _panel(
+    opens: list[float], lows: list[float] | None = None, highs: list[float] | None = None
+) -> pd.DataFrame:
     n = len(opens)
     dates = pd.bdate_range("2020-01-01", periods=n)
     opens_arr = np.asarray(opens, dtype=float)
@@ -29,18 +34,33 @@ def _panel(opens: list[float], lows: list[float] | None = None,
     lows_arr = np.asarray(lows, dtype=float) if lows else opens_arr * 0.99
     return pd.DataFrame(
         {
-            "symbol": "TST", "date": dates, "open": opens_arr,
+            "symbol": "TST",
+            "date": dates,
+            "open": opens_arr,
             "high": np.maximum(highs_arr, opens_arr),
             "low": np.minimum(lows_arr, opens_arr),
-            "close": opens_arr, "volume": 1e9, "adj_close": opens_arr,
+            "close": opens_arr,
+            "volume": 1e9,
+            "adj_close": opens_arr,
         }
     )
 
 
-def _intent(session: pd.Timestamp, horizon: int = 3, stop: float = 50.0,
-            target: float = 500.0, side: Side = Side.LONG) -> TradeIntent:
-    return TradeIntent(symbol="TST", signal_session=session, side=side,
-                       horizon=horizon, stop_price=stop, target_price=target)
+def _intent(
+    session: pd.Timestamp,
+    horizon: int = 3,
+    stop: float = 50.0,
+    target: float = 500.0,
+    side: Side = Side.LONG,
+) -> TradeIntent:
+    return TradeIntent(
+        symbol="TST",
+        signal_session=session,
+        side=side,
+        horizon=horizon,
+        stop_price=stop,
+        target_price=target,
+    )
 
 
 def test_time_exit_accounting_is_exact() -> None:
@@ -95,8 +115,7 @@ def test_short_trade_profits_from_decline() -> None:
     opens = [100, 100, 100, 96, 92, 88, 88, 88]
     panel = _panel(opens)
     engine = BacktestEngine(panel, _cfg(), CostScenario.BASE)
-    intent = _intent(panel["date"].iloc[1], horizon=3, side=Side.SHORT,
-                     stop=150.0, target=10.0)
+    intent = _intent(panel["date"].iloc[1], horizon=3, side=Side.SHORT, stop=150.0, target=10.0)
     ledger = engine.run([intent])
     trade = ledger.trades_frame().iloc[0]
     assert trade["side"] == "SHORT"
@@ -110,8 +129,7 @@ def test_position_and_exposure_limits_respected() -> None:
     panel = _panel(opens)
     cfg = _cfg(max_positions=1)
     engine = BacktestEngine(panel, cfg, CostScenario.BASE)
-    intents = [_intent(panel["date"].iloc[1], horizon=6),
-               _intent(panel["date"].iloc[2], horizon=6)]
+    intents = [_intent(panel["date"].iloc[1], horizon=6), _intent(panel["date"].iloc[2], horizon=6)]
     ledger = engine.run(intents)
     # Second intent arrives while the first position is open: refused.
     assert len(ledger.trades_frame()) == 1
@@ -125,18 +143,34 @@ def test_many_same_day_signals_respect_gross_and_position_caps() -> None:
     frames = []
     for i in range(n_symbols):
         opens = np.full(n_sessions, 50.0 + i)
-        frames.append(pd.DataFrame({
-            "symbol": f"S{i:02d}", "date": dates, "open": opens,
-            "high": opens * 1.01, "low": opens * 0.99, "close": opens,
-            "volume": 1e9, "adj_close": opens,
-        }))
+        frames.append(
+            pd.DataFrame(
+                {
+                    "symbol": f"S{i:02d}",
+                    "date": dates,
+                    "open": opens,
+                    "high": opens * 1.01,
+                    "low": opens * 0.99,
+                    "close": opens,
+                    "volume": 1e9,
+                    "adj_close": opens,
+                }
+            )
+        )
     panel = pd.concat(frames, ignore_index=True)
-    cfg = _cfg(max_position_weight=0.10, max_positions=30,
-               max_gross_exposure=0.5, max_net_exposure=0.5)
+    cfg = _cfg(
+        max_position_weight=0.10, max_positions=30, max_gross_exposure=0.5, max_net_exposure=0.5
+    )
     engine = BacktestEngine(panel, cfg, CostScenario.BASE)
     intents = [
-        TradeIntent(symbol=f"S{i:02d}", signal_session=dates[1], side=Side.LONG,
-                    horizon=8, stop_price=1.0, target_price=1e6)
+        TradeIntent(
+            symbol=f"S{i:02d}",
+            signal_session=dates[1],
+            side=Side.LONG,
+            horizon=8,
+            stop_price=1.0,
+            target_price=1e6,
+        )
         for i in range(n_symbols)
     ]
     ledger = engine.run(intents, initial_cash=100_000)
@@ -152,8 +186,12 @@ def test_property_worse_cost_scenarios_never_finish_richer() -> None:
     panel = _panel(opens)
     intents = [_intent(panel["date"].iloc[i], horizon=4) for i in (1, 10, 20, 30, 40)]
     finals = []
-    for scenario in (CostScenario.OPTIMISTIC, CostScenario.BASE,
-                     CostScenario.CONSERVATIVE, CostScenario.STRESS):
+    for scenario in (
+        CostScenario.OPTIMISTIC,
+        CostScenario.BASE,
+        CostScenario.CONSERVATIVE,
+        CostScenario.STRESS,
+    ):
         engine = BacktestEngine(panel, _cfg(), scenario)
         ledger = engine.run(intents)
         finals.append(ledger.equity_frame()["equity"].iloc[-1])

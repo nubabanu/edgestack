@@ -36,9 +36,7 @@ def ebm_feature_report(
     try:
         from interpret.glassbox import ExplainableBoostingRegressor
     except ImportError as exc:  # pragma: no cover - extra not installed
-        raise ValidationError(
-            "interpret is not installed; pip install edgestack[rules]"
-        ) from exc
+        raise ValidationError("interpret is not installed; pip install edgestack[rules]") from exc
 
     frame = features[list(feature_cols)].copy()
     y = target.to_numpy(dtype=float)
@@ -52,7 +50,9 @@ def ebm_feature_report(
         frame, y = frame.iloc[idx], y[idx]
 
     ebm = ExplainableBoostingRegressor(
-        interactions=max_interactions, random_state=seed, n_jobs=-1,
+        interactions=max_interactions,
+        random_state=seed,
+        n_jobs=-1,
     )
     ebm.fit(frame, y)
 
@@ -65,8 +65,9 @@ def ebm_feature_report(
         (n for n, imp in singles.items() if imp >= shortlist_fraction * max_imp),
         key=lambda n: -singles[n],
     )
-    log_event(log, 20, "ebm fitted", rows=len(frame),
-              shortlist=len(shortlist), interactions=len(pairs))
+    log_event(
+        log, 20, "ebm fitted", rows=len(frame), shortlist=len(shortlist), interactions=len(pairs)
+    )
     return {
         "n_rows": len(frame),
         "feature_importance": dict(sorted(singles.items(), key=lambda kv: -kv[1])),

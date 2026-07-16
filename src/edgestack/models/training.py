@@ -123,17 +123,21 @@ def train_models(
                     seed=cfg.project.random_seed,
                 )
             )
-            log_event(log, 20, "model trained", horizon=horizon, side=side.value,
-                      selected=selected, oof_log_loss=round(metrics["oof_log_loss"], 4))
+            log_event(
+                log,
+                20,
+                "model trained",
+                horizon=horizon,
+                side=side.value,
+                selected=selected,
+                oof_log_loss=round(metrics["oof_log_loss"], 4),
+            )
     return models
 
 
 def _select_simplest(oof_by_model: dict[str, tuple[np.ndarray, np.ndarray]]) -> str:
     """Walk simplest -> complex; upgrade only on a material OOF improvement."""
-    losses = {
-        name: log_loss_score(true, pred)
-        for name, (pred, true) in oof_by_model.items()
-    }
+    losses = {name: log_loss_score(true, pred) for name, (pred, true) in oof_by_model.items()}
     ordered = [name for name, _ in MODEL_FACTORIES if name in losses]
     selected = ordered[0]
     for challenger in ordered[1:]:

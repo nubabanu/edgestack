@@ -26,8 +26,11 @@ def _model_cfg() -> EdgeStackConfig:
         {
             "signals": {"horizons": [5]},
             "validation": {
-                "n_folds": 3, "test_sessions": 200, "train_min_sessions": 400,
-                "embargo_sessions": 5, "final_test_start": "2022-01-01",
+                "n_folds": 3,
+                "test_sessions": 200,
+                "train_min_sessions": 400,
+                "embargo_sessions": 5,
+                "final_test_start": "2022-01-01",
             },
         }
     )

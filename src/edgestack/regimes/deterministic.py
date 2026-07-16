@@ -22,9 +22,9 @@ VOL_LOW, VOL_HIGH = 0.12, 0.20
 
 @dataclass(frozen=True)
 class RegimeLabels:
-    market_trend: str      # UPTREND | DOWNTREND | SIDEWAYS | UNKNOWN
+    market_trend: str  # UPTREND | DOWNTREND | SIDEWAYS | UNKNOWN
     market_volatility: str  # LOW | MEDIUM | HIGH | UNKNOWN
-    stock_trend: str       # UP | DOWN | UNKNOWN
+    stock_trend: str  # UP | DOWN | UNKNOWN
 
     @property
     def market(self) -> str:

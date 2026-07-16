@@ -43,8 +43,7 @@ class CostModel:
     sec_fee_bps: float
 
     @classmethod
-    def from_config(cls, cfg: EdgeStackConfig,
-                    scenario: CostScenario | None = None) -> CostModel:
+    def from_config(cls, cfg: EdgeStackConfig, scenario: CostScenario | None = None) -> CostModel:
         return cls(
             scenario=scenario or cfg.costs.scenario,
             commission_bps=cfg.costs.commission_bps,
@@ -73,8 +72,9 @@ class CostModel:
         fee = self.sec_fee_bps if is_sell else 0.0
         return self.commission_bps + fee + self.multiplier * friction
 
-    def roundtrip_cost(self, side: Side, holding_sessions: int,
-                       participation: float = 0.0) -> float:
+    def roundtrip_cost(
+        self, side: Side, holding_sessions: int, participation: float = 0.0
+    ) -> float:
         """Total round-trip cost as a return fraction (not bps).
 
         For shorts this includes the borrow fee accrued over the holding
@@ -82,18 +82,18 @@ class CostModel:
         scenarios assume more expensive borrow.
         """
         entry_sell = side is Side.SHORT
-        legs_bps = (
-            self.one_way_cost_bps(is_sell=entry_sell, participation=participation)
-            + self.one_way_cost_bps(is_sell=not entry_sell, participation=participation)
-        )
+        legs_bps = self.one_way_cost_bps(
+            is_sell=entry_sell, participation=participation
+        ) + self.one_way_cost_bps(is_sell=not entry_sell, participation=participation)
         cost = legs_bps / 1e4
         if side is Side.SHORT:
             borrow = self.short_borrow_annualized * self.multiplier
             cost += borrow * holding_sessions / SESSIONS_PER_YEAR
         return cost
 
-    def net_return(self, gross_return: float, side: Side, holding_sessions: int,
-                   participation: float = 0.0) -> float:
+    def net_return(
+        self, gross_return: float, side: Side, holding_sessions: int, participation: float = 0.0
+    ) -> float:
         """Net return of a completed trade: directional gross minus costs."""
         directional = gross_return if side is Side.LONG else -gross_return
         return directional - self.roundtrip_cost(side, holding_sessions, participation)
