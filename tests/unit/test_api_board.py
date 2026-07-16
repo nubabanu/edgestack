@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 from datetime import UTC, date, datetime
 
+import numpy as np
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
 from edgestack.api.app import create_app
 from edgestack.config import EdgeStackConfig
+from edgestack.data.catalog import DataCatalog
 from edgestack.paper.canonical import CanonicalPaperStateV2, queue_recommendation_target
 from edgestack.recommendation.policy import load_baseline_policy
 from edgestack.recommendation.publication import AtomicRecommendationPublisher
@@ -28,7 +31,9 @@ from edgestack.recommendation.schemas import (
 SESSION = date(2026, 7, 16)
 
 
-def _publish_fixture(cfg: EdgeStackConfig) -> CanonicalRecommendationBundleV2:
+def _publish_fixture(
+    cfg: EdgeStackConfig, *, data_version: str = "data-v2"
+) -> CanonicalRecommendationBundleV2:
     policy = load_baseline_policy()
     as_of = datetime(2026, 7, 16, 20, tzinfo=UTC)
     execution_at = datetime(2026, 7, 17, 13, 30, tzinfo=UTC)
@@ -57,7 +62,7 @@ def _publish_fixture(cfg: EdgeStackConfig) -> CanonicalRecommendationBundleV2:
         as_of=as_of,
         execution_at=execution_at,
         artifact_version="artifact-v2",
-        data_version="data-v2",
+        data_version=data_version,
         policy_version=policy.policy_version,
         baseline_weights=policy.weights,
         unlevered_base_weights=policy.weights,
@@ -242,3 +247,47 @@ def test_latest_rejects_a_tampered_bundle(
     response = client.get("/recommendations/latest")
     assert response.status_code == 404
     assert "publication checksum mismatch" in response.json()["detail"]
+
+
+def test_instrument_analysis_is_version_bound_and_non_promotional(cfg: EdgeStackConfig) -> None:
+    catalog = DataCatalog(cfg)
+    dates = pd.bdate_range(end=SESSION, periods=900)
+    rng = np.random.default_rng(7)
+    close = 100 * np.cumprod(1 + rng.normal(0.0002, 0.01, len(dates)))
+    open_ = close * (1 + rng.normal(0, 0.001, len(dates)))
+    catalog.write_bars(
+        pd.DataFrame(
+            {
+                "symbol": "AAA",
+                "date": dates,
+                "open": open_,
+                "high": np.maximum(open_, close) * 1.005,
+                "low": np.minimum(open_, close) * 0.995,
+                "close": close,
+                "volume": 2_000_000.0,
+                "adj_close": close,
+            }
+        ),
+        provider="fixture",
+    )
+    _publish_fixture(cfg, data_version=catalog.data_manifest_hash())
+    client = TestClient(create_app(cfg))
+
+    response = client.post(
+        "/instruments/analyze",
+        json={
+            "symbol": "AAA",
+            "intended_entry_at": "2026-07-20T09:30:00-04:00",
+            "round_trip_cost_bps": 12,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["resolution"]["resolved_symbol"] == "AAA"
+    assert payload["status"] == "INSUFFICIENT_EVIDENCE"
+    assert payload["overall_rating"] == "NOT_RATED"
+    assert payload["alignment"]["aligned_trade"] is False
+    assert payload["horizon_analyses"][0]["best_window"] is None
+    assert payload["horizon_analyses"][1]["best_window"]["actionable"] is False
+    assert len(catalog.audit_events("test_set_accessed")) == 1

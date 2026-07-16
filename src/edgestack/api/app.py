@@ -10,7 +10,7 @@ import json
 from datetime import date
 
 from edgestack import __version__
-from edgestack.api.contracts import RecommendationPreviewRequestV2
+from edgestack.api.contracts import InstrumentAnalysisRequestV2, RecommendationPreviewRequestV2
 from edgestack.config import EdgeStackConfig
 from edgestack.data.catalog import DataCatalog
 from edgestack.discovery.edge_store import current_statuses, load_edges
@@ -21,6 +21,8 @@ from edgestack.recommendation.compatibility import (
     picks_projection,
     signals_projection,
 )
+from edgestack.recommendation.instrument import analyze_instrument, resolve_instrument
+from edgestack.recommendation.instrument_schemas import InstrumentAnalysisV2
 from edgestack.recommendation.schemas import (
     CanonicalRecommendationBundleV2,
     PortfolioRecommendationV2,
@@ -116,6 +118,53 @@ def create_app(cfg: EdgeStackConfig):
                 state=request.risk_state,
                 equity_override=request.equity_override,
                 reset_requested=request.reset_requested,
+            )
+        except DataError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/instruments/analyze", response_model=InstrumentAnalysisV2)
+    def instruments_analyze(request: InstrumentAnalysisRequestV2) -> InstrumentAnalysisV2:
+        """Analyze one instrument without changing portfolio selection or promotion state."""
+        try:
+            bundle = recommendations.latest()
+            resolution = resolve_instrument(
+                request.symbol,
+                requested_kind=request.instrument_kind,
+                canonical=bundle,
+            )
+            current_data_version = catalog.data_manifest_hash()
+            if current_data_version != bundle.data_version:
+                raise DataError(
+                    "market data changed after canonical publication; republish before analysis"
+                )
+            with catalog.guard.unlock(
+                reason=(
+                    "user-selected descriptive instrument analysis; previously accessed period; "
+                    "not promotion evidence"
+                )
+            ) as key:
+                daily = catalog.load_panel(
+                    symbols=(resolution.resolved_symbol,),
+                    end=bundle.session,
+                    unlock_key=key,
+                )
+            intraday = catalog.load_intraday_bars(
+                resolution.resolved_symbol,
+                end=bundle.as_of,
+            )
+            return analyze_instrument(
+                bundle=bundle,
+                resolution=resolution,
+                daily_bars=daily,
+                intended_entry_at=request.intended_entry_at,
+                intraday_bars=intraday,
+                timing_artifacts=recommendations.repository.timing_artifacts(),
+                news=(
+                    recommendations.repository.news_evidence(resolution.resolved_symbol)
+                    if request.include_news
+                    else ()
+                ),
+                round_trip_cost_bps=request.round_trip_cost_bps,
             )
         except DataError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc

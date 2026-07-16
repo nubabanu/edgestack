@@ -45,6 +45,15 @@ BAR_SCHEMA = pa.schema(
 )
 
 CORPORATE_ACTION_COLUMNS: tuple[str, ...] = ("symbol", "date", "action_type", "value")
+INTRADAY_BAR_COLUMNS: tuple[str, ...] = (
+    "symbol",
+    "timestamp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+)
 
 
 def validate_bars(df: pd.DataFrame, *, context: str = "bars") -> pd.DataFrame:
@@ -131,3 +140,32 @@ def validate_corporate_actions(
     if problems:
         raise SchemaError(f"{context}: " + "; ".join(problems))
     return output.sort_values(["symbol", "date", "action_type"]).reset_index(drop=True)
+
+
+def validate_intraday_bars(df: pd.DataFrame, *, context: str = "intraday_bars") -> pd.DataFrame:
+    """Validate hourly/minute OHLCV with timezone-aware timestamps normalized to UTC."""
+    missing = [column for column in INTRADAY_BAR_COLUMNS if column not in df.columns]
+    if missing:
+        raise SchemaError(f"{context}: missing required columns {missing}")
+    output = df.loc[:, list(INTRADAY_BAR_COLUMNS)].copy()
+    output["symbol"] = output["symbol"].astype(str).str.upper()
+    output["timestamp"] = pd.to_datetime(output["timestamp"], utc=True, errors="coerce")
+    for column in ("open", "high", "low", "close", "volume"):
+        output[column] = pd.to_numeric(output[column], errors="coerce")
+    problems: list[str] = []
+    if output[["timestamp", "open", "high", "low", "close", "volume"]].isna().any().any():
+        problems.append("null timestamp, price, or volume")
+    if output.duplicated(["symbol", "timestamp"]).any():
+        problems.append("duplicate (symbol, timestamp) rows")
+    valid = output.dropna()
+    if (valid[["open", "high", "low", "close"]] <= 0).any().any():
+        problems.append("non-positive prices")
+    if (valid["volume"] < 0).any():
+        problems.append("negative volume")
+    if (valid["high"] < valid[["open", "close", "low"]].max(axis=1)).any():
+        problems.append("high below another price")
+    if (valid["low"] > valid[["open", "close", "high"]].min(axis=1)).any():
+        problems.append("low above another price")
+    if problems:
+        raise SchemaError(f"{context}: " + "; ".join(problems))
+    return output.sort_values(["symbol", "timestamp"]).reset_index(drop=True)

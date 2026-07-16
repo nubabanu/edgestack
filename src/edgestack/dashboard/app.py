@@ -11,6 +11,7 @@ def main() -> None:  # pragma: no cover - interactive UI
     from edgestack.data.catalog import DataCatalog
     from edgestack.exceptions import DataError
     from edgestack.paper.canonical import load_monitoring_payload, load_paper_state
+    from edgestack.recommendation.instrument import analyze_instrument, resolve_instrument
     from edgestack.recommendation.service import CanonicalBundleRepository
 
     st.set_page_config(page_title="EdgeStack V2", layout="wide")
@@ -69,6 +70,51 @@ def main() -> None:  # pragma: no cover - interactive UI
     if base.watchlist:
         st.subheader("Watchlist only — zero portfolio weight")
         st.dataframe(pd.DataFrame([entry.model_dump() for entry in base.watchlist]))
+
+    st.header("Analyze a stock, ETF, or commodity proxy")
+    st.caption(
+        "Best/worst historical windows are research-only unless a compatible frozen promoted "
+        "timing artifact is shown. Daily bars never infer an hour."
+    )
+    instrument_symbol = st.text_input("Ticker or commodity", placeholder="AAPL, GLD, GOLD, OIL")
+    intended_text = st.text_input(
+        "Optional intended entry (ISO 8601 with timezone)",
+        placeholder="2026-07-20T09:30:00-04:00",
+    )
+    if st.button("Analyze instrument", disabled=not instrument_symbol.strip()):
+        try:
+            from datetime import datetime
+
+            intended = datetime.fromisoformat(intended_text) if intended_text.strip() else None
+            if intended is not None and intended.tzinfo is None:
+                raise DataError("intended entry must include a timezone offset")
+            if catalog.data_manifest_hash() != bundle.data_version:
+                raise DataError("market data changed; republish the canonical bundle first")
+            resolution = resolve_instrument(instrument_symbol, canonical=bundle)
+            with catalog.guard.unlock(
+                reason="dashboard instrument analysis; descriptive, not promotion evidence"
+            ) as key:
+                daily = catalog.load_panel(
+                    symbols=(resolution.resolved_symbol,),
+                    end=bundle.session,
+                    unlock_key=key,
+                )
+            analysis = analyze_instrument(
+                bundle=bundle,
+                resolution=resolution,
+                daily_bars=daily,
+                intended_entry_at=intended,
+                intraday_bars=catalog.load_intraday_bars(
+                    resolution.resolved_symbol, end=bundle.as_of
+                ),
+                timing_artifacts=repository.timing_artifacts(),
+                news=repository.news_evidence(resolution.resolved_symbol),
+            )
+            st.session_state["instrument_analysis_v2"] = analysis.model_dump(mode="json")
+        except (DataError, ValueError) as exc:
+            st.error(f"Instrument analysis unavailable: {exc}")
+    if analysis_payload := st.session_state.get("instrument_analysis_v2"):
+        st.json(analysis_payload)
 
     state = recommendation.output_risk_state
     st.subheader("Drawdown state")

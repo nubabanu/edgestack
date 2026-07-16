@@ -119,11 +119,18 @@ def test_atomic_publication_writes_one_verified_version_set(tmp_path: Path) -> N
     assert run.name == record.run_id
     assert (run / "checksums.json").exists()
     assert (run / "compatibility" / "board.json").exists()
-    for name in ("paper_state.json", "monitoring.json"):
+    for name in (
+        "paper_state.json",
+        "monitoring.json",
+        "instrument_timing.json",
+        "news_context.json",
+    ):
         payload = json.loads((run / name).read_text(encoding="utf-8"))
         assert payload["session"] == bundle.session.isoformat()
         assert payload["data_version"] == bundle.data_version
         assert payload["artifact_version"] == bundle.artifact_version
+    assert repository.timing_artifacts() == ()
+    assert repository.news_evidence("SPY") == ()
 
 
 def test_failure_before_pointer_swap_leaves_previous_publication_current(tmp_path: Path) -> None:

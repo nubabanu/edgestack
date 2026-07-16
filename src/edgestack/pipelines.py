@@ -48,6 +48,30 @@ def run_data_download(
     print(f"catalog now holds {len(catalog.list_symbols())} symbols")
 
 
+def run_intraday_download(
+    cfg: EdgeStackConfig,
+    start: date,
+    end: date,
+    *,
+    symbols: tuple[str, ...],
+    provider: str = "yahoo",
+) -> None:
+    from edgestack.data.catalog import DataCatalog
+    from edgestack.data.providers.base import IntradayDataProvider
+    from edgestack.data.providers.registry import get_price_provider
+    from edgestack.exceptions import ProviderError
+
+    price_provider = get_price_provider(provider, cfg)
+    if not isinstance(price_provider, IntradayDataProvider):
+        raise ProviderError(f"provider {provider!r} has no intraday capability")
+    bars = price_provider.fetch_intraday_bars(symbols, start, end, interval="60m")
+    catalog = DataCatalog(cfg)
+    written = catalog.write_intraday_bars(bars, provider=provider)
+    catalog.audit("intraday_data_download", reason=provider, symbols=len(written), rows=len(bars))
+    for symbol in symbols:
+        print(f"  {symbol}: {written.get(symbol, 0)} hourly rows")
+
+
 def run_data_validate(cfg: EdgeStackConfig) -> None:
     from edgestack.data.calendar import TradingCalendar
     from edgestack.data.catalog import DataCatalog

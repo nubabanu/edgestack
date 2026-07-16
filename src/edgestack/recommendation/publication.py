@@ -19,6 +19,7 @@ from edgestack.recommendation.compatibility import (
     signals_projection,
 )
 from edgestack.recommendation.hashing import canonical_json, file_sha256, stable_hash
+from edgestack.recommendation.instrument_schemas import FrozenTimingArtifactV2, NewsEvidenceV2
 from edgestack.recommendation.manifests import PublicationRecordV2
 from edgestack.recommendation.risk import RiskInputsV2
 from edgestack.recommendation.schemas import CanonicalRecommendationBundleV2
@@ -43,10 +44,26 @@ class AtomicRecommendationPublisher:
         risk_inputs: RiskInputsV2,
         paper_state: dict[str, Any],
         monitoring: dict[str, Any],
+        timing_artifacts: tuple[FrozenTimingArtifactV2, ...] = (),
+        news_evidence: tuple[NewsEvidenceV2, ...] = (),
         before_pointer_swap: Callable[[Path], None] | None = None,
     ) -> PublicationRecordV2:
         if risk_inputs.session != bundle.session:
             raise DataError("publication risk inputs and bundle sessions differ")
+        expected_versions = (bundle.data_version, bundle.artifact_version, bundle.policy_version)
+        seen_timing: set[tuple[str, object]] = set()
+        for artifact in timing_artifacts:
+            versions = (artifact.data_version, artifact.artifact_version, artifact.policy_version)
+            if versions != expected_versions:
+                raise DataError(
+                    f"timing artifact version mismatch for {artifact.symbol}/{artifact.horizon}"
+                )
+            key = (artifact.symbol, artifact.horizon)
+            if key in seen_timing:
+                raise DataError(
+                    f"duplicate timing artifact for {artifact.symbol}/{artifact.horizon}"
+                )
+            seen_timing.add(key)
         self.staging.mkdir(parents=True, exist_ok=True)
         temporary = self.staging / uuid.uuid4().hex
         temporary.mkdir()
@@ -68,6 +85,14 @@ class AtomicRecommendationPublisher:
                 "risk_inputs.json": inputs_payload,
                 "paper_state.json": _versioned_payload(version_set, paper_state),
                 "monitoring.json": _versioned_payload(version_set, monitoring),
+                "instrument_timing.json": _versioned_payload(
+                    version_set,
+                    {"artifacts": [item.model_dump(mode="json") for item in timing_artifacts]},
+                ),
+                "news_context.json": _versioned_payload(
+                    version_set,
+                    {"items": [item.model_dump(mode="json") for item in news_evidence]},
+                ),
                 "compatibility/board.json": board_projection(bundle),
                 "compatibility/picks.json": picks_projection(bundle),
                 "compatibility/master.json": master_projection(bundle),
@@ -83,6 +108,12 @@ class AtomicRecommendationPublisher:
                     "risk_inputs_hash": stable_hash(inputs_payload),
                     "paper_state_hash": stable_hash(paper_state),
                     "monitoring_hash": stable_hash(monitoring),
+                    "instrument_timing_hash": stable_hash(
+                        [item.model_dump(mode="json") for item in timing_artifacts]
+                    ),
+                    "news_context_hash": stable_hash(
+                        [item.model_dump(mode="json") for item in news_evidence]
+                    ),
                 }
             )
             run_dir = self.runs / run_id

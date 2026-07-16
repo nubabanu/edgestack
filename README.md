@@ -59,6 +59,7 @@ The orchestrator fails on data-quality, artifact, schema, or checksum errors. It
 
 - `GET /recommendations/latest` returns the verified canonical bundle.
 - `POST /recommendations/preview` accepts `RiskProfileV2`, optional `RiskStateV2`/equity override, and an optional reset request. It only recalculates sizing and stress; it cannot research, promote, select, or persist.
+- `POST /instruments/analyze` accepts a stock/ETF ticker or commodity name/proxy and an optional intended-entry timestamp. It returns day/week/month/year best and worst historical windows, tailwinds, headwinds, counter-effects, news context, current-year observations, and explicit abstentions. Only compatible frozen promoted timing artifacts can make a window actionable or create a directional rating.
 - `/board`, `/picks`, `/master`, `/signals/*`, and `/candidates/*` are deprecated compatibility projections. Board rows and picks are empty; master contains canonical weights only.
 
 Run the API with:
@@ -66,6 +67,15 @@ Run the API with:
 ```bash
 edgestack api serve --config configs/live.yaml
 ```
+
+Hourly analysis is opt-in because daily bars cannot identify a best hour:
+
+```bash
+edgestack data intraday-download --symbols GLD,AAPL --start 2025-07-16 --end 2026-07-16 --config configs/live.yaml
+python scripts/nightly.py --config configs/live.yaml --skip-data-update --skip-features
+```
+
+Commodity words resolve to disclosed tradable proxies (`GOLD → GLD`, `OIL/WTI → USO`, `BRENT → BNO`, `SILVER → SLV`). Proxy fees, tracking error, roll yield, and trading hours remain visible warnings.
 
 ## User risk sizing
 

@@ -65,7 +65,23 @@ The nightly sequence is data update/quality, features, artifact/policy verificat
 
 ## Android behavior
 
-Android caches the canonical bundle and optional server preview. Profile fields migrate the former base-leverage value once into the 0–5× ceiling. Offline mode displays cached output and performs no signal or leverage calculation. Notifications compare server-owned status, targets, freshness, and risk state only. Calendar/overlay/ensemble engines and their alerts were removed.
+Android caches the canonical bundle, optional server preview, and last server-generated instrument analysis. Its Analyze screen accepts a ticker/commodity proxy and optional timezone-qualified intended entry. It shows best/worst windows, exits, effects and their counter-effects, evidence, news context, cautions, and whether all four horizons are genuinely promoted and aligned. The device never calculates a signal, rating, or window.
+
+Profile fields migrate the former base-leverage value once into the 0–5× ceiling. Offline mode displays cached output and performs no signal or leverage calculation. Notifications compare server-owned status, targets, freshness, and risk state only. Calendar/overlay/ensemble engines and their alerts were removed.
+
+## User-selected instrument timing
+
+`POST /instruments/analyze` is version-bound to the current canonical publication and cannot mutate portfolio selection, promotion, paper targets, or risk state. It resolves common commodity requests to tradable proxies and discloses the mapping. Daily adjusted-open total returns support week/month/year studies; separately ingested timezone-aware hourly bars support the day/hour study. Daily data is never used to infer an hour.
+
+The response separates three concepts:
+
+- descriptive conditions such as trend, momentum, mean reversion, and volatility, which have zero actionable contribution until promoted;
+- searched historical timing windows, reported after costs with session ESS, confidence bounds, and family-size p-value adjustment, but labeled observational;
+- frozen timing artifacts that already passed nested selection, complete-family inference, cost/execution stress, ablation, and promotion. Only these can be actionable.
+
+Every edge reports the adverse effect of an apparent tailwind and the protective/avoidance value of a headwind. An `ALL PROMOTED HORIZONS ALIGNED` setup requires compatible promoted day, week, month, and year timing artifacts, at least one promoted positive contribution, and no promoted negative contribution. Absence of hourly data, frozen news, or promoted evidence yields an explicit abstention—not a guessed hour, sentiment, or “perfect” buy/sell time.
+
+News is a frozen, timestamped context input with source, age, and freshness. Its actionable contribution is structurally fixed at zero unless a future promoted artifact explicitly validates a point-in-time news feature.
 
 ## Known limitations
 
@@ -73,6 +89,8 @@ Android caches the canonical bundle and optional server preview. Profile fields 
 - Yahoo coverage is survivorship-biased and does not supply a point-in-time delisted universe.
 - DGS3MO is a proxy; broker-specific margin terms can be materially worse.
 - Daily bars cannot reconstruct intraday queue priority or market impact exactly.
+- Free hourly history is limited and can be throttled; no hour is reported when it is absent.
+- News context may be absent, delayed, duplicated, or wrong and does not change the score by default.
 - The baseline is diversified by instrument labels, not guaranteed economic risk parity.
 - No sleeve is currently entitled to weight solely from a legacy status or report.
 - V2 prospective stock evidence begins only with the first frozen V2 publication.

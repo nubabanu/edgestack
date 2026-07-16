@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging as _stdlib_logging
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import typer
@@ -117,6 +117,33 @@ def data_download(
         date.fromisoformat(end),
         provider=provider,
         symbols=sym,
+    )
+
+
+@data_app.command("intraday-download")
+def intraday_download(
+    symbols: str = typer.Option(..., help="Comma-separated symbols or tradable proxies."),
+    start: str = typer.Option(
+        str(date.today() - timedelta(days=365)), help="Start date YYYY-MM-DD."
+    ),
+    end: str = typer.Option(str(date.today()), help="End date YYYY-MM-DD."),
+    provider: str = typer.Option("yahoo", help="Intraday-capable provider."),
+    config: Path | None = _CONFIG_OPT,
+) -> None:
+    """Download hourly bars used by day/hour timing analysis."""
+    cfg = _setup(config)
+    from edgestack.pipelines import run_intraday_download
+
+    wanted = tuple(item.strip().upper() for item in symbols.split(",") if item.strip())
+    if not wanted:
+        raise typer.BadParameter("at least one symbol is required")
+    _run(
+        run_intraday_download,
+        cfg,
+        date.fromisoformat(start),
+        date.fromisoformat(end),
+        symbols=wanted,
+        provider=provider,
     )
 
 

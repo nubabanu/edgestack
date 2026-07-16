@@ -84,6 +84,8 @@ def run_session(cfg: EdgeStackConfig, as_of: date | None = None) -> str:
         risk_inputs=risk_inputs,
         paper_state=updated.model_dump(mode="json"),
         monitoring=load_monitoring_payload(repository),
+        timing_artifacts=repository.timing_artifacts(),
+        news_evidence=repository.news_evidence(),
     )
     RecommendationRegistry(catalog).save_publication(publication)
     catalog.audit(

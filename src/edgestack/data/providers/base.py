@@ -44,6 +44,18 @@ class PriceDataProvider(abc.ABC):
         """
 
 
+class IntradayDataProvider(abc.ABC):
+    """Optional timezone-aware intraday OHLCV capability."""
+
+    metadata: ProviderMetadata
+
+    @abc.abstractmethod
+    def fetch_intraday_bars(
+        self, symbols: tuple[str, ...], start: date, end: date, *, interval: str = "60m"
+    ) -> pd.DataFrame:
+        """Return symbol/timestamp/OHLCV bars with timestamps convertible to UTC."""
+
+
 class UniverseProvider(abc.ABC):
     metadata: ProviderMetadata
 

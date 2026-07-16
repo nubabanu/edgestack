@@ -6,7 +6,11 @@ from datetime import date
 
 import pytest
 
-from edgestack.data.providers.yahoo import parse_chart_payload, parse_corporate_actions
+from edgestack.data.providers.yahoo import (
+    parse_chart_payload,
+    parse_corporate_actions,
+    parse_intraday_chart_payload,
+)
 from edgestack.exceptions import ProviderError
 
 FIXTURE = {
@@ -69,6 +73,14 @@ def test_parse_corporate_actions_preserves_dividends_and_split_ratios() -> None:
         {"action_type": "split", "value": 4.0},
     ]
     assert actions["symbol"].tolist() == ["AAPL", "AAPL"]
+
+
+def test_parse_intraday_payload_preserves_timezone_aware_timestamp() -> None:
+    bars = parse_intraday_chart_payload("aapl", FIXTURE)
+
+    assert len(bars) == 2
+    assert str(bars["timestamp"].dt.tz) == "UTC"
+    assert bars["symbol"].unique().tolist() == ["AAPL"]
 
 
 @pytest.mark.network

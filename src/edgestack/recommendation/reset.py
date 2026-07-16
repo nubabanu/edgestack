@@ -58,6 +58,8 @@ def reset_persisted_risk_state(cfg: EdgeStackConfig) -> PublicationRecordV2:
         risk_inputs=inputs,
         paper_state=updated_paper.model_dump(mode="json"),
         monitoring=load_monitoring_payload(repository),
+        timing_artifacts=repository.timing_artifacts(),
+        news_evidence=repository.news_evidence(),
     )
     RecommendationRegistry(catalog).save_publication(publication)
     catalog.audit(

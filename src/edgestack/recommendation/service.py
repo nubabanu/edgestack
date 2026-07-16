@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from edgestack.exceptions import DataError
 from edgestack.recommendation.hashing import stable_hash
+from edgestack.recommendation.instrument_schemas import FrozenTimingArtifactV2, NewsEvidenceV2
 from edgestack.recommendation.risk import RiskInputsV2, size_recommendation
 from edgestack.recommendation.schemas import (
     CanonicalRecommendationBundleV2,
@@ -89,6 +90,70 @@ class CanonicalBundleRepository:
             raise
         except (OSError, ValueError, KeyError, TypeError) as exc:
             raise DataError(f"invalid published risk inputs: {exc}") from exc
+
+    def timing_artifacts(self) -> tuple[FrozenTimingArtifactV2, ...]:
+        payload = self._optional_versioned_payload("instrument_timing.json")
+        raw = payload.get("artifacts", [])
+        if not isinstance(raw, list):
+            raise DataError("published timing artifacts are not a list")
+        try:
+            items = tuple(FrozenTimingArtifactV2.model_validate(item) for item in raw)
+            bundle = self.latest()
+            expected = (bundle.data_version, bundle.artifact_version, bundle.policy_version)
+            for item in items:
+                versions = (item.data_version, item.artifact_version, item.policy_version)
+                if versions != expected:
+                    raise DataError(
+                        f"published timing artifact version mismatch for "
+                        f"{item.symbol}/{item.horizon}"
+                    )
+            return items
+        except DataError:
+            raise
+        except ValueError as exc:
+            raise DataError(f"invalid published timing artifact: {exc}") from exc
+
+    def news_evidence(self, symbol: str | None = None) -> tuple[NewsEvidenceV2, ...]:
+        payload = self._optional_versioned_payload("news_context.json")
+        raw = payload.get("items", [])
+        if not isinstance(raw, list):
+            raise DataError("published news context is not a list")
+        try:
+            items = tuple(NewsEvidenceV2.model_validate(value) for value in raw)
+            return (
+                items if symbol is None else tuple(item for item in items if item.symbol == symbol)
+            )
+        except ValueError as exc:
+            raise DataError(f"invalid published news evidence: {exc}") from exc
+
+    def _optional_versioned_payload(self, filename: str) -> dict[str, Any]:
+        pointer = self.pointer()
+        run_dir = self.run_dir(pointer)
+        _verify_run(run_dir)
+        path = run_dir / filename
+        # Compatibility for the first V2 runs published before instrument analysis.
+        if not path.exists():
+            return {}
+        try:
+            wrapper = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(wrapper, dict) or not isinstance(wrapper.get("payload"), dict):
+                raise TypeError("versioned document is not an object")
+            bundle = self.latest()
+            expected = {
+                "session": bundle.session.isoformat(),
+                "data_version": bundle.data_version,
+                "artifact_version": bundle.artifact_version,
+                "policy_version": bundle.policy_version,
+                "bundle_hash": bundle.bundle_hash,
+            }
+            for key, value in expected.items():
+                if wrapper.get(key) != value:
+                    raise DataError(f"published {filename} {key} mismatch")
+            return dict(wrapper["payload"])
+        except DataError:
+            raise
+        except (OSError, ValueError, TypeError) as exc:
+            raise DataError(f"invalid published {filename}: {exc}") from exc
 
 
 class CanonicalRecommendationService:

@@ -22,9 +22,9 @@ import pandas as pd
 import requests
 
 from edgestack.config import EdgeStackConfig
-from edgestack.data.providers.base import PriceDataProvider, ProviderMetadata
+from edgestack.data.providers.base import IntradayDataProvider, PriceDataProvider, ProviderMetadata
 from edgestack.data.providers.registry import register_price_provider
-from edgestack.data.schemas import validate_bars
+from edgestack.data.schemas import validate_bars, validate_intraday_bars
 from edgestack.exceptions import ProviderError
 from edgestack.logging import get_logger, log_event
 
@@ -119,6 +119,33 @@ def parse_corporate_actions(symbol: str, payload: dict[str, Any]) -> pd.DataFram
     return pd.DataFrame(rows, columns=columns)
 
 
+def parse_intraday_chart_payload(symbol: str, payload: dict[str, Any]) -> pd.DataFrame:
+    chart = payload.get("chart") or {}
+    if chart.get("error"):
+        raise ProviderError(f"yahoo intraday error for {symbol}: {chart['error']}")
+    results = chart.get("result") or []
+    if not results:
+        raise ProviderError(f"yahoo returned no intraday data for {symbol}")
+    result = results[0]
+    timestamps = result.get("timestamp") or []
+    quote = (result.get("indicators", {}).get("quote") or [{}])[0]
+    if not timestamps or not quote.get("close"):
+        raise ProviderError(f"yahoo returned an empty intraday series for {symbol}")
+    output = pd.DataFrame(
+        {
+            "symbol": symbol.upper(),
+            "timestamp": pd.to_datetime(timestamps, unit="s", utc=True),
+            "open": quote.get("open"),
+            "high": quote.get("high"),
+            "low": quote.get("low"),
+            "close": quote.get("close"),
+            "volume": quote.get("volume"),
+        }
+    ).dropna(subset=["open", "high", "low", "close"])
+    output["volume"] = output["volume"].fillna(0.0)
+    return validate_intraday_bars(output, context=f"yahoo_intraday[{symbol}]")
+
+
 def _event_date(timestamp: int, timezone: str) -> pd.Timestamp:
     return (
         pd.to_datetime(timestamp, unit="s", utc=True)
@@ -128,7 +155,7 @@ def _event_date(timestamp: int, timezone: str) -> pd.Timestamp:
     )
 
 
-class YahooProvider(PriceDataProvider):
+class YahooProvider(PriceDataProvider, IntradayDataProvider):
     def __init__(
         self, cache_dir: Path, *, timeout: float, max_retries: int, cache_ttl_days: int
     ) -> None:
@@ -151,7 +178,9 @@ class YahooProvider(PriceDataProvider):
                 "OHLC split-adjusted only; adj_close is split+dividend adjusted",
                 "no delisted securities: survivorship-biased symbol coverage",
                 "no point-in-time universe membership",
+                "60m history is vendor-limited to 729 calendar days per request",
             ),
+            frequencies=("1d", "60m"),
         )
 
     def fetch_daily_bars(self, symbols: tuple[str, ...], start: date, end: date) -> pd.DataFrame:
@@ -211,6 +240,32 @@ class YahooProvider(PriceDataProvider):
         df.to_parquet(cache_file, index=False)
         actions.to_parquet(actions_file, index=False)
         return df, actions
+
+    def fetch_intraday_bars(
+        self, symbols: tuple[str, ...], start: date, end: date, *, interval: str = "60m"
+    ) -> pd.DataFrame:
+        if interval != "60m":
+            raise ProviderError("the V2 timing workflow currently accepts only 60m Yahoo bars")
+        if (end - start).days > 729:
+            raise ProviderError("Yahoo 60m requests are limited to at most 729 calendar days")
+        frames: list[pd.DataFrame] = []
+        params = {
+            "period1": str(int(pd.Timestamp(start, tz="UTC").timestamp())),
+            "period2": str(int(pd.Timestamp(end + timedelta(days=1), tz="UTC").timestamp())),
+            "interval": interval,
+            "includePrePost": "false",
+            "events": "div,splits",
+        }
+        for index, symbol in enumerate(symbols):
+            if index:
+                time.sleep(_POLITE_DELAY_S)
+            payload = self._request_with_retries(symbol, params)
+            frames.append(parse_intraday_chart_payload(symbol, payload))
+        if not frames:
+            raise ProviderError(f"yahoo returned no intraday data for {symbols!r}")
+        return validate_intraday_bars(
+            pd.concat(frames, ignore_index=True), context="yahoo_intraday"
+        )
 
     def _request_with_retries(self, symbol: str, params: dict[str, str]) -> dict[str, Any]:
         delay = 1.0

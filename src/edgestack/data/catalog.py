@@ -30,8 +30,10 @@ from edgestack.config import EdgeStackConfig
 from edgestack.data.schemas import (
     BAR_COLUMNS,
     CORPORATE_ACTION_COLUMNS,
+    INTRADAY_BAR_COLUMNS,
     validate_bars,
     validate_corporate_actions,
+    validate_intraday_bars,
 )
 from edgestack.exceptions import DataError, TestPeriodLockedError
 from edgestack.logging import get_logger, log_event
@@ -226,6 +228,7 @@ class DataCatalog:
         self.artifacts_dir = Path(cfg.paths.artifacts_dir)
         self.prices_dir = self.data_dir / "curated" / "prices"
         self.corporate_actions_dir = self.data_dir / "curated" / "corporate_actions"
+        self.intraday_dir = self.data_dir / "curated" / "intraday"
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.artifacts_dir / "edgestack.duckdb"
         self._ensure_schema()
@@ -304,6 +307,45 @@ class DataCatalog:
             written[str(symbol)] = len(group)
         return written
 
+    def write_intraday_bars(self, df: pd.DataFrame, *, provider: str) -> dict[str, int]:
+        """Merge validated intraday bars into per-symbol Parquet files atomically."""
+        bars = validate_intraday_bars(df, context=f"intraday[{provider}]")
+        written: dict[str, int] = {}
+        for symbol, group in bars.groupby("symbol", sort=True):
+            path = safe_child_path(self.intraday_dir, f"{symbol}.parquet")
+            merged = group
+            if path.exists():
+                merged = (
+                    pd.concat([pd.read_parquet(path), group], ignore_index=True)
+                    .drop_duplicates(["symbol", "timestamp"], keep="last")
+                    .sort_values("timestamp")
+                    .reset_index(drop=True)
+                )
+            import io
+
+            buffer = io.BytesIO()
+            merged.loc[:, list(INTRADAY_BAR_COLUMNS)].to_parquet(buffer, index=False)
+            atomic_write_bytes(path, buffer.getvalue())
+            written[str(symbol)] = len(group)
+        return written
+
+    def load_intraday_bars(
+        self,
+        symbol: str,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> pd.DataFrame:
+        path = safe_child_path(self.intraday_dir, f"{symbol.upper()}.parquet")
+        if not path.exists():
+            return pd.DataFrame(columns=INTRADAY_BAR_COLUMNS)
+        output = validate_intraday_bars(pd.read_parquet(path), context=f"intraday[{symbol}]")
+        if start is not None:
+            output = output.loc[output["timestamp"] >= pd.Timestamp(start)]
+        if end is not None:
+            output = output.loc[output["timestamp"] <= pd.Timestamp(end)]
+        return output.reset_index(drop=True)
+
     def load_corporate_actions(
         self,
         symbols: tuple[str, ...] | None = None,
@@ -371,6 +413,7 @@ class DataCatalog:
         for kind, directory in (
             ("prices", self.prices_dir),
             ("corporate_actions", self.corporate_actions_dir),
+            ("intraday", self.intraday_dir),
         ):
             if not directory.exists():
                 continue

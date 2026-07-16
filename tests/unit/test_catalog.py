@@ -113,3 +113,26 @@ def test_corporate_actions_round_trip_and_change_data_version(catalog: DataCatal
         {"action_type": "split", "value": 2.0},
     ]
     assert catalog.data_manifest_hash() != before
+
+
+def test_intraday_round_trip_changes_data_version(catalog: DataCatalog) -> None:
+    before = catalog.data_manifest_hash()
+    timestamps = pd.date_range("2026-07-16T13:30:00Z", periods=3, freq="h")
+    bars = pd.DataFrame(
+        {
+            "symbol": "AAA",
+            "timestamp": timestamps,
+            "open": [100.0, 101.0, 100.5],
+            "high": [101.2, 101.5, 101.0],
+            "low": [99.8, 100.4, 99.9],
+            "close": [101.0, 100.5, 100.8],
+            "volume": [10_000.0, 11_000.0, 9_000.0],
+        }
+    )
+
+    catalog.write_intraday_bars(bars, provider="fixture")
+    loaded = catalog.load_intraday_bars("AAA")
+
+    assert len(loaded) == 3
+    assert str(loaded["timestamp"].dt.tz) == "UTC"
+    assert catalog.data_manifest_hash() != before
