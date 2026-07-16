@@ -125,6 +125,8 @@ object OverlayCalculator {
             spyClose = today.close,
             sma200 = r.sma200[i].takeIf { !it.isNaN() },
             vol20 = r.vol20[i].takeIf { !it.isNaN() },
+            lastReturn = (bars[i].adj / bars[i - 1].adj - 1.0)
+                .takeIf { it.isFinite() },
             history = (start..i).map { r.dates[it] to r.applied[it] },
         )
     }

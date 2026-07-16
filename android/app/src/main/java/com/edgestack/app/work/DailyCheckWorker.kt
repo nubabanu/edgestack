@@ -58,6 +58,18 @@ class DailyCheckWorker(
                             else "20d realized vol back under 20%.",
                         )
                     }
+                    // red-close sniper: SPY down today, in calm uptrend
+                    // (t=5.41 finding: buy the close, sell at tomorrow's open;
+                    // price at 15:45 ET approximates the close)
+                    if ((state.lastReturn ?: 0.0) < 0.0 && above && !volOn) {
+                        AlertNotifier.notify(
+                            applicationContext, AlertNotifier.CHANNEL_CALENDAR, 210,
+                            "Sniper: red close in calm uptrend",
+                            "SPY is down today inside an uptrend. Historically the " +
+                                "gentlest trade: buy near the close, sell at " +
+                                "tomorrow's open (60% hit, typical bad case -0.8%).",
+                        )
+                    }
                     c.settings.setRiskState(above, volOn)
                 }
             }

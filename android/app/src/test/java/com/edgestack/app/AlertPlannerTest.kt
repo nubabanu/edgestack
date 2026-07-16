@@ -56,6 +56,20 @@ class AlertPlannerTest {
     }
 
     @Test
+    fun thanksgivingFiresOnTuesdayBefore() {
+        // Thanksgiving 2026 = Thu Nov 26; Wed session Nov 25; Tuesday Nov 24.
+        assertTrue(AlertType.THANKSGIVING_WED in types(LocalDate.of(2026, 11, 24)))
+        assertTrue(AlertType.THANKSGIVING_WED !in types(LocalDate.of(2026, 11, 25)))
+    }
+
+    @Test
+    fun preChristmasFiresOn14thDecemberSession() {
+        // Dec 2026 sessions: td14 = Dec 18 (buy close, hold td15 = Dec 21).
+        assertTrue(AlertType.DEC_PRE_CHRISTMAS in types(LocalDate.of(2026, 12, 18)))
+        assertTrue(AlertType.DEC_PRE_CHRISTMAS !in types(LocalDate.of(2026, 12, 17)))
+    }
+
+    @Test
     fun alertsAnchorAtMarketTimeDuringDstDivergence() {
         // Nov 2, 2026: US DST ended Nov 1, EU ended Oct 25 — both on winter time,
         // 15:45 ET == 21:45 Berlin.

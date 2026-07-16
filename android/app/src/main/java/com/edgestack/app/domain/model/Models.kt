@@ -116,6 +116,7 @@ data class OverlayState(
     val spyClose: Double,
     val sma200: Double?,
     val vol20: Double?,
+    val lastReturn: Double?,
     val history: List<Pair<LocalDate, Double>>,
 )
 

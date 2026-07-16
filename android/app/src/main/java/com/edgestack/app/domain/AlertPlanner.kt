@@ -13,6 +13,9 @@ enum class AlertType {
     SEPTEMBER_DERISK,    // last August session: cut to 0.5x from next session
     FEB_SNIPER,          // last January session: XLV/V buy at today's close
     NOV_WORST_DAY_FLAT,  // 6th Nov trading day: go flat at close (td7 next)
+    THANKSGIVING_WED,    // Tuesday before Thanksgiving: buy close, hold Wed
+    DEC_PRE_CHRISTMAS,   // 14th Dec trading day: buy close, hold td15
+    RED_CLOSE_SNIPER,    // data-driven (worker): red close in calm uptrend
 }
 
 data class PlannedAlert(
@@ -28,6 +31,8 @@ data class AlertSettings(
     val septemberDerisk: Boolean = true,
     val febSniper: Boolean = true,
     val novWorstDay: Boolean = true,
+    val thanksgiving: Boolean = true,
+    val decPreChristmas: Boolean = true,
 )
 
 /**
@@ -44,6 +49,21 @@ object AlertPlanner {
 
     fun fireAt(d: LocalDate): ZonedDateTime =
         ZonedDateTime.of(LocalDateTime.of(d, ALERT_TIME), MARKET_ZONE)
+
+    /** Session before the session before Thanksgiving (4th Thursday of Nov). */
+    fun tuesdayBeforeThanksgiving(calendar: TradingCalendar, year: Int): LocalDate? {
+        var d = LocalDate.of(year, 11, 1)
+        var thursdays = 0
+        while (true) {
+            if (d.dayOfWeek.value == 4) {
+                thursdays++
+                if (thursdays == 4) break
+            }
+            d = d.plusDays(1)
+        }
+        val wed = calendar.sessionOnOrBefore(d.minusDays(1)) ?: return null
+        return calendar.sessionOnOrBefore(wed.minusDays(1))
+    }
 
     fun alertsFor(
         calendar: TradingCalendar,
@@ -91,6 +111,27 @@ object AlertPlanner {
                 "Nov worst-day: go flat at close",
                 "Next session is the 7th November trading day - the worst " +
                     "single day of the year (SPY & QQQ agree). Overlay goes flat.",
+            )
+        }
+        if (settings.thanksgiving && today.monthValue == 11 &&
+            today == tuesdayBeforeThanksgiving(calendar, today.year)
+        ) {
+            out += PlannedAlert(
+                AlertType.THANKSGIVING_WED, at,
+                "Thanksgiving sniper: buy at today's close",
+                "Tomorrow (Wed before Thanksgiving) is one of the year's most " +
+                    "reliable sessions: QQQ 81% / SPY 70% positive. Sell at " +
+                    "Wednesday's close.",
+            )
+        }
+        if (settings.decPreChristmas && today.monthValue == 12 &&
+            calendar.tradingDayOfMonth(today) == 14
+        ) {
+            out += PlannedAlert(
+                AlertType.DEC_PRE_CHRISTMAS, at,
+                "Pre-Christmas sniper: buy at today's close",
+                "The 15th December trading day is historically strong " +
+                    "(SPY +43 bps, 73% positive years). Sell at tomorrow's close.",
             )
         }
         if (settings.buyAtClose && out.isEmpty() &&
