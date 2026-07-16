@@ -1,7 +1,9 @@
 package com.edgestack.app.data.remote
 
 import com.edgestack.app.core.AppJson
+import com.edgestack.app.domain.model.BacktestRunV2
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
+import com.edgestack.app.domain.model.EdgeSummaryV2
 import com.edgestack.app.domain.model.InstrumentAnalysisRequestV2
 import com.edgestack.app.domain.model.InstrumentAnalysisV2
 import com.edgestack.app.domain.model.InstrumentRecheckRequestV2
@@ -15,6 +17,7 @@ import com.edgestack.app.domain.model.SniperPlanV2
 import com.edgestack.app.domain.model.SniperPreviewRequestV2
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -53,6 +56,9 @@ interface EdgeStackApi {
     suspend fun patternLeaders(
         @Body request: PatternLeaderRequestV2,
     ): PatternLeaderBoardV2
+    @GET("edges") suspend fun edges(): List<EdgeSummaryV2>
+    @GET("monitoring/edges") suspend fun monitoringEdges(): JsonObject
+    @GET("backtests") suspend fun backtests(): List<BacktestRunV2>
     @GET("sniper/latest")
     suspend fun latestSniper(): SniperPlanV2
     @POST("sniper/preview")

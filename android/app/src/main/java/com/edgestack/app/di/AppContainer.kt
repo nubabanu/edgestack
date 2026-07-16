@@ -6,6 +6,7 @@ import com.edgestack.app.data.local.JsonFileStore
 import com.edgestack.app.data.local.SeedAssets
 import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.repo.CalendarRepository
+import com.edgestack.app.data.repo.EdgesRepository
 import com.edgestack.app.data.repo.InstrumentAnalysisRepository
 import com.edgestack.app.data.repo.RecommendationRepository
 import com.edgestack.app.data.repo.SniperRepository
@@ -28,6 +29,9 @@ class AppContainer(context: Context) {
     val recommendationRepo = RecommendationRepository(seed, fileStore)
     val instrumentRepo = InstrumentAnalysisRepository(fileStore)
     val sniperRepo = SniperRepository(fileStore)
+    val edgesRepo = EdgesRepository(fileStore)
     val calendarRepo = CalendarRepository(seed)
-    val syncRepo = SyncRepository(settings, recommendationRepo, instrumentRepo, sniperRepo, http)
+    val syncRepo = SyncRepository(
+        settings, recommendationRepo, instrumentRepo, sniperRepo, edgesRepo, http,
+    )
 }

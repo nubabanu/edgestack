@@ -9,28 +9,26 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.edgestack.app.ui.board.BoardScreen
 import com.edgestack.app.ui.board.BoardViewModel
+import com.edgestack.app.ui.calendar.CalendarScreen
+import com.edgestack.app.ui.calendar.CalendarViewModel
 import com.edgestack.app.ui.components.DisclaimerFooter
+import com.edgestack.app.ui.edges.EdgesScreen
+import com.edgestack.app.ui.edges.EdgesViewModel
 import com.edgestack.app.ui.instrument.InstrumentScreen
 import com.edgestack.app.ui.instrument.InstrumentViewModel
 import com.edgestack.app.ui.overlay.OverlayScreen
@@ -69,8 +67,12 @@ class MainActivity : ComponentActivity() {
                     TradesViewModel(container.syncRepo) as T
                 InstrumentViewModel::class.java ->
                     InstrumentViewModel(container.instrumentRepo, container.syncRepo) as T
+                CalendarViewModel::class.java ->
+                    CalendarViewModel(container.calendarRepo, container.instrumentRepo) as T
                 SniperViewModel::class.java ->
                     SniperViewModel(container.sniperRepo, container.syncRepo) as T
+                EdgesViewModel::class.java ->
+                    EdgesViewModel(container.edgesRepo, container.syncRepo) as T
                 SettingsViewModel::class.java ->
                     SettingsViewModel(container.settings, container.syncRepo) as T
                 else -> throw IllegalArgumentException("unknown $modelClass")
@@ -81,37 +83,30 @@ class MainActivity : ComponentActivity() {
             EdgeStackTheme {
                 var tab by remember { mutableIntStateOf(0) }
                 val tabs = listOf(
-                    "Portfolio" to Icons.Filled.Home,
-                    "Risk" to Icons.Filled.Star,
-                    "Analyze" to Icons.Filled.Search,
-                    "Sniper" to Icons.Filled.Star,
-                    "Trades" to Icons.Filled.ShoppingCart,
-                    "Settings" to Icons.Filled.Settings,
+                    "Portfolio", "Calendar", "Risk", "Analyze",
+                    "Sniper", "Edges", "Trades", "Settings",
                 )
                 Scaffold(
-                    bottomBar = {
-                        Column {
-                            DisclaimerFooter()
-                            NavigationBar {
-                                tabs.forEachIndexed { i, (label, icon) ->
-                                    NavigationBarItem(
-                                        selected = tab == i,
-                                        onClick = { tab = i },
-                                        icon = { Icon(icon, contentDescription = label) },
-                                        label = { Text(label) },
-                                    )
-                                }
-                            }
-                        }
-                    },
+                    bottomBar = { DisclaimerFooter() },
                 ) { padding ->
                     Column(Modifier.fillMaxSize().padding(padding)) {
+                        ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
+                            tabs.forEachIndexed { i, label ->
+                                Tab(
+                                    selected = tab == i,
+                                    onClick = { tab = i },
+                                    text = { Text(label) },
+                                )
+                            }
+                        }
                         when (tab) {
                             0 -> BoardScreen(viewModel(factory = factory))
-                            1 -> OverlayScreen(viewModel(factory = factory))
-                            2 -> InstrumentScreen(viewModel(factory = factory))
-                            3 -> SniperScreen(viewModel(factory = factory))
-                            4 -> TradesScreen(viewModel(factory = factory))
+                            1 -> CalendarScreen(viewModel(factory = factory))
+                            2 -> OverlayScreen(viewModel(factory = factory))
+                            3 -> InstrumentScreen(viewModel(factory = factory))
+                            4 -> SniperScreen(viewModel(factory = factory))
+                            5 -> EdgesScreen(viewModel(factory = factory))
+                            6 -> TradesScreen(viewModel(factory = factory))
                             else -> SettingsScreen(viewModel(factory = factory))
                         }
                     }

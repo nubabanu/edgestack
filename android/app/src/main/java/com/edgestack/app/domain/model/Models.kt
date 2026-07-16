@@ -592,3 +592,29 @@ data class PatternLeaderBoardV2(
     val leaders: List<PatternLeaderV2>,
     val warning: String,
 )
+
+/** One row of GET /edges — the validated edge catalog with lifecycle status. */
+@Serializable
+data class EdgeSummaryV2(
+    @SerialName("edge_id") val edgeId: String,
+    val name: String = "",
+    val family: String = "",
+    val direction: String = "",
+    val horizon: Int = 0,
+    val status: String = "",
+    @SerialName("net_mean_return") val netMeanReturn: Double? = null,
+    @SerialName("q_value") val qValue: Double? = null,
+    @SerialName("deflated_sharpe") val deflatedSharpe: Double? = null,
+    @SerialName("sample_size") val sampleSize: Int? = null,
+)
+
+@Serializable
+data class EdgeCatalog(val edges: List<EdgeSummaryV2> = emptyList())
+
+/** One row of GET /backtests. */
+@Serializable
+data class BacktestRunV2(
+    @SerialName("run_id") val runId: String,
+    @SerialName("created_at") val createdAt: String = "",
+    @SerialName("cost_scenario") val costScenario: String = "",
+)

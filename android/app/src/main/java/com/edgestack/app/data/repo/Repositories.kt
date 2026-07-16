@@ -5,7 +5,10 @@ import com.edgestack.app.data.local.SeedAssets
 import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.remote.EdgeStackApi
 import com.edgestack.app.domain.TradingCalendar
+import com.edgestack.app.domain.model.BacktestRunV2
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
+import com.edgestack.app.domain.model.EdgeCatalog
+import com.edgestack.app.domain.model.EdgeSummaryV2
 import com.edgestack.app.domain.model.InstrumentAnalysisRequestV2
 import com.edgestack.app.domain.model.InstrumentAnalysisV2
 import com.edgestack.app.domain.model.InstrumentRecheckRequestV2
@@ -19,6 +22,7 @@ import com.edgestack.app.domain.model.SniperPlanV2
 import com.edgestack.app.domain.model.SniperPreviewRequestV2
 import com.edgestack.app.domain.model.TrackedPosition
 import com.edgestack.app.domain.model.TrackedPositions
+import kotlinx.serialization.json.JsonObject
 import okhttp3.OkHttpClient
 import java.time.LocalDate
 
@@ -92,6 +96,21 @@ class InstrumentAnalysisRepository(private val store: JsonFileStore) {
     }
 }
 
+/** Last server-fetched edge catalog and monitoring snapshot for offline display. */
+class EdgesRepository(private val store: JsonFileStore) {
+    fun loadCatalog(): List<EdgeSummaryV2> =
+        store.read("edges.json", EdgeCatalog.serializer())?.edges.orEmpty()
+
+    fun saveCatalog(edges: List<EdgeSummaryV2>) =
+        store.write("edges.json", EdgeCatalog.serializer(), EdgeCatalog(edges))
+
+    fun loadMonitoring(): JsonObject? =
+        store.read("edges_monitoring.json", JsonObject.serializer())
+
+    fun saveMonitoring(payload: JsonObject) =
+        store.write("edges_monitoring.json", JsonObject.serializer(), payload)
+}
+
 /** Last server-evaluated sniper plan. Offline mode displays it without recalculating signals. */
 class SniperRepository(private val store: JsonFileStore) {
     fun load(): SniperPlanV2? =
@@ -106,6 +125,7 @@ class SyncRepository(
     private val recommendationRepo: RecommendationRepository,
     private val instrumentRepo: InstrumentAnalysisRepository,
     private val sniperRepo: SniperRepository,
+    private val edgesRepo: EdgesRepository,
     private val http: OkHttpClient,
 ) {
     private suspend fun api(): EdgeStackApi? {
@@ -188,6 +208,21 @@ class SyncRepository(
         )
     }
 
+    suspend fun edges(): Result<List<EdgeSummaryV2>> = runCatching {
+        val api = api() ?: error("no server URL configured")
+        api.edges().also(edgesRepo::saveCatalog)
+    }
+
+    suspend fun monitoringEdges(): Result<JsonObject> = runCatching {
+        val api = api() ?: error("no server URL configured")
+        api.monitoringEdges().also(edgesRepo::saveMonitoring)
+    }
+
+    suspend fun backtests(): Result<List<BacktestRunV2>> = runCatching {
+        val api = api() ?: error("no server URL configured")
+        api.backtests()
+    }
+
     suspend fun latestSniper(): Result<SniperPlanV2> = runCatching {
         val api = api() ?: error("no server URL configured")
         val plan = api.latestSniper()
@@ -221,6 +256,8 @@ class SyncRepository(
         val bundle = api.latestRecommendation()
         recommendationRepo.saveBundle(bundle)
         runCatching { api.latestSniper() }.onSuccess(sniperRepo::save)
+        runCatching { api.edges() }.onSuccess(edgesRepo::saveCatalog)
+        runCatching { api.monitoringEdges() }.onSuccess(edgesRepo::saveMonitoring)
         val previewResult = preview()
         val preview = previewResult.getOrElse {
             recommendationRepo.clearPreview()
