@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from pathlib import Path
 
 from edgestack import __version__
 from edgestack.config import EdgeStackConfig
@@ -74,6 +75,16 @@ def create_app(cfg: EdgeStackConfig):
             if e.identity.edge_id == edge_id:
                 return json.loads(e.model_dump_json())
         raise HTTPException(status_code=404, detail=f"unknown edge {edge_id}")
+
+    @app.get("/board")
+    def board() -> dict:
+        path = Path("artifacts") / "live_board.json"
+        if not path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="live board not generated; run scripts/live_signals.py",
+            )
+        return json.loads(path.read_text(encoding="utf-8"))
 
     @app.get("/signals/latest")
     def signals_latest() -> dict:

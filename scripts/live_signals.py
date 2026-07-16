@@ -13,9 +13,10 @@ Everything is a small statistical tilt, not a prediction.
 
 from __future__ import annotations
 
+import json
 import sys
 import time
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -24,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 from edgestack.config import load_config
-from edgestack.data.catalog import DataCatalog
+from edgestack.data.catalog import DataCatalog, atomic_write_bytes
 from edgestack.data.universe_pit import PitSP500Universe
 from edgestack.discovery.candidate_generation import (
     BINARY_RULE_FEATURES,
@@ -158,6 +159,21 @@ def main() -> int:
                       "conviction": "{:.0f}".format, "close": "{:.2f}".format,
                       "stop": "{:.2f}".format, "target": "{:.2f}".format}))
     print("\ntop candidate evidence:", board.iloc[0]["top_edges"])
+
+    # --- JSON export for the API (/board) and the Android companion app -----
+    head = board.head(10).rename(columns={"E[net]_10d": "e_net_10d"})
+    payload = {
+        "schema_version": 1,
+        "as_of": str(latest.date()),
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "disclaimer": "Research output only. Not investment advice.",
+        "regime": {"bench_trend_200": bench_trend, "bench_vol_20": bench_vol,
+                   "trend": regime, "vol": vol_state},
+        "rows": json.loads(head.to_json(orient="records")),
+    }
+    atomic_write_bytes(Path("artifacts") / "live_board.json",
+                       json.dumps(payload, indent=1).encode())
+    print("board exported -> artifacts/live_board.json")
 
     # --- research-only short list: historically weakest cohorts NOW ---------
     weak = today.loc[

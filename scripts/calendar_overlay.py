@@ -33,11 +33,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import numpy as np
 import pandas as pd
 import requests
+from seasonality_scan import fetch
 
 from edgestack.data.catalog import atomic_write_bytes
 from edgestack.validation.advanced_tests import newey_west_alpha
 from edgestack.validation.metrics import max_drawdown, sharpe_ratio
-from seasonality_scan import fetch
 
 TRADE_COST = 0.0002          # 2 bps per unit exposure change (SPY/QQQ spreads)
 BORROW_SPREAD = 0.015        # broker margin spread over T-bills
@@ -54,7 +54,7 @@ def tbill_series(session: requests.Session, index: pd.DatetimeIndex) -> pd.Serie
         return pd.Series(0.02, index=index)
 
 
-def build_exposure(df: pd.DataFrame) -> pd.Series:
+def build_exposure(df: pd.DataFrame, base: float = 1.0) -> pd.Series:
     d = df.copy()
     d["date"] = d["dt"].dt.tz_localize(None).dt.normalize()
     d = d.set_index("date")
@@ -77,7 +77,10 @@ def build_exposure(df: pd.DataFrame) -> pd.Series:
     L = L.mask(vol20 > 0.20, L.clip(upper=1.0))
     L.iloc[:200] = 1.0                     # warmup: plain buy-and-hold
     # decided at close t-1, applied to session t
-    return L.shift(1).fillna(1.0), ret
+    applied = L.shift(1).fillna(1.0)
+    if base != 1.0:                        # levered variant: scale whole series
+        applied = (applied * base).clip(upper=2.5)
+    return applied, ret
 
 
 def run(sym: str, session: requests.Session) -> dict:

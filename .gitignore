@@ -35,3 +35,11 @@ demo_output.txt
 example_candidate.txt
 *.log
 *_log.txt
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.kotlin/
+board_regen.tmp
