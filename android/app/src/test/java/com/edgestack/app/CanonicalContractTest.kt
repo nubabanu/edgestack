@@ -3,6 +3,7 @@ package com.edgestack.app
 import com.edgestack.app.core.AppJson
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
 import com.edgestack.app.domain.model.InstrumentAnalysisV2
+import com.edgestack.app.domain.model.SniperPlanV2
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -125,5 +126,87 @@ class CanonicalContractTest {
         assertEquals(53.2, analysis.chosenTimeRatings.single().score!!.winScore, 1e-12)
         assertEquals("15:45 New York", analysis.exitPlans.single().preferredExit)
         assertEquals(60, analysis.recheckPlan.cadenceMinutes)
+    }
+
+    @Test
+    fun sniperContractPreservesShadowRolesSizingAndHardExclusions() {
+        val payload = """
+            {
+              "schema_version": 2,
+              "generated_at": "2026-07-16T20:00:00Z",
+              "session": "2026-07-16",
+              "data_version": "data-v2",
+              "artifact_version": "artifact-v2",
+              "policy_version": "baseline-diversified-v1",
+              "account_equity": 100000,
+              "max_tolerable_loss": 250,
+              "requested_vehicle": "SPY",
+              "policy_ranking": [{
+                "rank": 1,
+                "strategy_id": "C1_C2_PRIMARY",
+                "stage": 1,
+                "role": "PRIMARY_ENGINE",
+                "activation": "SHADOW_READY",
+                "conviction": "HIGHEST",
+                "rule": "RSI(2) or three down above 200-DMA.",
+                "reason": "Requires frozen promotion."
+              }],
+              "stage_1_candidates": [{
+                "strategy_id": "C1_C2_PRIMARY",
+                "component_triggers": ["C2_THREE_DOWN"],
+                "symbol": "SPY",
+                "status": "TRIGGERED_SHADOW",
+                "signal_session": "2026-07-16",
+                "entry_window": "Next regular-session open",
+                "exit_rule": "Close above 5-DMA or fourth close.",
+                "maximum_holding_sessions": 4,
+                "sizing": {
+                  "account_equity": 100000,
+                  "max_tolerable_loss": 250,
+                  "adverse_move_p05": -0.04,
+                  "risk_notional": 6250,
+                  "capped_notional": 6250,
+                  "portfolio_weight": 0.0625,
+                  "estimated_shares": 10,
+                  "cap_applied": false,
+                  "resolved_signal_outcomes": 40,
+                  "estimate_source": "prior signals",
+                  "warning": "Tail loss can be worse."
+                },
+                "evidence": {
+                  "observations": 40,
+                  "effective_sample_size": 30,
+                  "evidence_grade": "INSUFFICIENT",
+                  "promoted": false,
+                  "warning": "Previously accessed history."
+                },
+                "actionable": false,
+                "paper_only": true
+              }],
+              "stage_2_candidates": [],
+              "overlays": [{
+                "strategy_id": "C3_VIX_CONTANGO",
+                "state": "UNAVAILABLE",
+                "threshold": "positive contango",
+                "can_initiate": false,
+                "effect": "Veto only."
+              }],
+              "excluded_strategy_ids": [
+                "A3_MINOR_HOLIDAY", "A4_SMALL_CAP_JANUARY", "A5_WEEKEND_MONDAY",
+                "B_NAIVE_OVERNIGHT", "D_SHORT_VOL_INCOME"
+              ],
+              "stage_1_promotion_satisfied": false,
+              "warnings": ["No canonical weight."],
+              "disclaimer": "Research and paper-trading shadow plan only."
+            }
+        """.trimIndent()
+
+        val plan = AppJson.decodeFromString(SniperPlanV2.serializer(), payload)
+
+        assertEquals("TRIGGERED_SHADOW", plan.stage1Candidates.single().status)
+        assertEquals(6250.0, plan.stage1Candidates.single().sizing!!.cappedNotional, 1e-12)
+        assertTrue(!plan.stage1Candidates.single().actionable)
+        assertTrue(!plan.overlays.single().canInitiate)
+        assertEquals(5, plan.excludedStrategyIds.size)
     }
 }

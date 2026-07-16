@@ -37,6 +37,8 @@ import com.edgestack.app.ui.overlay.OverlayScreen
 import com.edgestack.app.ui.overlay.OverlayViewModel
 import com.edgestack.app.ui.settings.SettingsScreen
 import com.edgestack.app.ui.settings.SettingsViewModel
+import com.edgestack.app.ui.sniper.SniperScreen
+import com.edgestack.app.ui.sniper.SniperViewModel
 import com.edgestack.app.ui.trades.TradesScreen
 import com.edgestack.app.ui.trades.TradesViewModel
 import com.edgestack.app.ui.theme.EdgeStackTheme
@@ -67,6 +69,8 @@ class MainActivity : ComponentActivity() {
                     TradesViewModel(container.syncRepo) as T
                 InstrumentViewModel::class.java ->
                     InstrumentViewModel(container.instrumentRepo, container.syncRepo) as T
+                SniperViewModel::class.java ->
+                    SniperViewModel(container.sniperRepo, container.syncRepo) as T
                 SettingsViewModel::class.java ->
                     SettingsViewModel(container.settings, container.syncRepo) as T
                 else -> throw IllegalArgumentException("unknown $modelClass")
@@ -80,6 +84,7 @@ class MainActivity : ComponentActivity() {
                     "Portfolio" to Icons.Filled.Home,
                     "Risk" to Icons.Filled.Star,
                     "Analyze" to Icons.Filled.Search,
+                    "Sniper" to Icons.Filled.Star,
                     "Trades" to Icons.Filled.ShoppingCart,
                     "Settings" to Icons.Filled.Settings,
                 )
@@ -105,7 +110,8 @@ class MainActivity : ComponentActivity() {
                             0 -> BoardScreen(viewModel(factory = factory))
                             1 -> OverlayScreen(viewModel(factory = factory))
                             2 -> InstrumentScreen(viewModel(factory = factory))
-                            3 -> TradesScreen(viewModel(factory = factory))
+                            3 -> SniperScreen(viewModel(factory = factory))
+                            4 -> TradesScreen(viewModel(factory = factory))
                             else -> SettingsScreen(viewModel(factory = factory))
                         }
                     }

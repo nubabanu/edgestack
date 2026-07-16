@@ -331,3 +331,56 @@ def test_instrument_analysis_is_version_bound_and_non_promotional(cfg: EdgeStack
         for item in day_only.json()["chosen_time_ratings"]
     )
     assert any(item["resolution"] == "DAY" for item in day_only.json()["chosen_time_ratings"])
+
+
+def test_sniper_api_is_version_bound_sized_and_structurally_non_actionable(
+    cfg: EdgeStackConfig,
+) -> None:
+    catalog = DataCatalog(cfg)
+    dates = pd.bdate_range(end=SESSION, periods=1_000)
+    rng = np.random.default_rng(83)
+    returns = rng.normal(0.00035, 0.004, len(dates))
+    for index in range(240, len(returns) - 10, 20):
+        returns[index : index + 3] = [-0.003, -0.004, -0.005]
+        returns[index + 3 : index + 6] = [0.005, 0.004, 0.003]
+    returns[-3:] = [-0.006, -0.007, -0.008]
+    close = 100 * np.cumprod(1 + returns)
+    open_ = close * (1 + rng.normal(0, 0.001, len(dates)))
+    catalog.write_bars(
+        pd.DataFrame(
+            {
+                "symbol": "SPY",
+                "date": dates,
+                "open": open_,
+                "high": np.maximum(open_, close) * 1.003,
+                "low": np.minimum(open_, close) * 0.997,
+                "close": close,
+                "volume": 10_000_000.0,
+                "adj_close": close,
+            }
+        ),
+        provider="fixture",
+    )
+    _publish_fixture(cfg, data_version=catalog.data_manifest_hash())
+    client = TestClient(create_app(cfg))
+    canonical_before = client.get("/recommendations/latest").json()
+
+    latest = client.get("/sniper/latest")
+    preview = client.post(
+        "/sniper/preview",
+        json={"account_equity": 200_000, "max_tolerable_loss": 400, "vehicle": "SPY"},
+    )
+
+    assert latest.status_code == preview.status_code == 200
+    payload = preview.json()
+    primary = payload["stage_1_candidates"][0]
+    assert payload["account_equity"] == 200_000
+    assert payload["max_tolerable_loss"] == 400
+    assert primary["strategy_id"] == "C1_C2_PRIMARY"
+    assert primary["status"] == "TRIGGERED_SHADOW"
+    assert primary["actionable"] is False
+    assert primary["sizing"]["capped_notional"] <= 200_000
+    assert all(not item["can_initiate"] for item in payload["overlays"])
+    assert len(payload["excluded_strategy_ids"]) == 5
+    assert all(item["status"] == "BLOCKED" for item in payload["stage_2_candidates"])
+    assert client.get("/recommendations/latest").json() == canonical_before

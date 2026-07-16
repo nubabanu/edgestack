@@ -8,6 +8,7 @@ import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.repo.CalendarRepository
 import com.edgestack.app.data.repo.InstrumentAnalysisRepository
 import com.edgestack.app.data.repo.RecommendationRepository
+import com.edgestack.app.data.repo.SniperRepository
 import com.edgestack.app.data.repo.SyncRepository
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -26,6 +27,7 @@ class AppContainer(context: Context) {
 
     val recommendationRepo = RecommendationRepository(seed, fileStore)
     val instrumentRepo = InstrumentAnalysisRepository(fileStore)
+    val sniperRepo = SniperRepository(fileStore)
     val calendarRepo = CalendarRepository(seed)
-    val syncRepo = SyncRepository(settings, recommendationRepo, instrumentRepo, http)
+    val syncRepo = SyncRepository(settings, recommendationRepo, instrumentRepo, sniperRepo, http)
 }

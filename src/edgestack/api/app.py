@@ -17,7 +17,9 @@ from edgestack.api.contracts import (
     PatternLeaderRequestV2,
     RecommendationPreviewRequestV2,
 )
+from edgestack.api.sniper_contracts import SniperPreviewRequestV2
 from edgestack.config import EdgeStackConfig
+from edgestack.data.calendar import TradingCalendar
 from edgestack.data.catalog import DataCatalog
 from edgestack.discovery.edge_store import current_statuses, load_edges
 from edgestack.exceptions import DataError, EdgeStackError
@@ -42,6 +44,8 @@ from edgestack.recommendation.service import (
     CanonicalBundleRepository,
     CanonicalRecommendationService,
 )
+from edgestack.recommendation.sniper import build_sniper_plan
+from edgestack.recommendation.sniper_schemas import SniperPlanV2
 from edgestack.recommendation.trade_calendar import compare_recheck
 from edgestack.types import EdgeStatus
 
@@ -270,6 +274,51 @@ def create_app(cfg: EdgeStackConfig):
             ),
             round_trip_cost_bps=request.round_trip_cost_bps,
         )
+
+    @app.get("/sniper/latest", response_model=SniperPlanV2)
+    def sniper_latest() -> SniperPlanV2:
+        bundle = _canonical()
+        return _sniper_plan(
+            account_equity=bundle.default_risk_profile.account_equity,
+            max_tolerable_loss=bundle.default_risk_profile.account_equity * 0.0025,
+            vehicle="SPY",
+        )
+
+    @app.post("/sniper/preview", response_model=SniperPlanV2)
+    def sniper_preview(request: SniperPreviewRequestV2) -> SniperPlanV2:
+        return _sniper_plan(
+            account_equity=request.account_equity,
+            max_tolerable_loss=request.max_tolerable_loss,
+            vehicle=request.vehicle,
+        )
+
+    def _sniper_plan(
+        *, account_equity: float, max_tolerable_loss: float, vehicle: str
+    ) -> SniperPlanV2:
+        try:
+            bundle = recommendations.latest()
+            if catalog.data_manifest_hash() != bundle.data_version:
+                raise DataError("market data changed; republish before sniper evaluation")
+            requested = vehicle.strip().upper()
+            symbols = tuple(dict.fromkeys(("SPY", requested)))
+            with catalog.guard.unlock(
+                reason="sniper shadow evaluation; descriptive, not promotion evidence"
+            ) as key:
+                panel = catalog.load_panel(
+                    symbols=symbols,
+                    end=bundle.session,
+                    unlock_key=key,
+                )
+            return build_sniper_plan(
+                bundle=bundle,
+                panel=panel,
+                calendar=TradingCalendar(cfg.data.calendar),
+                account_equity=account_equity,
+                max_tolerable_loss=max_tolerable_loss,
+                vehicle=requested,
+            )
+        except DataError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/board", deprecated=True)
     def board():

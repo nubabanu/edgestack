@@ -11,6 +11,8 @@ import com.edgestack.app.domain.model.PatternLeaderRequestV2
 import com.edgestack.app.domain.model.PaperResponse
 import com.edgestack.app.domain.model.PortfolioRecommendationV2
 import com.edgestack.app.domain.model.RecommendationPreviewRequestV2
+import com.edgestack.app.domain.model.SniperPlanV2
+import com.edgestack.app.domain.model.SniperPreviewRequestV2
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import okhttp3.MediaType.Companion.toMediaType
@@ -51,6 +53,12 @@ interface EdgeStackApi {
     suspend fun patternLeaders(
         @Body request: PatternLeaderRequestV2,
     ): PatternLeaderBoardV2
+    @GET("sniper/latest")
+    suspend fun latestSniper(): SniperPlanV2
+    @POST("sniper/preview")
+    suspend fun previewSniper(
+        @Body request: SniperPreviewRequestV2,
+    ): SniperPlanV2
 
     companion object {
         fun create(baseUrl: String, http: OkHttpClient): EdgeStackApi =

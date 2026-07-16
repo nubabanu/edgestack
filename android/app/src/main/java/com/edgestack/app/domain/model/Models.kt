@@ -231,6 +231,104 @@ data class RecommendationPreviewRequestV2(
     @SerialName("reset_requested") val resetRequested: Boolean = false,
 )
 
+// --- staged, loss-aversion-first sniper shadow plan ---
+
+@Serializable
+data class SniperPolicyItemV2(
+    val rank: Int,
+    @SerialName("strategy_id") val strategyId: String,
+    val stage: Int,
+    val role: String,
+    val activation: String,
+    val conviction: String,
+    val rule: String,
+    val reason: String,
+)
+
+@Serializable
+data class SniperSizingV2(
+    @SerialName("account_equity") val accountEquity: Double,
+    @SerialName("max_tolerable_loss") val maxTolerableLoss: Double,
+    @SerialName("adverse_move_p05") val adverseMoveP05: Double,
+    @SerialName("risk_notional") val riskNotional: Double,
+    @SerialName("capped_notional") val cappedNotional: Double,
+    @SerialName("portfolio_weight") val portfolioWeight: Double,
+    @SerialName("estimated_shares") val estimatedShares: Int,
+    @SerialName("cap_applied") val capApplied: Boolean,
+    @SerialName("resolved_signal_outcomes") val resolvedSignalOutcomes: Int,
+    @SerialName("estimate_source") val estimateSource: String,
+    val warning: String,
+)
+
+@Serializable
+data class SniperOutcomeEvidenceV2(
+    val observations: Int,
+    @SerialName("effective_sample_size") val effectiveSampleSize: Double,
+    @SerialName("cost_adjusted_win_rate") val costAdjustedWinRate: Double? = null,
+    @SerialName("mean_net_return") val meanNetReturn: Double? = null,
+    @SerialName("adverse_move_p05") val adverseMoveP05: Double? = null,
+    @SerialName("evidence_grade") val evidenceGrade: String,
+    val promoted: Boolean = false,
+    val warning: String,
+)
+
+@Serializable
+data class SniperCandidateV2(
+    @SerialName("strategy_id") val strategyId: String,
+    @SerialName("component_triggers") val componentTriggers: List<String> = emptyList(),
+    val symbol: String,
+    val status: String,
+    @SerialName("signal_session") val signalSession: String? = null,
+    @SerialName("entry_window") val entryWindow: String? = null,
+    @SerialName("exit_rule") val exitRule: String,
+    @SerialName("maximum_holding_sessions") val maximumHoldingSessions: Int,
+    val sizing: SniperSizingV2? = null,
+    val evidence: SniperOutcomeEvidenceV2,
+    @SerialName("veto_reasons") val vetoReasons: List<String> = emptyList(),
+    val cautions: List<String> = emptyList(),
+    val actionable: Boolean = false,
+    @SerialName("paper_only") val paperOnly: Boolean = true,
+)
+
+@Serializable
+data class SniperOverlayV2(
+    @SerialName("strategy_id") val strategyId: String,
+    val state: String,
+    val value: Double? = null,
+    val threshold: String,
+    @SerialName("can_initiate") val canInitiate: Boolean = false,
+    val effect: String,
+    val warning: String? = null,
+)
+
+@Serializable
+data class SniperPlanV2(
+    @SerialName("schema_version") val schemaVersion: Int = 2,
+    @SerialName("generated_at") val generatedAt: String,
+    val session: String,
+    @SerialName("data_version") val dataVersion: String,
+    @SerialName("artifact_version") val artifactVersion: String,
+    @SerialName("policy_version") val policyVersion: String,
+    @SerialName("account_equity") val accountEquity: Double,
+    @SerialName("max_tolerable_loss") val maxTolerableLoss: Double,
+    @SerialName("requested_vehicle") val requestedVehicle: String,
+    @SerialName("policy_ranking") val policyRanking: List<SniperPolicyItemV2>,
+    @SerialName("stage_1_candidates") val stage1Candidates: List<SniperCandidateV2>,
+    @SerialName("stage_2_candidates") val stage2Candidates: List<SniperCandidateV2>,
+    val overlays: List<SniperOverlayV2>,
+    @SerialName("excluded_strategy_ids") val excludedStrategyIds: List<String>,
+    @SerialName("stage_1_promotion_satisfied") val stage1PromotionSatisfied: Boolean = false,
+    val warnings: List<String> = emptyList(),
+    val disclaimer: String,
+)
+
+@Serializable
+data class SniperPreviewRequestV2(
+    @SerialName("account_equity") val accountEquity: Double = 100_000.0,
+    @SerialName("max_tolerable_loss") val maxTolerableLoss: Double = 250.0,
+    val vehicle: String = "SPY",
+)
+
 // --- user-selected instrument analysis; server evidence only ---
 
 @Serializable

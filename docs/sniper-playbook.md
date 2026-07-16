@@ -1,78 +1,77 @@
-# The Sniper Playbook — loss-aversion-first trading
+# Sniper V2 — staged loss-aversion-first shadow strategy
 
-> Research output only. Not investment advice. Every number below is measured
-> in this repo (see seasonality_scan, strategy_zoo, xmarket_replication,
-> french_deep_history, execution_sensitivity artifacts).
+> Research and paper-trading shadow output only. No live orders and no investment advice. The
+> earlier broad "all-stars" sniper hypothesis remains rejected. The narrower rules below use
+> previously accessed history descriptively and receive zero canonical portfolio weight unless a
+> frozen sleeve passes every Recommendation Engine V2 promotion gate.
 
-## Design principle
+## Ranked policy
 
-Trade the probability of NOT losing, not expected profit — and trade rarely.
-Every window below is a 1-4 session hold (a defined exit means a loss cannot
-grow while you watch), always unlevered, always on index/defensive ETFs.
-Single stocks run ~52-54% daily hit rates at best — psychologically wrong for
-a loss-averse trader — with one measured exception noted below.
+| Rank | Rule | Current use |
+|---:|---|---|
+| 1 | C1/C2 RSI(2) or three-down dip | Stage 1 shadow engine |
+| 2 | A1 Santa Claus window | Stage 1 scheduled shadow candidate |
+| 3 | A2 defined-risk pre-FOMC | Blocked: options/FOMC/IV/fill data absent |
+| 4 | E1 TLT month-end | Blocked until Stage 1 promotion and separate validation |
+| 5 | C3 VIX contango re-cross | Veto/filter only; unavailable without point-in-time futures |
+| 6 | C4 put/call and breadth washout | Confirmation only; unavailable without compatible inputs |
+| 7 | A6 OpEx-week micro-tilt | Blocked; no incremental promoted artifact |
+| 8 | E2 Gold January | Blocked low-conviction watchlist observation |
 
-## The calendar (regenerate dates: `python scripts/sniper_calendar.py`)
+The hard-disabled set is A3 minor-holiday effects, A4 small-cap January, A5 weekend/Monday, B
+naive overnight-only, and D short-volatility income. They cannot create a candidate, overlay, or
+portfolio weight.
 
-| Window | Vehicle | Hold | Hit rate | Worst ever | p5 |
-|---|---|---|---|---|---|
-| Feb-1 (buy last Jan close) | XLV | 1 session | **89%** (28y) | −2.0% | −0.3% |
-| Feb-1 companion | V (Visa) | 1 session | 80% (15y, MA-confirmed) | — | — |
-| Wed before Thanksgiving (buy Tue close) | SPY | 1 session | 70% | −2.4% | −2.0% |
-| Turn-of-month (buy last session close) | QQQ/SPY | 4 sessions | 62-64% | −7% | −2.5/−3.9% |
-| 15th Dec trading day (buy td14 close) | SPY | 1 session | 73% | small | — |
-| **Red close in calm uptrend (any day)** | SPY | overnight only | **60%, t=5.41** | — | **−0.8%** |
+## C1/C2 primary engine
 
-Confirmed cross-market: ToM positive in 12/12 foreign markets and 6/6 US eras
-back to 1927; September weakest in 12/12 markets and 6/6 eras.
+The engine evaluates SPY or an approved diversified low-volatility vehicle (`USMV`, `SPLV`, `XLV`,
+or `XLP`) after the session close. It creates one combined candidate—not two positions—when either
+RSI(2) is below 5 or adjusted closes have fallen for three consecutive sessions.
 
-## Stand-aside rules (avoiding loss is also a trade)
+Eligibility requires both the vehicle and SPY to be above their 200-session moving averages and
+both 20-session annualized volatilities to be at most 20%. September is a mandatory stand-aside.
+A supplied VIX backwardation observation vetoes the candidate. The planned entry is the next
+regular-session open; the descriptive exit is the first close above the then-known 5-DMA or the
+fourth-session close.
 
-- ALL of September: worst month everywhere; last August session = de-risk day.
-- 7th November trading day: worst single day of the year (SPY & QQQ agree) —
-  flat at the prior close.
-- Never initiate before a >=4-day holiday closure (the only overnight span
-  with negative average returns).
-- VETO everything when SPY < 200-DMA or 20d vol > 20%: hit rates collapse
-  and tails fatten (gap-down buys in high-vol sideways: 20% hit, −8.6% mean).
+Sizing is:
 
-## Kind-of-vehicle rules (halves the loss SIZE)
+```text
+shadow notional = maximum tolerable modeled loss / abs(prior-signal adverse-move p5)
+```
 
-Lowest-vol-quintile stocks: bad day p5 −1.8% vs −4.2% for the wildest
-quintile — but even the calmest single stock is ~53% daily hit with
-catastrophic idiosyncratic tails. Express "kind" through the vehicle:
-XLV / XLP / USMV-style, or diversified low-vol baskets (p5 −1.5%, the
-smallest tails measured). Single names additionally require: lowest-vol
-quintile, beta < 1, clean fundamentals (no >10% short interest, no extreme
-leverage, positive FCF), and NO earnings date inside the window.
+The notional is capped at account equity, so the shadow preview cannot introduce leverage. At
+least 30 resolved, non-overlapping in-regime historical signals are required before using the
+descriptive adverse-tail estimate; otherwise the engine uses a conservative −4% fallback. The
+5th percentile is not a maximum loss—gaps, execution, and regime change can lose more.
 
-## Gap rules at the open (for orders already planned)
+## A1 Santa window
 
-- Moderate gap DOWN (−1..−3%): best entry cohort — proceed (t=16, 5d +59bps).
-- Extreme gap DOWN (< −3%): cancel — dead-cat bounce, 5d −36bps.
-- Moderate gap UP (+1..+3%): proceed, mild continuation.
-- Extreme gap UP (> +3%): cancel — 47% hit buying that open. (Index gap-ups
-  are the exception: SPY >+1% overnight continues, 60% same-day.)
+The scheduled entry is the close of the fifth-to-last December exchange session and the exit is
+the close of the second January session. It has its own descriptive outcome series and sizing. It
+is not automatically sent to the canonical paper executor because close-auction execution differs
+from the default next-open policy.
 
-## Sizing — where loss aversion is actually solved
+## Stages and overlays
 
-position = (max € loss you can tolerate) / (worst-case % of the window).
-Sized this way, the worst day in 30 years costs exactly your pre-agreed pain
-limit. Never leverage: alignment grants permission and size, never aggression.
+Stage 2 cannot unlock merely because Stage 1 has a good recent result. It requires a compatible
+promoted Stage 1 artifact, then independent data and validation for the Stage 2 family. A2 also
+requires point-in-time FOMC dates, option chains, IV rank, spreads, and actual-fill assumptions;
+shares are not substituted for the defined-risk option expression.
 
-## Honest arithmetic
+C3 and C4 have typed contracts with `can_initiate=false`. C3 can only pass or veto C1/C2. C4 can
+only confirm an existing eligible C1/C2 candidate; it cannot override a trend, volatility,
+September, freshness, or risk veto. A6 currently applies no tilt.
 
-The best window loses 1 year in 9. The full calendar (~15 trades/yr at
-65-89% hit) produces ~3-5 losing trades per year — small, capped, brief,
-pre-agreed. No schedule has 100% hit; the design makes losses rare, small
-and decided in advance, which is what makes them bearable.
+## API and Android
 
-Core for the untraded capital: permanent portfolio (25% each SPY/TLT/SHY/GLD,
-5% bands) or the unified book (docs/strategy-zoo.md) — and check it rarely.
+- `GET /sniper/latest` evaluates the canonical session with the default profile equity and a 0.25%
+  modeled loss budget.
+- `POST /sniper/preview` accepts account equity, maximum tolerable loss, and an approved vehicle.
+  It is stateless and does not mutate the canonical recommendation.
+- The Android **Sniper** tab consumes these server contracts, displays trigger components, entry
+  and exit rules, modeled loss sizing, vetoes, evidence, blocked stages, overlays, and exclusions.
+  Offline mode shows the last server result without calculating signals on-device.
 
-## App integration
-
-The Android app fires all of these at 15:45 America/New_York: ToM window,
-September de-risk, Feb-1 sniper, Nov worst-day, Thanksgiving Wednesday,
-pre-Christmas, and the data-driven red-close-in-calm-uptrend trigger, plus
-200-DMA breach and vol-gate transitions on the risk channel.
+Sniper output is version-bound to the current canonical data and artifact versions. If market data
+changes after publication, the API fails closed until the canonical bundle is republished.

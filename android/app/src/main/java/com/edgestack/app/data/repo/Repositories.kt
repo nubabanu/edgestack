@@ -15,6 +15,8 @@ import com.edgestack.app.domain.model.PatternLeaderRequestV2
 import com.edgestack.app.domain.model.PaperResponse
 import com.edgestack.app.domain.model.PortfolioRecommendationV2
 import com.edgestack.app.domain.model.RecommendationPreviewRequestV2
+import com.edgestack.app.domain.model.SniperPlanV2
+import com.edgestack.app.domain.model.SniperPreviewRequestV2
 import com.edgestack.app.domain.model.TrackedPosition
 import com.edgestack.app.domain.model.TrackedPositions
 import okhttp3.OkHttpClient
@@ -90,10 +92,20 @@ class InstrumentAnalysisRepository(private val store: JsonFileStore) {
     }
 }
 
+/** Last server-evaluated sniper plan. Offline mode displays it without recalculating signals. */
+class SniperRepository(private val store: JsonFileStore) {
+    fun load(): SniperPlanV2? =
+        store.read("sniper_plan.json", SniperPlanV2.serializer())
+
+    fun save(plan: SniperPlanV2) =
+        store.write("sniper_plan.json", SniperPlanV2.serializer(), plan)
+}
+
 class SyncRepository(
     private val settingsStore: SettingsStore,
     private val recommendationRepo: RecommendationRepository,
     private val instrumentRepo: InstrumentAnalysisRepository,
+    private val sniperRepo: SniperRepository,
     private val http: OkHttpClient,
 ) {
     private suspend fun api(): EdgeStackApi? {
@@ -176,10 +188,39 @@ class SyncRepository(
         )
     }
 
+    suspend fun latestSniper(): Result<SniperPlanV2> = runCatching {
+        val api = api() ?: error("no server URL configured")
+        val plan = api.latestSniper()
+        sniperRepo.save(plan)
+        plan
+    }
+
+    suspend fun previewSniper(
+        accountEquity: Double,
+        maxTolerableLoss: Double,
+        vehicle: String,
+    ): Result<SniperPlanV2> = runCatching {
+        require(accountEquity > 0) { "account equity must be positive" }
+        require(maxTolerableLoss > 0 && maxTolerableLoss <= accountEquity) {
+            "max tolerable loss must be positive and no greater than equity"
+        }
+        val api = api() ?: error("no server URL configured")
+        val plan = api.previewSniper(
+            SniperPreviewRequestV2(
+                accountEquity = accountEquity,
+                maxTolerableLoss = maxTolerableLoss,
+                vehicle = vehicle.trim().uppercase(),
+            ),
+        )
+        sniperRepo.save(plan)
+        plan
+    }
+
     suspend fun syncAll(): Result<String> = runCatching {
         val api = api() ?: error("no server URL configured")
         val bundle = api.latestRecommendation()
         recommendationRepo.saveBundle(bundle)
+        runCatching { api.latestSniper() }.onSuccess(sniperRepo::save)
         val previewResult = preview()
         val preview = previewResult.getOrElse {
             recommendationRepo.clearPreview()

@@ -62,6 +62,7 @@ The orchestrator fails on data-quality, artifact, schema, or checksum errors. It
 - `POST /instruments/analyze` accepts a stock/ETF ticker or commodity name/proxy and an optional intended-entry timestamp. It returns day/week/month/year best and worst historical windows, tailwinds, headwinds, counter-effects, news context, current-year observations, and explicit abstentions. Only compatible frozen promoted timing artifacts can make a window actionable or create a directional rating.
 - `POST /instruments/recheck` compares a prior analysis with the latest canonical inputs and reports whether the selected timing still holds or a higher-ranked alternative emerged.
 - `POST /instruments/pattern-leaders` scans 1–50 explicitly supplied symbols and returns a research-only ranking. It never promotes the symbol/slot search.
+- `GET /sniper/latest` returns the version-bound staged sniper shadow plan. `POST /sniper/preview` changes only account equity, modeled loss budget, and the approved diversified vehicle; it cannot mutate canonical weights or promotion state. C1/C2 and Santa are Stage 1 shadow candidates, C3/C4 are non-initiating overlays, and Stage 2 remains blocked until its data and promotion prerequisites exist.
 - `/board`, `/picks`, `/master`, `/signals/*`, and `/candidates/*` are deprecated compatibility projections. Board rows and picks are empty; master contains canonical weights only.
 
 Run the API with:
