@@ -103,6 +103,46 @@ CREATE TABLE IF NOT EXISTS audit_log (
     config_hash TEXT,
     detail JSON
 );
+CREATE TABLE IF NOT EXISTS experiment_manifests_v2 (
+    manifest_hash TEXT PRIMARY KEY,
+    experiment_id TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    payload JSON NOT NULL
+);
+CREATE TABLE IF NOT EXISTS trial_ledger_v2 (
+    trial_id TEXT PRIMARY KEY,
+    experiment_id TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    status TEXT NOT NULL,
+    payload JSON NOT NULL
+);
+CREATE TABLE IF NOT EXISTS frozen_artifacts_v2 (
+    content_hash TEXT PRIMARY KEY,
+    manifest_hash TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    payload JSON NOT NULL
+);
+CREATE TABLE IF NOT EXISTS promotion_decisions_v2 (
+    sleeve_id TEXT NOT NULL,
+    artifact_hash TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    promoted BOOLEAN NOT NULL,
+    payload JSON NOT NULL,
+    PRIMARY KEY (sleeve_id, artifact_hash)
+);
+CREATE TABLE IF NOT EXISTS prospective_evidence_v2 (
+    sleeve_id TEXT NOT NULL,
+    frozen_artifact_hash TEXT NOT NULL,
+    recorded_at TIMESTAMP NOT NULL,
+    payload JSON NOT NULL,
+    PRIMARY KEY (sleeve_id, frozen_artifact_hash, recorded_at)
+);
+CREATE TABLE IF NOT EXISTS publications_v2 (
+    run_id TEXT PRIMARY KEY,
+    published_at TIMESTAMP NOT NULL,
+    bundle_hash TEXT NOT NULL,
+    payload JSON NOT NULL
+);
 """
 
 

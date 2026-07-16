@@ -1,0 +1,15 @@
+schema_version: 2
+policy_version: baseline-diversified-v1
+effective_date: 2026-07-16
+weights:
+  - {symbol: SPY, weight: 0.25, asset_kind: ETF, sector: broad_equity}
+  - {symbol: TLT, weight: 0.25, asset_kind: ETF, sector: long_treasury}
+  - {symbol: SHY, weight: 0.25, asset_kind: ETF, sector: short_treasury}
+  - {symbol: GLD, weight: 0.25, asset_kind: ETF, sector: gold}
+rebalance_schedule: quarterly_next_open_or_drift
+drift_threshold: 0.05
+execution_policy: next_open
+total_return_treatment: adjusted_open_with_explicit_corporate_actions
+one_way_cost_bps: 5.0
+participation_limit: 0.10
+alpha_claimed: false
