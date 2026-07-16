@@ -16,6 +16,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
@@ -30,6 +31,8 @@ import androidx.lifecycle.ViewModelProvider
 import com.edgestack.app.ui.board.BoardScreen
 import com.edgestack.app.ui.board.BoardViewModel
 import com.edgestack.app.ui.components.DisclaimerFooter
+import com.edgestack.app.ui.instrument.InstrumentScreen
+import com.edgestack.app.ui.instrument.InstrumentViewModel
 import com.edgestack.app.ui.overlay.OverlayScreen
 import com.edgestack.app.ui.overlay.OverlayViewModel
 import com.edgestack.app.ui.settings.SettingsScreen
@@ -62,6 +65,8 @@ class MainActivity : ComponentActivity() {
                     ) as T
                 TradesViewModel::class.java ->
                     TradesViewModel(container.syncRepo) as T
+                InstrumentViewModel::class.java ->
+                    InstrumentViewModel(container.instrumentRepo, container.syncRepo) as T
                 SettingsViewModel::class.java ->
                     SettingsViewModel(container.settings, container.syncRepo) as T
                 else -> throw IllegalArgumentException("unknown $modelClass")
@@ -74,6 +79,7 @@ class MainActivity : ComponentActivity() {
                 val tabs = listOf(
                     "Portfolio" to Icons.Filled.Home,
                     "Risk" to Icons.Filled.Star,
+                    "Analyze" to Icons.Filled.Search,
                     "Trades" to Icons.Filled.ShoppingCart,
                     "Settings" to Icons.Filled.Settings,
                 )
@@ -98,7 +104,8 @@ class MainActivity : ComponentActivity() {
                         when (tab) {
                             0 -> BoardScreen(viewModel(factory = factory))
                             1 -> OverlayScreen(viewModel(factory = factory))
-                            2 -> TradesScreen(viewModel(factory = factory))
+                            2 -> InstrumentScreen(viewModel(factory = factory))
+                            3 -> TradesScreen(viewModel(factory = factory))
                             else -> SettingsScreen(viewModel(factory = factory))
                         }
                     }

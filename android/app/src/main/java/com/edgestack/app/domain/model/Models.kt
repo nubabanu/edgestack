@@ -230,3 +230,134 @@ data class RecommendationPreviewRequestV2(
     @SerialName("equity_override") val equityOverride: Double? = null,
     @SerialName("reset_requested") val resetRequested: Boolean = false,
 )
+
+// --- user-selected instrument analysis; server evidence only ---
+
+@Serializable
+data class InstrumentResolutionV2(
+    @SerialName("requested_symbol") val requestedSymbol: String,
+    @SerialName("resolved_symbol") val resolvedSymbol: String,
+    @SerialName("instrument_kind") val instrumentKind: String,
+    @SerialName("proxy_for") val proxyFor: String? = null,
+    @SerialName("tradeable_instrument") val tradeableInstrument: Boolean = true,
+    val notes: List<String> = emptyList(),
+)
+
+@Serializable
+data class EdgeEffectV2(
+    @SerialName("edge_id") val edgeId: String,
+    val family: String,
+    @SerialName("horizon_sessions") val horizonSessions: Int,
+    val direction: String,
+    val observation: String,
+    @SerialName("positive_contribution") val positiveContribution: Double = 0.0,
+    @SerialName("negative_contribution") val negativeContribution: Double = 0.0,
+    @SerialName("net_contribution") val netContribution: Double = 0.0,
+    @SerialName("protective_avoidance_value") val protectiveAvoidanceValue: Double = 0.0,
+    @SerialName("lower_95") val lower95: Double? = null,
+    @SerialName("adverse_counter_effect") val adverseCounterEffect: String,
+    @SerialName("protective_counter_effect") val protectiveCounterEffect: String,
+    @SerialName("evidence_grade") val evidenceGrade: String,
+    val compound: Boolean = false,
+    val promoted: Boolean = false,
+    @SerialName("artifact_hash") val artifactHash: String? = null,
+    val invalidation: String,
+)
+
+@Serializable
+data class TimingWindowV2(
+    val horizon: String,
+    val label: String,
+    @SerialName("entry_window") val entryWindow: String,
+    @SerialName("exit_window") val exitWindow: String,
+    @SerialName("holding_sessions") val holdingSessions: Int,
+    @SerialName("expected_net_return") val expectedNetReturn: Double? = null,
+    @SerialName("lower_95") val lower95: Double? = null,
+    @SerialName("upper_95") val upper95: Double? = null,
+    @SerialName("multiple_testing_adjusted_pvalue")
+    val multipleTestingAdjustedPvalue: Double? = null,
+    val observations: Int = 0,
+    @SerialName("effective_sample_size") val effectiveSampleSize: Double = 0.0,
+    @SerialName("evidence_grade") val evidenceGrade: String,
+    val actionable: Boolean = false,
+    @SerialName("artifact_hash") val artifactHash: String? = null,
+    val rationale: String,
+    @SerialName("what_invalidates_it") val whatInvalidatesIt: List<String> = emptyList(),
+)
+
+@Serializable
+data class HorizonTimingAnalysisV2(
+    val horizon: String,
+    @SerialName("data_resolution") val dataResolution: String,
+    @SerialName("best_window") val bestWindow: TimingWindowV2? = null,
+    @SerialName("worst_window") val worstWindow: TimingWindowV2? = null,
+    val alternatives: List<TimingWindowV2> = emptyList(),
+    @SerialName("intended_entry_assessment") val intendedEntryAssessment: String? = null,
+    val actionable: Boolean = false,
+    @SerialName("searched_variants") val searchedVariants: Int = 0,
+    val warning: String? = null,
+)
+
+@Serializable
+data class NewsEvidenceV2(
+    @SerialName("news_id") val newsId: String,
+    val symbol: String,
+    val headline: String,
+    val source: String,
+    @SerialName("published_at") val publishedAt: String,
+    val url: String? = null,
+    val summary: String = "",
+    @SerialName("sentiment_label") val sentimentLabel: String = "UNSCORED",
+    val relevance: Double? = null,
+    @SerialName("is_fresh") val isFresh: Boolean,
+    @SerialName("age_hours") val ageHours: Double,
+    val warning: String,
+)
+
+@Serializable
+data class AlignmentSummaryV2(
+    @SerialName("aligned_trade") val alignedTrade: Boolean,
+    @SerialName("promoted_tailwinds") val promotedTailwinds: Int,
+    @SerialName("promoted_headwinds") val promotedHeadwinds: Int,
+    @SerialName("observational_tailwinds") val observationalTailwinds: Int,
+    @SerialName("observational_headwinds") val observationalHeadwinds: Int,
+    @SerialName("actionable_horizons") val actionableHorizons: List<String> = emptyList(),
+    @SerialName("missing_inputs") val missingInputs: List<String> = emptyList(),
+    val explanation: String,
+)
+
+@Serializable
+data class InstrumentAnalysisV2(
+    @SerialName("schema_version") val schemaVersion: Int = 2,
+    @SerialName("analysis_id") val analysisId: String,
+    val resolution: InstrumentResolutionV2,
+    @SerialName("as_of") val asOf: String,
+    @SerialName("intended_entry_at") val intendedEntryAt: String? = null,
+    @SerialName("data_version") val dataVersion: String,
+    @SerialName("artifact_version") val artifactVersion: String,
+    @SerialName("policy_version") val policyVersion: String,
+    @SerialName("current_price") val currentPrice: Double? = null,
+    val status: String,
+    @SerialName("overall_rating") val overallRating: String,
+    @SerialName("overall_score") val overallScore: Double? = null,
+    @SerialName("canonical_portfolio_weight") val canonicalPortfolioWeight: Double = 0.0,
+    val alignment: AlignmentSummaryV2,
+    @SerialName("horizon_analyses") val horizonAnalyses: List<HorizonTimingAnalysisV2>,
+    val tailwinds: List<EdgeEffectV2> = emptyList(),
+    val headwinds: List<EdgeEffectV2> = emptyList(),
+    @SerialName("mixed_effects") val mixedEffects: List<EdgeEffectV2> = emptyList(),
+    val news: List<NewsEvidenceV2> = emptyList(),
+    @SerialName("what_to_watch") val whatToWatch: List<String> = emptyList(),
+    @SerialName("current_year_notes") val currentYearNotes: List<String> = emptyList(),
+    val warnings: List<String> = emptyList(),
+    val disclaimer: String,
+)
+
+@Serializable
+data class InstrumentAnalysisRequestV2(
+    val symbol: String,
+    @SerialName("instrument_kind") val instrumentKind: String? = null,
+    @SerialName("intended_entry_at") val intendedEntryAt: String? = null,
+    @SerialName("round_trip_cost_bps") val roundTripCostBps: Double = 10.0,
+    @SerialName("include_news") val includeNews: Boolean = true,
+)

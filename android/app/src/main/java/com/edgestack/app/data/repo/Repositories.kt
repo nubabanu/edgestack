@@ -6,6 +6,8 @@ import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.remote.EdgeStackApi
 import com.edgestack.app.domain.TradingCalendar
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
+import com.edgestack.app.domain.model.InstrumentAnalysisRequestV2
+import com.edgestack.app.domain.model.InstrumentAnalysisV2
 import com.edgestack.app.domain.model.PaperResponse
 import com.edgestack.app.domain.model.PortfolioRecommendationV2
 import com.edgestack.app.domain.model.RecommendationPreviewRequestV2
@@ -61,9 +63,22 @@ class PositionsRepository(private val store: JsonFileStore) {
         save(load().filterNot { it.symbol == symbol && it.entryDate == entryDate })
 }
 
+class InstrumentAnalysisRepository(private val store: JsonFileStore) {
+    fun loadLast(): InstrumentAnalysisV2? =
+        store.read("instrument_analysis.json", InstrumentAnalysisV2.serializer())
+
+    fun save(analysis: InstrumentAnalysisV2) =
+        store.write(
+            "instrument_analysis.json",
+            InstrumentAnalysisV2.serializer(),
+            analysis,
+        )
+}
+
 class SyncRepository(
     private val settingsStore: SettingsStore,
     private val recommendationRepo: RecommendationRepository,
+    private val instrumentRepo: InstrumentAnalysisRepository,
     private val http: OkHttpClient,
 ) {
     private suspend fun api(): EdgeStackApi? {
@@ -100,6 +115,23 @@ class SyncRepository(
             result.freshness.isFresh,
             result.outputRiskState,
         )
+        result
+    }
+
+    suspend fun analyzeInstrument(
+        symbol: String,
+        intendedEntryAt: String? = null,
+        roundTripCostBps: Double = 10.0,
+    ): Result<InstrumentAnalysisV2> = runCatching {
+        val api = api() ?: error("no server URL configured")
+        val result = api.analyzeInstrument(
+            InstrumentAnalysisRequestV2(
+                symbol = symbol.trim().uppercase(),
+                intendedEntryAt = intendedEntryAt,
+                roundTripCostBps = roundTripCostBps,
+            ),
+        )
+        instrumentRepo.save(result)
         result
     }
 

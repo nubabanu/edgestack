@@ -6,6 +6,7 @@ import com.edgestack.app.data.local.JsonFileStore
 import com.edgestack.app.data.local.SeedAssets
 import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.repo.CalendarRepository
+import com.edgestack.app.data.repo.InstrumentAnalysisRepository
 import com.edgestack.app.data.repo.RecommendationRepository
 import com.edgestack.app.data.repo.SyncRepository
 import okhttp3.OkHttpClient
@@ -24,6 +25,7 @@ class AppContainer(context: Context) {
     private val fileStore = JsonFileStore(context, AppJson)
 
     val recommendationRepo = RecommendationRepository(seed, fileStore)
+    val instrumentRepo = InstrumentAnalysisRepository(fileStore)
     val calendarRepo = CalendarRepository(seed)
-    val syncRepo = SyncRepository(settings, recommendationRepo, http)
+    val syncRepo = SyncRepository(settings, recommendationRepo, instrumentRepo, http)
 }

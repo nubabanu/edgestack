@@ -2,6 +2,8 @@ package com.edgestack.app.data.remote
 
 import com.edgestack.app.core.AppJson
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
+import com.edgestack.app.domain.model.InstrumentAnalysisRequestV2
+import com.edgestack.app.domain.model.InstrumentAnalysisV2
 import com.edgestack.app.domain.model.PaperResponse
 import com.edgestack.app.domain.model.PortfolioRecommendationV2
 import com.edgestack.app.domain.model.RecommendationPreviewRequestV2
@@ -33,6 +35,10 @@ interface EdgeStackApi {
     suspend fun previewRecommendation(
         @Body request: RecommendationPreviewRequestV2,
     ): PortfolioRecommendationV2
+    @POST("instruments/analyze")
+    suspend fun analyzeInstrument(
+        @Body request: InstrumentAnalysisRequestV2,
+    ): InstrumentAnalysisV2
 
     companion object {
         fun create(baseUrl: String, http: OkHttpClient): EdgeStackApi =
