@@ -5,6 +5,7 @@ import com.edgestack.app.core.AppJson
 import com.edgestack.app.domain.model.Board
 import com.edgestack.app.domain.model.CalendarBundle
 import com.edgestack.app.domain.model.EdgesBundle
+import com.edgestack.app.domain.model.PicksBundle
 
 /** Bundled seed data under assets/seed, exported by scripts/export_mobile_bundle.py. */
 class SeedAssets(private val context: Context) {
@@ -20,4 +21,8 @@ class SeedAssets(private val context: Context) {
 
     fun calendar(): CalendarBundle =
         AppJson.decodeFromString(CalendarBundle.serializer(), read("calendar.json"))
+
+    fun picks(): PicksBundle? = runCatching {
+        AppJson.decodeFromString(PicksBundle.serializer(), read("picks.json"))
+    }.getOrNull()
 }

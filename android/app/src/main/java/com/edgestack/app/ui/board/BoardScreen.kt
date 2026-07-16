@@ -31,6 +31,7 @@ import com.edgestack.app.data.repo.BoardRepository
 import com.edgestack.app.data.repo.SyncRepository
 import com.edgestack.app.domain.model.Board
 import com.edgestack.app.domain.model.BoardRow
+import com.edgestack.app.domain.model.Pick
 import com.edgestack.app.domain.model.QuoteStatus
 import com.edgestack.app.ui.theme.Accent
 import com.edgestack.app.ui.theme.AccentAmber
@@ -43,6 +44,7 @@ class BoardViewModel(
 ) : ViewModel() {
 
     var board by mutableStateOf<Board?>(null); private set
+    var picks by mutableStateOf<List<Pick>>(emptyList()); private set
     var quotes by mutableStateOf<Map<String, Double>>(emptyMap()); private set
     var status by mutableStateOf(""); private set
     var refreshing by mutableStateOf(false); private set
@@ -51,6 +53,8 @@ class BoardViewModel(
 
     fun load() {
         board = runCatching { boardRepo.load() }.getOrNull()
+        picks = runCatching { boardRepo.loadPicks()?.picks }.getOrNull()
+            ?.filterNotNull().orEmpty()
     }
 
     fun refreshQuotes() {
@@ -115,7 +119,44 @@ fun BoardScreen(vm: BoardViewModel) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(top = 8.dp),
         ) {
+            if (vm.picks.isNotEmpty()) {
+                item { PicksCard(vm.picks) }
+            }
             items(board.rows) { row -> BoardRowCard(row, vm) }
+        }
+    }
+}
+
+@Composable
+private fun PicksCard(picks: List<Pick>) {
+    Card {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text("Best pick per horizon", style = MaterialTheme.typography.titleMedium)
+            picks.forEach { p ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    Text(p.horizon.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AccentAmber)
+                    Spacer(Modifier.width(8.dp))
+                    Text(p.symbol, style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.weight(1f))
+                    Text(if (p.validated) "validated" else "judgment",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (p.validated) Accent else Color.Gray)
+                }
+                Text("Buy: ${p.buy}", style = MaterialTheme.typography.bodySmall)
+                Text("Sell: ${p.sell}", style = MaterialTheme.typography.bodySmall)
+                if (p.stop != null && p.target != null) {
+                    Text("stop %.2f   target %.2f".format(p.stop, p.target),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.Gray)
+                }
+                Text(p.rationale, style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray)
+            }
         }
     }
 }

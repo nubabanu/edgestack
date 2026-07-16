@@ -33,6 +33,9 @@ def main() -> int:
         raise SystemExit("artifacts/live_board.json missing — run "
                          "scripts/live_signals.py first")
     atomic_write_bytes(SEED / "board.json", board_path.read_bytes())
+    picks_path = Path("artifacts") / "picks.json"
+    if picks_path.exists():
+        atomic_write_bytes(SEED / "picks.json", picks_path.read_bytes())
 
     cfg = load_config("configs/live.yaml")
     catalog = DataCatalog(cfg)

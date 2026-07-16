@@ -86,6 +86,28 @@ data class CalendarBundle(
     val sessions: List<String> = emptyList(),
 )
 
+@Serializable
+data class Pick(
+    val horizon: String,
+    val symbol: String,
+    val name: String = "",
+    val close: Double? = null,
+    val buy: String = "",
+    val sell: String = "",
+    val stop: Double? = null,
+    val target: Double? = null,
+    val rationale: String = "",
+    val validated: Boolean = false,
+)
+
+@Serializable
+data class PicksBundle(
+    @SerialName("schema_version") val schemaVersion: Int = 1,
+    @SerialName("as_of") val asOf: String = "",
+    val disclaimer: String = "",
+    val picks: List<Pick?> = emptyList(),
+)
+
 /** Result of the on-device overlay computation for one session. */
 data class OverlayState(
     val date: LocalDate,

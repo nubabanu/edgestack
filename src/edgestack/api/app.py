@@ -86,6 +86,16 @@ def create_app(cfg: EdgeStackConfig):
             )
         return json.loads(path.read_text(encoding="utf-8"))
 
+    @app.get("/picks")
+    def picks() -> dict:
+        path = Path("artifacts") / "picks.json"
+        if not path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="picks not generated; run scripts/make_picks.py",
+            )
+        return json.loads(path.read_text(encoding="utf-8"))
+
     @app.get("/master")
     def master() -> dict:
         path = Path("artifacts") / "master_signal.json"

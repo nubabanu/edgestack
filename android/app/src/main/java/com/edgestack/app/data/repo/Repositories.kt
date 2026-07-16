@@ -11,6 +11,7 @@ import com.edgestack.app.domain.model.Board
 import com.edgestack.app.domain.model.Edge
 import com.edgestack.app.domain.model.EdgesBundle
 import com.edgestack.app.domain.model.OverlayState
+import com.edgestack.app.domain.model.PicksBundle
 import com.edgestack.app.domain.model.SpyBar
 import okhttp3.OkHttpClient
 import java.time.LocalDate
@@ -25,6 +26,12 @@ class BoardRepository(
         store.read("board.json", Board.serializer()) ?: seed.board()
 
     fun save(board: Board) = store.write("board.json", Board.serializer(), board)
+
+    fun loadPicks(): PicksBundle? =
+        store.read("picks.json", PicksBundle.serializer()) ?: seed.picks()
+
+    fun savePicks(picks: PicksBundle) =
+        store.write("picks.json", PicksBundle.serializer(), picks)
 
     suspend fun liveQuotes(board: Board): Map<String, Double> =
         yahoo.latestQuotes(board.rows.map { it.symbol })
@@ -89,6 +96,7 @@ class SyncRepository(
             boardRepo.save(it)
             boardMsg = "board: ${it.asOf}"
         }
+        runCatching { api.picks() }.onSuccess { boardRepo.savePicks(it) }
         val edges: List<Edge> = api.edges()
         edgesRepo.save(EdgesBundle(edges = edges))
         settingsStore.stampSync(System.currentTimeMillis())
