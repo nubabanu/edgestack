@@ -19,7 +19,8 @@ Old stock ideas are zero-weight watchlist records. A stock sleeve additionally n
 
 ## Install and verify
 
-Requires Python 3.12 and, for Android, JDK 17.
+Requires Python 3.12 and, for Android, JDK 17 or 21. JDK 24 breaks Gradle's
+test task ("Type T not present"); point `JAVA_HOME` at 17/21 before building.
 
 ```bash
 python -m venv .venv
@@ -39,7 +40,7 @@ cd android
 ./gradlew testDebugUnitTest assembleDebug
 ```
 
-On Windows, point `JAVA_HOME` to a JDK 17 installation before invoking `gradlew.bat`.
+On Windows, point `JAVA_HOME` to a JDK 17/21 installation before invoking `gradlew.bat`.
 
 ## Run the nightly publication
 
@@ -55,6 +56,12 @@ For a data-prepared offline check:
 
 The orchestrator fails on data-quality, artifact, schema, or checksum errors. It writes all outputs to a temporary directory, renames the completed run to `artifacts/recommendations/runs/<content-hash>`, and then atomically replaces `artifacts/recommendations/current.json`. Failure before the pointer swap leaves the prior publication current.
 
+Fail-fast applies to the symbols tonight's publication consumes (baseline policy plus configured universe). Delisted point-in-time catalog members that return empty series are skipped with a warning, and the pre-flight quality gate covers the required symbols; the full research catalog remains covered by `edgestack data validate`. The publication step separately re-validates its own panel and requires 252 aligned return sessions for the policy ETFs — backfill them once with:
+
+```bash
+edgestack data download --symbols "SPY,TLT,SHY,GLD" --start 2015-01-02 --config configs/live.yaml
+```
+
 ## Public interface
 
 - `GET /recommendations/latest` returns the verified canonical bundle.
@@ -63,6 +70,8 @@ The orchestrator fails on data-quality, artifact, schema, or checksum errors. It
 - `POST /instruments/recheck` compares a prior analysis with the latest canonical inputs and reports whether the selected timing still holds or a higher-ranked alternative emerged.
 - `POST /instruments/pattern-leaders` scans 1–50 explicitly supplied symbols and returns a research-only ranking. It never promotes the symbol/slot search.
 - `GET /sniper/latest` returns the version-bound staged sniper shadow plan. `POST /sniper/preview` changes only account equity, modeled loss budget, and the approved diversified vehicle; it cannot mutate canonical weights or promotion state. C1/C2 and Santa are Stage 1 shadow candidates, C3/C4 are non-initiating overlays, and Stage 2 remains blocked until its data and promotion prerequisites exist.
+- `GET /edges` lists the validated edge catalog with lifecycle status, net mean return, q-value, deflated Sharpe, and sample size; `GET /edges/{edge_id}` returns one full record.
+- `GET /monitoring/edges` returns the canonical monitoring payload; `GET /backtests` and `GET /backtests/{run_id}` list and fetch stored backtest runs.
 - `/board`, `/picks`, `/master`, `/signals/*`, and `/candidates/*` are deprecated compatibility projections. Board rows and picks are empty; master contains canonical weights only.
 
 Run the API with:
@@ -82,6 +91,42 @@ python scripts/nightly.py --config configs/live.yaml --skip-data-update --skip-f
 Commodity words resolve to disclosed tradable proxies (`GOLD → GLD`, `OIL/WTI → USO`, `BRENT → BNO`, `SILVER → SLV`). Proxy fees, tracking error, roll yield, and trading hours remain visible warnings.
 
 When an intended entry includes a date and time, EdgeStack separately rates its 15-minute slot, hour, weekday across every holding horizon, position within the month, and month of the year. It displays rank, cost-adjusted historical win score, a better compatible slot if available, and conditional day/week/month/year exits. Win score is a shrunk historical frequency with an ESS confidence penalty—not a promised probability of profit. Rechecks tighten from daily to six-hourly, hourly, and finally 15-minute cadence as entry approaches.
+
+## Android companion app
+
+The app in `android/` (package `com.edgestack.app`) is a read-only client for the PC-hosted API. It never places orders and never computes signals on the device; offline it displays the last server result or the bundled canonical seed.
+
+Tabs:
+
+- **Portfolio** — canonical base weights, promoted sleeves, zero-weight watchlist, freshness.
+- **Calendar** — NYSE month grid with turn-of-month windows, session math, and per-day historical tailwind shading projected from the last instrument analysis (weekday, week-of-month, and month slots; research only).
+- **Risk** — server-calculated leverage, binding constraint, stress and financing, canonical targets.
+- **Analyze** — instrument timing: best/worst windows per horizon, chosen-time ratings, exit maps, tailwinds/headwinds, news context, automatic rechecks.
+- **Sniper** — staged shadow plan with equity/loss-budget preview; paper only.
+- **Edges** — validated edge catalog with search and status filters, monitoring health, backtest runs.
+- **Trades** — canonical paper account state.
+- **Settings** — server URL, risk-sizing profile, connection test, sync.
+
+Build and install:
+
+```bash
+cd android
+./gradlew assembleDebug   # output: app/build/outputs/apk/debug/app-debug.apk
+```
+
+Connect a phone (same Wi-Fi as the PC):
+
+1. Allow the port once, in an elevated shell: `New-NetFirewallRule -DisplayName "EdgeStack API" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow`
+2. Serve the API on all interfaces: `edgestack api serve --host 0.0.0.0 --port 8000 --config configs/live.yaml`
+3. In the app's Settings tab set `http://<PC-LAN-IP>:8000`, then Test and Sync. The Android emulator reaches the host at `http://10.0.2.2:8000`.
+
+Away from home, install Tailscale on both devices and use the PC's Tailscale IP instead; the app permits cleartext HTTP for LAN/Tailscale use.
+
+Refresh the bundled offline seed after a new publication:
+
+```bash
+.venv/Scripts/python scripts/export_mobile_bundle.py
+```
 
 ## User risk sizing
 
