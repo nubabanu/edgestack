@@ -103,3 +103,37 @@ three splits (dev 08-15, val 16-23, holdout 24+) AND pooled NW alpha t >= 2.
   growth/income screens (no PIT fundamentals history), carry (FX/rates),
   options income/hedging, credit/duration beyond ETF proxies, crypto,
   tax strategies, event-driven (PEAD, M&A, spin-offs).
+
+---
+
+# Execution sensitivity + Unified book (Tier 3 refinements)
+
+## Execution reality check (execution_sensitivity.py)
+
+The zoo convention fills AT the signal close — impossible live (MOC cutoff
+precedes the close). Under honest models at 2 bps:
+
+| Vehicle | same-close (optimistic) | next-open (realistic) | next-close (worst) |
+|---|---|---|---|
+| ensemble4 SPY | t=4.04 | t=2.39 (marginal) | t=3.02 |
+| ensemble4 QQQ | t=4.85 | **t=4.31 — survives intact** | t=2.65 |
+
+Verdict: implement the satellite on QQQ with next-open (MOO) fills. At 10 bps
+costs SPY dies (t=1.01); QQQ still stands (t=3.44).
+
+## Unified book (unified_book.py) — the final portfolio
+
+One jointly-constructed, vol-targeted book: permanent-portfolio core
+(SPY/TLT/SHY/GLD, 5% bands, 5 bps) + ensemble4-on-QQQ satellite at
+realistic next-open fills. Grid of 9 (split x vol-target) combos selected
+on dev(2005-15)+val(2016-23) ONLY; holdout reported after selection.
+
+SELECTED: **60% core / 40% satellite, 8% vol target** —
+holdout (untouched): Sharpe 1.70 vs SPY 1.31, CAGR +15.3%, maxDD **-5.9%**
+vs SPY -18.8%; pooled alpha +5.9%/yr (t=4.88) at beta 0.29.
+
+Robust: all 9 combos land holdout Sharpe 1.64-1.74 — the choice is not
+fragile. Honest caveat: raw holdout CAGR trails SPY (15.3% vs ~21%); the
+book wins on risk-adjusted terms and drawdown (one third of SPY's), not on
+raw return in a bull market. It is the codified version of the final
+recommendation: diversified core, validated satellite, vol governor.
