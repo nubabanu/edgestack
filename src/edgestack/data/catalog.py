@@ -20,7 +20,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 import duckdb
@@ -167,7 +167,17 @@ def atomic_write_bytes(path: Path, payload: bytes) -> None:
 
 def safe_child_path(root: Path, name: str) -> Path:
     """Join ``name`` under ``root`` rejecting traversal outside the root."""
-    candidate = (root / name).resolve()
+    posix_name = name.replace("\\", "/")
+    posix_path = PurePosixPath(posix_name)
+    windows_path = PureWindowsPath(name)
+    if (
+        posix_path.is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or ".." in posix_path.parts
+    ):
+        raise DataError(f"unsafe path outside {root}: {name!r}")
+    candidate = root.joinpath(*posix_path.parts).resolve()
     if not candidate.is_relative_to(root.resolve()):
         raise DataError(f"unsafe path outside {root}: {name!r}")
     return candidate

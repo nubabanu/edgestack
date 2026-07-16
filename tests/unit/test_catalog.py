@@ -85,6 +85,14 @@ def test_atomic_write_and_path_safety(tmp_path) -> None:
     assert not leftovers
     with pytest.raises(DataError, match="unsafe path"):
         safe_child_path(tmp_path, "..\\..\\evil.parquet")
+    with pytest.raises(DataError, match="unsafe path"):
+        safe_child_path(tmp_path, "nested/..\\../evil.parquet")
+    with pytest.raises(DataError, match="unsafe path"):
+        safe_child_path(tmp_path, "C:\\evil.parquet")
+    assert (
+        safe_child_path(tmp_path, "nested\\safe.parquet")
+        == (tmp_path / "nested" / "safe.parquet").resolve()
+    )
 
 
 def test_corporate_actions_round_trip_and_change_data_version(catalog: DataCatalog) -> None:
