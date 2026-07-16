@@ -86,6 +86,35 @@ class DailyCheckWorker(
                     applicationContext, AlertNotifier.CHANNEL_CALENDAR,
                     200 + alert.type.ordinal, alert.title, alert.message)
             }
+
+            // tracked-position checks: stop breach + time-exit due
+            runCatching {
+                val positions = c.positionsRepo.load()
+                if (positions.isNotEmpty()) {
+                    val quotes = c.yahoo.latestQuotes(
+                        positions.map { it.symbol }.distinct())
+                    positions.forEachIndexed { i, p ->
+                        val last = quotes[p.symbol] ?: return@forEachIndexed
+                        if (p.stop != null && last <= p.stop) {
+                            AlertNotifier.notify(
+                                applicationContext, AlertNotifier.CHANNEL_RISK,
+                                300 + i, "STOP BREACHED: ${p.symbol}",
+                                "Last %.2f <= stop %.2f. Exit at/near the close — "
+                                    .format(last, p.stop) +
+                                    "no averaging down.")
+                        }
+                        val held = calendar.sessionsBetween(
+                            java.time.LocalDate.parse(p.entryDate), today)
+                        if (held >= p.horizonSessions) {
+                            AlertNotifier.notify(
+                                applicationContext, AlertNotifier.CHANNEL_CALENDAR,
+                                340 + i, "Time exit due: ${p.symbol}",
+                                "Held $held sessions (plan: ${p.horizonSessions}). " +
+                                    "The edge was measured to here — exit at the close.")
+                        }
+                    }
+                }
+            }
         }
 
         WorkScheduler.scheduleNext(applicationContext, calendar)

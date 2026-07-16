@@ -5,6 +5,7 @@ import com.edgestack.app.domain.model.SpyBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -51,20 +52,69 @@ class YahooChartClient(private val http: OkHttpClient) {
         return fetchResult(symbol, now.minus(years * 365, ChronoUnit.DAYS), now).toBars()
     }
 
-    /** Latest regular-market price per symbol; failed symbols are omitted. */
-    suspend fun latestQuotes(symbols: List<String>): Map<String, Double> = coroutineScope {
-        val now = Instant.now()
-        symbols.map { symbol ->
-            async {
-                runCatching {
-                    val r = fetchResult(symbol, now.minus(7, ChronoUnit.DAYS), now)
-                    symbol to (r.meta.regularMarketPrice
-                        ?: r.toBars().lastOrNull()?.close)
-                }.getOrNull()
+    /** One retried batched spark request; per-symbol charts as fallback. */
+    suspend fun latestQuotes(symbols: List<String>): Map<String, Double> {
+        if (symbols.isEmpty()) return emptyMap()
+        val spark = runCatching { sparkQuotes(symbols) }.getOrDefault(emptyMap())
+        if (spark.size == symbols.size) return spark
+        val missing = symbols.filter { it !in spark }
+        return spark + perSymbolQuotes(missing)
+    }
+
+    private suspend fun sparkQuotes(symbols: List<String>): Map<String, Double> =
+        withRetry(attempts = 3) {
+            withContext(Dispatchers.IO) {
+                val url = "https://query1.finance.yahoo.com/v8/finance/spark".toHttpUrl()
+                    .newBuilder()
+                    .addQueryParameter("symbols", symbols.joinToString(","))
+                    .addQueryParameter("range", "1d")
+                    .addQueryParameter("interval", "1d")
+                    .build()
+                val request = Request.Builder().url(url)
+                    .header("User-Agent", USER_AGENT).build()
+                http.newCall(request).execute().use { resp ->
+                    if (!resp.isSuccessful) throw IOException("spark ${resp.code}")
+                    val body = resp.body?.string() ?: throw IOException("empty spark")
+                    val parsed = AppJson.decodeFromString(SparkResponse.serializer(), body)
+                    parsed.spark.result.orEmpty().mapNotNull { r ->
+                        val price = r.response?.firstOrNull()?.let { res ->
+                            res.meta.regularMarketPrice
+                                ?: res.indicators.quote.firstOrNull()
+                                    ?.close?.lastOrNull { c -> c != null }
+                        }
+                        price?.let { r.symbol to it }
+                    }.toMap()
+                }
             }
-        }.mapNotNull { it.await() }
-            .mapNotNull { (s, p) -> p?.let { s to it } }
-            .toMap()
+        }
+
+    private suspend fun perSymbolQuotes(symbols: List<String>): Map<String, Double> =
+        coroutineScope {
+            val now = Instant.now()
+            symbols.map { symbol ->
+                async {
+                    runCatching {
+                        val r = fetchResult(symbol, now.minus(7, ChronoUnit.DAYS), now)
+                        symbol to (r.meta.regularMarketPrice
+                            ?: r.toBars().lastOrNull()?.close)
+                    }.getOrNull()
+                }
+            }.mapNotNull { it.await() }
+                .mapNotNull { (s, p) -> p?.let { s to it } }
+                .toMap()
+        }
+
+    private suspend fun <T> withRetry(attempts: Int, block: suspend () -> T): T {
+        var last: Throwable? = null
+        repeat(attempts) { k ->
+            try {
+                return block()
+            } catch (e: Exception) {
+                last = e
+                delay(400L * (1L shl k))   // 400ms, 800ms, ...
+            }
+        }
+        throw last ?: IOException("retry failed")
     }
 
     companion object {

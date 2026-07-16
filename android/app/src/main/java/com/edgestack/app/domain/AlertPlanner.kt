@@ -50,6 +50,26 @@ object AlertPlanner {
     fun fireAt(d: LocalDate): ZonedDateTime =
         ZonedDateTime.of(LocalDateTime.of(d, ALERT_TIME), MARKET_ZONE)
 
+    /** Next [count] NAMED sniper windows on/after [from] (planning view). */
+    fun upcoming(
+        calendar: TradingCalendar,
+        from: LocalDate,
+        count: Int = 3,
+        settings: AlertSettings = AlertSettings(),
+    ): List<PlannedAlert> {
+        val out = mutableListOf<PlannedAlert>()
+        var d: LocalDate? = if (calendar.isSession(from)) from
+                            else calendar.nextSession(from)
+        var steps = 0
+        while (d != null && out.size < count && steps < 420) {
+            out += alertsFor(calendar, d, settings)
+                .filter { it.type != AlertType.BUY_AT_CLOSE }
+            d = calendar.nextSession(d)
+            steps++
+        }
+        return out.take(count)
+    }
+
     /** Session before the session before Thanksgiving (4th Thursday of Nov). */
     fun tuesdayBeforeThanksgiving(calendar: TradingCalendar, year: Int): LocalDate? {
         var d = LocalDate.of(year, 11, 1)

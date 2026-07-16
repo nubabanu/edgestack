@@ -25,7 +25,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.repo.OverlayRepository
+import com.edgestack.app.domain.AlertPlanner
+import com.edgestack.app.domain.EnsembleCalculator
+import com.edgestack.app.domain.PlannedAlert
+import com.edgestack.app.domain.TradingCalendar
 import com.edgestack.app.domain.model.OverlayState
+import java.time.LocalDate
 import com.edgestack.app.ui.components.ExposureDial
 import com.edgestack.app.ui.components.Sparkline
 import kotlinx.coroutines.launch
@@ -33,9 +38,13 @@ import kotlinx.coroutines.launch
 class OverlayViewModel(
     private val overlayRepo: OverlayRepository,
     private val settingsStore: SettingsStore,
+    private val calendar: TradingCalendar,
 ) : ViewModel() {
 
     var state by mutableStateOf<OverlayState?>(null); private set
+    var ensembles by mutableStateOf<Map<String, EnsembleCalculator.State>>(emptyMap())
+        private set
+    var upcoming by mutableStateOf<List<PlannedAlert>>(emptyList()); private set
     var base by mutableStateOf(1.0); private set
     var loading by mutableStateOf(false); private set
     var error by mutableStateOf(""); private set
@@ -43,6 +52,7 @@ class OverlayViewModel(
     init {
         viewModelScope.launch {
             base = settingsStore.current().baseLeverage
+            upcoming = AlertPlanner.upcoming(calendar, LocalDate.now(), count = 3)
             refresh()
         }
     }
@@ -66,6 +76,9 @@ class OverlayViewModel(
         viewModelScope.launch {
             state = overlayRepo.state(base, forceRefresh = true)
             if (state == null) error = "SPY fetch failed (offline?)"
+            ensembles = listOf("SPY", "QQQ", "XLK").mapNotNull { sym ->
+                overlayRepo.ensembleState(sym)?.let { sym to it }
+            }.toMap()
             loading = false
         }
     }
@@ -88,6 +101,50 @@ fun OverlayScreen(vm: OverlayViewModel) {
         }
         if (vm.error.isNotBlank()) {
             Text(vm.error, color = MaterialTheme.colorScheme.error)
+        }
+        if (vm.ensembles.isNotEmpty()) {
+            Text("Ensemble4 — the validated signal",
+                style = MaterialTheme.typography.titleMedium)
+            vm.ensembles.forEach { (sym, e) ->
+                Card {
+                    Column(Modifier.padding(10.dp)) {
+                        Row {
+                            Text(sym, style = MaterialTheme.typography.titleMedium)
+                            Text("  exposure %.2f".format(e.exposure),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary)
+                        }
+                        Text(
+                            e.families.entries.joinToString("   ") { (k, v) ->
+                                val mark = when {
+                                    k == "vol_target" -> "%.2f".format(v)
+                                    v >= 1.0 -> "YES"
+                                    else -> "no"
+                                }
+                                "${k.removeSuffix("_20d").removeSuffix("_3dn")}: $mark"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray,
+                        )
+                    }
+                }
+            }
+        }
+        if (vm.upcoming.isNotEmpty()) {
+            Text("Upcoming sniper windows",
+                style = MaterialTheme.typography.titleMedium)
+            Card {
+                Column(Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    vm.upcoming.forEach { a ->
+                        val d = a.fireAt.toLocalDate()
+                        val days = java.time.temporal.ChronoUnit.DAYS
+                            .between(LocalDate.now(), d)
+                        Text("$d (in $days d) — ${a.title}",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
         }
         if (s != null) {
             ExposureDial(value = s.appliedL)

@@ -5,13 +5,17 @@ import com.edgestack.app.data.local.SeedAssets
 import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.remote.EdgeStackApi
 import com.edgestack.app.data.remote.YahooChartClient
+import com.edgestack.app.domain.EnsembleCalculator
 import com.edgestack.app.domain.OverlayCalculator
 import com.edgestack.app.domain.TradingCalendar
 import com.edgestack.app.domain.model.Board
 import com.edgestack.app.domain.model.Edge
 import com.edgestack.app.domain.model.EdgesBundle
 import com.edgestack.app.domain.model.OverlayState
+import com.edgestack.app.domain.model.PaperResponse
 import com.edgestack.app.domain.model.PicksBundle
+import com.edgestack.app.domain.model.TrackedPosition
+import com.edgestack.app.domain.model.TrackedPositions
 import com.edgestack.app.domain.model.SpyBar
 import okhttp3.OkHttpClient
 import java.time.LocalDate
@@ -53,20 +57,45 @@ class OverlayRepository(
     private val calendar: TradingCalendar,
 ) {
 
-    @Volatile private var cachedBars: List<SpyBar> = emptyList()
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, List<SpyBar>>()
 
-    suspend fun bars(forceRefresh: Boolean = false): List<SpyBar> {
-        if (cachedBars.isEmpty() || forceRefresh ||
-            cachedBars.last().date < LocalDate.now().minusDays(1)
+    suspend fun bars(symbol: String = "SPY",
+                     forceRefresh: Boolean = false): List<SpyBar> {
+        val cached = cache[symbol].orEmpty()
+        if (cached.isEmpty() || forceRefresh ||
+            cached.last().date < LocalDate.now().minusDays(1)
         ) {
-            runCatching { yahoo.dailyHistory("SPY", years = 3) }
-                .onSuccess { if (it.size > OverlayCalculator.WARMUP) cachedBars = it }
+            runCatching { yahoo.dailyHistory(symbol, years = 3) }
+                .onSuccess {
+                    if (it.size > OverlayCalculator.WARMUP) cache[symbol] = it
+                }
         }
-        return cachedBars
+        return cache[symbol].orEmpty()
     }
 
     suspend fun state(base: Double, forceRefresh: Boolean = false): OverlayState? =
-        OverlayCalculator.state(bars(forceRefresh), base = base, calendar = calendar)
+        OverlayCalculator.state(bars("SPY", forceRefresh), base = base,
+                                calendar = calendar)
+
+    suspend fun ensembleState(symbol: String,
+                              forceRefresh: Boolean = false): EnsembleCalculator.State? =
+        EnsembleCalculator.state(bars(symbol, forceRefresh))
+}
+
+class PositionsRepository(private val store: JsonFileStore) {
+
+    fun load(): List<TrackedPosition> =
+        store.read("positions.json", TrackedPositions.serializer())?.positions
+            .orEmpty()
+
+    fun save(positions: List<TrackedPosition>) =
+        store.write("positions.json", TrackedPositions.serializer(),
+                    TrackedPositions(positions))
+
+    fun add(p: TrackedPosition) = save(load() + p)
+
+    fun remove(symbol: String, entryDate: String) =
+        save(load().filterNot { it.symbol == symbol && it.entryDate == entryDate })
 }
 
 class SyncRepository(
@@ -79,6 +108,11 @@ class SyncRepository(
         val url = settingsStore.current().baseUrl
         if (url.isBlank()) return null
         return EdgeStackApi.create(url, http)
+    }
+
+    suspend fun paper(): Result<PaperResponse> = runCatching {
+        val api = api() ?: error("no server URL configured")
+        api.paper()
     }
 
     suspend fun testConnection(): Result<String> = runCatching {

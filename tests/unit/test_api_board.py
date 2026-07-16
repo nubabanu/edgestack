@@ -23,6 +23,12 @@ def test_board_missing_is_404(client: TestClient) -> None:
     assert "live board not generated" in resp.json()["detail"]
 
 
+def test_paper_missing_is_404(client: TestClient) -> None:
+    resp = client.get("/paper")
+    assert resp.status_code == 404
+    assert "no paper state" in resp.json()["detail"]
+
+
 def test_master_missing_is_404(client: TestClient) -> None:
     resp = client.get("/master")
     assert resp.status_code == 404

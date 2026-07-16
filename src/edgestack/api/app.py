@@ -86,6 +86,28 @@ def create_app(cfg: EdgeStackConfig):
             )
         return json.loads(path.read_text(encoding="utf-8"))
 
+    @app.get("/paper")
+    def paper() -> dict:
+        state_path = catalog.artifacts_dir / "paper" / "state.json"
+        if not state_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="no paper state; run `edgestack paper run` first",
+            )
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        history = []
+        try:
+            rows = catalog.audit_events("paper_session")
+            for _, row in rows.iterrows():
+                detail = json.loads(row["detail"]) if row["detail"] else {}
+                if "equity" in detail:
+                    history.append({"date": str(row["reason"]),
+                                    "equity": detail["equity"]})
+        except Exception:  # audit table is best-effort for the app
+            pass
+        return {"state": state, "equity_history": history,
+                "disclaimer": DISCLAIMER}
+
     @app.get("/picks")
     def picks() -> dict:
         path = Path("artifacts") / "picks.json"

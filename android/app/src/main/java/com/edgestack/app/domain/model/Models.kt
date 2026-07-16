@@ -108,6 +108,58 @@ data class PicksBundle(
     val picks: List<Pick?> = emptyList(),
 )
 
+/** A user-entered real position tracked by the app. */
+@Serializable
+data class TrackedPosition(
+    val symbol: String,
+    val entryPrice: Double,
+    val quantity: Double,
+    val entryDate: String,           // ISO yyyy-MM-dd
+    val stop: Double? = null,
+    val target: Double? = null,
+    val horizonSessions: Int = 10,
+)
+
+@Serializable
+data class TrackedPositions(val positions: List<TrackedPosition> = emptyList())
+
+// --- paper account (GET /paper on the PC) ---
+@Serializable
+data class PaperPositionDto(
+    val symbol: String,
+    val quantity: Double = 0.0,
+    @SerialName("entry_price") val entryPrice: Double = 0.0,
+    @SerialName("entry_session") val entrySession: String = "",
+    @SerialName("stop_price") val stopPrice: Double = 0.0,
+    @SerialName("target_price") val targetPrice: Double = 0.0,
+)
+
+@Serializable
+data class PaperTradeDto(
+    val symbol: String,
+    @SerialName("net_pnl") val netPnl: Double = 0.0,
+    @SerialName("exit_reason") val exitReason: String = "",
+    @SerialName("exit_session") val exitSession: String = "",
+    @SerialName("realized_net_return") val realizedNetReturn: Double = 0.0,
+)
+
+@Serializable
+data class PaperStateDto(
+    val cash: Double = 0.0,
+    @SerialName("last_session") val lastSession: String? = null,
+    val positions: List<PaperPositionDto> = emptyList(),
+    val trades: List<PaperTradeDto> = emptyList(),
+)
+
+@Serializable
+data class EquityPoint(val date: String, val equity: Double)
+
+@Serializable
+data class PaperResponse(
+    val state: PaperStateDto = PaperStateDto(),
+    @SerialName("equity_history") val equityHistory: List<EquityPoint> = emptyList(),
+)
+
 /** Result of the on-device overlay computation for one session. */
 data class OverlayState(
     val date: LocalDate,

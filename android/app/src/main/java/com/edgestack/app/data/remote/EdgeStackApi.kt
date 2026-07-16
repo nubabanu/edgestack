@@ -3,6 +3,7 @@ package com.edgestack.app.data.remote
 import com.edgestack.app.core.AppJson
 import com.edgestack.app.domain.model.Board
 import com.edgestack.app.domain.model.Edge
+import com.edgestack.app.domain.model.PaperResponse
 import com.edgestack.app.domain.model.PicksBundle
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -26,6 +27,7 @@ interface EdgeStackApi {
     @GET("version") suspend fun version(): VersionInfo
     @GET("board") suspend fun board(): Board
     @GET("picks") suspend fun picks(): PicksBundle
+    @GET("paper") suspend fun paper(): PaperResponse
     @GET("edges") suspend fun edges(): List<Edge>
     @GET("edges/{id}") suspend fun edgeDetail(@Path("id") id: String): Edge
 

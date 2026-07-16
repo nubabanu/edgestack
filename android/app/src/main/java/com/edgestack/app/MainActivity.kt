@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -36,6 +37,8 @@ import com.edgestack.app.ui.overlay.OverlayScreen
 import com.edgestack.app.ui.overlay.OverlayViewModel
 import com.edgestack.app.ui.settings.SettingsScreen
 import com.edgestack.app.ui.settings.SettingsViewModel
+import com.edgestack.app.ui.trades.TradesScreen
+import com.edgestack.app.ui.trades.TradesViewModel
 import com.edgestack.app.ui.theme.EdgeStackTheme
 import com.edgestack.app.work.AlertNotifier
 
@@ -56,7 +59,12 @@ class MainActivity : ComponentActivity() {
                 BoardViewModel::class.java ->
                     BoardViewModel(container.boardRepo, container.syncRepo) as T
                 OverlayViewModel::class.java ->
-                    OverlayViewModel(container.overlayRepo, container.settings) as T
+                    OverlayViewModel(container.overlayRepo, container.settings,
+                                     container.calendarRepo.calendar) as T
+                TradesViewModel::class.java ->
+                    TradesViewModel(container.positionsRepo, container.syncRepo,
+                                    container.yahoo,
+                                    container.calendarRepo.calendar) as T
                 EdgesViewModel::class.java -> EdgesViewModel(container.edgesRepo) as T
                 SettingsViewModel::class.java ->
                     SettingsViewModel(container.settings, container.syncRepo) as T
@@ -70,6 +78,7 @@ class MainActivity : ComponentActivity() {
                 val tabs = listOf(
                     "Board" to Icons.Filled.Home,
                     "Overlay" to Icons.Filled.Star,
+                    "Trades" to Icons.Filled.ShoppingCart,
                     "Edges" to Icons.AutoMirrored.Filled.List,
                     "Settings" to Icons.Filled.Settings,
                 )
@@ -94,7 +103,8 @@ class MainActivity : ComponentActivity() {
                         when (tab) {
                             0 -> BoardScreen(viewModel(factory = factory))
                             1 -> OverlayScreen(viewModel(factory = factory))
-                            2 -> EdgesScreen(viewModel(factory = factory))
+                            2 -> TradesScreen(viewModel(factory = factory))
+                            3 -> EdgesScreen(viewModel(factory = factory))
                             else -> SettingsScreen(viewModel(factory = factory)) {
                                 AlertNotifier.notify(
                                     this@MainActivity, AlertNotifier.CHANNEL_CALENDAR,

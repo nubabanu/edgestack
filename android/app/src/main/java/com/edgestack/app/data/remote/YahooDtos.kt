@@ -47,6 +47,15 @@ data class YahooQuote(
 @Serializable
 data class YahooAdjClose(val adjclose: List<Double?> = emptyList())
 
+@Serializable
+data class SparkResponse(val spark: SparkBody)
+
+@Serializable
+data class SparkBody(val result: List<SparkResult>? = null)
+
+@Serializable
+data class SparkResult(val symbol: String, val response: List<YahooResult>? = null)
+
 /** Convert to bars, dropping rows with null open/close (Yahoo emits them). */
 fun YahooResult.toBars(): List<SpyBar> {
     val ts = timestamp ?: return emptyList()

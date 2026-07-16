@@ -52,6 +52,23 @@ def main() -> int:
         print(f"{name}: {len(bars)} bars, {len(applied)} exposures, "
               f"mean L {applied.mean():.3f}")
 
+    # ensemble4 parity fixture: same bars, exposure from the package reference
+    from edgestack.strategies import ensemble_exposure, family_positions
+
+    bars_df = df.rename(columns={"dt": "dt"}).copy()
+    bars_df = bars_df.assign(
+        date=bars_df["dt"].dt.tz_localize(None).dt.normalize()
+    ).set_index("date")
+    ens = ensemble_exposure(bars_df)
+    fams = family_positions(bars_df)
+    atomic_write_bytes(FIXTURES / "ensemble_spy.json", json.dumps({
+        "bars": bars,
+        "exposure": [{"date": str(d.date()), "e": float(v)}
+                     for d, v in ens.items()],
+        "last_families": {k: float(fams[k].iloc[-1]) for k in fams.columns},
+    }).encode())
+    print(f"ensemble_spy.json: {len(ens)} exposures")
+
     # raw chart sample for DTO tests: 30 bars, one with a null close
     r = session.get(
         "https://query1.finance.yahoo.com/v8/finance/chart/SPY",

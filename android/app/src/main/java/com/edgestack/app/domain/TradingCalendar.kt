@@ -57,6 +57,14 @@ class TradingCalendar(sessionDates: List<LocalDate>) {
     fun isLastSessionOfMonth(d: LocalDate): Boolean =
         d in index && lastSessionOfMonth(YearMonth.from(d)) == d
 
+    /** Number of sessions strictly after [a], up to and including [b]. */
+    fun sessionsBetween(a: LocalDate, b: LocalDate): Int {
+        if (b <= a) return 0
+        val ia = sessions.binarySearch(a).let { if (it >= 0) it else -(it + 1) - 1 }
+        val ib = sessions.binarySearch(b).let { if (it >= 0) it else -(it + 1) - 1 }
+        return (ib - ia).coerceAtLeast(0)
+    }
+
     /** Turn-of-month window: last session of a month or first 3 of the next. */
     fun isTurnOfMonthWindow(d: LocalDate): Boolean {
         val td = tradingDayOfMonth(d) ?: return false
