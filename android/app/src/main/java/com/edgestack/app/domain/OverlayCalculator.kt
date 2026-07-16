@@ -87,8 +87,19 @@ object OverlayCalculator {
         return Result(dates, applied, sma200, vol20)
     }
 
-    /** Today's state + which rules fired, for the dial screen. */
-    fun state(bars: List<SpyBar>, base: Double = 1.0, historySessions: Int = 120): OverlayState? {
+    /**
+     * Today's state + which rules fired, for the dial screen.
+     *
+     * [calendar] (the bundled exchange calendar) decides month-position rules.
+     * Bar data alone cannot: the last bar of a partial month always looks like
+     * month-end, so mid-month days would wrongly light the turn-of-month chip.
+     */
+    fun state(
+        bars: List<SpyBar>,
+        base: Double = 1.0,
+        historySessions: Int = 120,
+        calendar: TradingCalendar? = null,
+    ): OverlayState? {
         if (bars.size < 2) return null
         val r = compute(bars, base)
         val i = bars.size - 1
@@ -96,10 +107,12 @@ object OverlayCalculator {
         val fired = buildList {
             val m = today.date.monthValue
             val cal = TradingCalendarFromBars(r.dates)
+            val isTom = calendar?.isTurnOfMonthWindow(today.date) ?: cal.isTom(i)
+            val tdom7 = (calendar?.tradingDayOfMonth(today.date) ?: cal.tdom(i)) == 7
             if (m == 9) add("September de-risk 0.5x")
             if (m == 10 || m == 11) add("Oct-Nov boost 1.5x")
-            if (cal.isTom(i)) add("Turn-of-month +0.5x")
-            if (m == 11 && cal.tdom(i) == 7) add("Nov worst-day: FLAT")
+            if (isTom) add("Turn-of-month +0.5x")
+            if (m == 11 && tdom7) add("Nov worst-day: FLAT")
             if (today.close < r.sma200[i]) add("Below 200-DMA gate (max 0.5x)")
             if (r.vol20[i] > 0.20) add("Vol > 20% gate (max 1.0x)")
             if (base != 1.0) add("Base leverage ${base}x")

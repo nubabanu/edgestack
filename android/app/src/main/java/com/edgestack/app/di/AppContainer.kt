@@ -29,7 +29,7 @@ class AppContainer(context: Context) {
 
     val boardRepo = BoardRepository(seed, fileStore, yahoo)
     val edgesRepo = EdgesRepository(seed, fileStore)
-    val overlayRepo = OverlayRepository(yahoo)
     val calendarRepo = CalendarRepository(seed)
+    val overlayRepo = OverlayRepository(yahoo, calendarRepo.calendar)
     val syncRepo = SyncRepository(settings, boardRepo, edgesRepo, http)
 }

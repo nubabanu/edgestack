@@ -41,7 +41,10 @@ class EdgesRepository(
         store.write("edges.json", EdgesBundle.serializer(), bundle)
 }
 
-class OverlayRepository(private val yahoo: YahooChartClient) {
+class OverlayRepository(
+    private val yahoo: YahooChartClient,
+    private val calendar: TradingCalendar,
+) {
 
     @Volatile private var cachedBars: List<SpyBar> = emptyList()
 
@@ -56,7 +59,7 @@ class OverlayRepository(private val yahoo: YahooChartClient) {
     }
 
     suspend fun state(base: Double, forceRefresh: Boolean = false): OverlayState? =
-        OverlayCalculator.state(bars(forceRefresh), base = base)
+        OverlayCalculator.state(bars(forceRefresh), base = base, calendar = calendar)
 }
 
 class SyncRepository(

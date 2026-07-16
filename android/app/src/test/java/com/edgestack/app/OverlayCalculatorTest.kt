@@ -5,6 +5,9 @@ import com.edgestack.app.domain.model.SpyBar
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -61,6 +64,29 @@ class OverlayCalculatorTest {
     @Test fun parityWithPythonBase10() = assertParity("overlay_spy_base10.json")
 
     @Test fun parityWithPythonBase13() = assertParity("overlay_spy_base13.json")
+
+    @Test
+    fun tomChipUsesExchangeCalendarNotBarBoundary() {
+        val fx = load("overlay_spy_base10.json")
+        // slice so the series ends mid-month: 2026-07-10 is July's 7th session
+        val bars = fx.bars.map {
+            SpyBar(LocalDate.parse(it.date), it.open, it.high, it.low, it.close, it.adj)
+        }.filter { it.date <= LocalDate.of(2026, 7, 10) }
+        val calText = requireNotNull(
+            javaClass.getResourceAsStream("/fixtures/calendar.json"))
+            .bufferedReader().readText()
+        val sessions = kotlinx.serialization.json.Json.parseToJsonElement(calText)
+            .jsonObject["sessions"]!!.jsonArray
+            .map { LocalDate.parse(it.jsonPrimitive.content) }
+        val calendar = com.edgestack.app.domain.TradingCalendar(sessions)
+
+        // without a calendar the final bar looks like month-end -> chip fires
+        val naive = requireNotNull(OverlayCalculator.state(bars))
+        assertTrue(naive.firedRules.any { it.contains("Turn-of-month") })
+        // with the bundled calendar, mid-month is correctly NOT turn-of-month
+        val informed = requireNotNull(OverlayCalculator.state(bars, calendar = calendar))
+        assertTrue(informed.firedRules.none { it.contains("Turn-of-month") })
+    }
 
     @Test
     fun stateReportsFiredRules() {
