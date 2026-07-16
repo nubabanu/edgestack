@@ -54,7 +54,9 @@ class CanonicalBundleRepository:
 
     def latest(self) -> CanonicalRecommendationBundleV2:
         pointer = self.pointer()
-        path = self.run_dir(pointer) / "recommendation.json"
+        run_dir = self.run_dir(pointer)
+        _verify_run(run_dir)
+        path = run_dir / "recommendation.json"
         if not path.exists():
             raise DataError(f"published recommendation is missing: {pointer.run_id}")
         try:
@@ -71,7 +73,9 @@ class CanonicalBundleRepository:
 
     def risk_inputs(self) -> RiskInputsV2:
         pointer = self.pointer()
-        path = self.run_dir(pointer) / "risk_inputs.json"
+        run_dir = self.run_dir(pointer)
+        _verify_run(run_dir)
+        path = run_dir / "risk_inputs.json"
         if not path.exists():
             raise DataError(f"published risk inputs are missing: {pointer.run_id}")
         try:
@@ -154,3 +158,10 @@ def _risk_inputs_from_json(payload: dict[str, Any]) -> RiskInputsV2:
         stress_acceptable=bool(payload.get("stress_acceptable", True)),
         data_fresh=bool(payload.get("data_fresh", True)),
     )
+
+
+def _verify_run(run_dir: Path) -> None:
+    # Local import keeps the publisher/repository dependency acyclic at import time.
+    from edgestack.recommendation.publication import verify_published_run
+
+    verify_published_run(run_dir)

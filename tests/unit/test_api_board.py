@@ -10,8 +10,8 @@ from fastapi.testclient import TestClient
 
 from edgestack.api.app import create_app
 from edgestack.config import EdgeStackConfig
-from edgestack.recommendation.hashing import stable_hash
 from edgestack.recommendation.policy import load_baseline_policy
+from edgestack.recommendation.publication import AtomicRecommendationPublisher
 from edgestack.recommendation.risk import RiskInputsV2, size_recommendation
 from edgestack.recommendation.schemas import (
     AssetKind,
@@ -23,7 +23,6 @@ from edgestack.recommendation.schemas import (
     RiskStateV2,
     WatchlistEntryV2,
 )
-from edgestack.recommendation.service import risk_inputs_json
 
 SESSION = date(2026, 7, 16)
 
@@ -97,30 +96,11 @@ def _publish_fixture(cfg: EdgeStackConfig) -> CanonicalRecommendationBundleV2:
         base_recommendation=base,
         default_recommendation=recommendation,
     )
-    inputs_payload = risk_inputs_json(inputs)
-    run_id = stable_hash(
-        {"bundle_hash": bundle.bundle_hash, "risk_inputs_hash": stable_hash(inputs_payload)}
-    )
-    root = cfg.paths.artifacts_dir / "recommendations"
-    run = root / "runs" / run_id
-    run.mkdir(parents=True)
-    (run / "recommendation.json").write_text(bundle.model_dump_json(indent=2), encoding="utf-8")
-    (run / "risk_inputs.json").write_text(
-        json.dumps(inputs_payload, sort_keys=True), encoding="utf-8"
-    )
-    root.mkdir(parents=True, exist_ok=True)
-    (root / "current.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 2,
-                "run_id": run_id,
-                "bundle_hash": bundle.bundle_hash,
-                "risk_inputs_hash": stable_hash(inputs_payload),
-                "session": SESSION.isoformat(),
-            },
-            sort_keys=True,
-        ),
-        encoding="utf-8",
+    AtomicRecommendationPublisher(cfg.paths.artifacts_dir).publish(
+        bundle=bundle,
+        risk_inputs=inputs,
+        paper_state={"status": "fixture"},
+        monitoring={"healthy": True},
     )
     return bundle
 
@@ -245,4 +225,4 @@ def test_latest_rejects_a_tampered_bundle(
 
     response = client.get("/recommendations/latest")
     assert response.status_code == 404
-    assert "bundle hash mismatch" in response.json()["detail"]
+    assert "publication checksum mismatch" in response.json()["detail"]

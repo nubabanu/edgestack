@@ -58,7 +58,9 @@ def run_data_validate(cfg: EdgeStackConfig) -> None:
     report = assess_panel(panel, TradingCalendar(cfg.data.calendar))
     print(report.summary())
     if report.quarantined:
-        print("some symbols failed quality gates; fix or exclude them before research")
+        from edgestack.exceptions import DataError
+
+        raise DataError("some symbols failed quality gates; fix or exclude them before research")
 
 
 def run_features_build(cfg: EdgeStackConfig) -> None:

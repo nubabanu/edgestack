@@ -300,14 +300,16 @@ class DataCatalog:
         return self.guard.apply(panel, unlock_key=unlock_key)
 
     def data_manifest_hash(self) -> str:
-        """Cheap, deterministic fingerprint of the stored price data."""
+        """Deterministic content fingerprint of the stored price data."""
         import hashlib
 
         h = hashlib.sha256()
         if self.prices_dir.exists():
             for path in sorted(self.prices_dir.glob("*.parquet")):
-                stat = path.stat()
-                h.update(f"{path.name}:{stat.st_size}:{stat.st_mtime_ns}".encode())
+                h.update(path.name.encode())
+                with path.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        h.update(chunk)
         return h.hexdigest()
 
     # -- metadata --------------------------------------------------------------
