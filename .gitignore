@@ -33,3 +33,5 @@ demo_output.txt
 .vscode/
 .idea/
 example_candidate.txt
+*.log
+*_log.txt
