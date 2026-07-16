@@ -86,6 +86,16 @@ def create_app(cfg: EdgeStackConfig):
             )
         return json.loads(path.read_text(encoding="utf-8"))
 
+    @app.get("/master")
+    def master() -> dict:
+        path = Path("artifacts") / "master_signal.json"
+        if not path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="master signal not generated; run scripts/master_signal.py",
+            )
+        return json.loads(path.read_text(encoding="utf-8"))
+
     @app.get("/signals/latest")
     def signals_latest() -> dict:
         return json.loads(_report().model_dump_json())
