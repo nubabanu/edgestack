@@ -189,6 +189,9 @@ fun CalendarScreen(vm: CalendarViewModel) {
             )
         }
         item { Legend(vm.overlay.hasData) }
+        if (vm.overlay.hasData) {
+            item { WeekAheadCard(today, vm.calendar, vm.overlay, vm.overlaySymbol) }
+        }
         item { MonthFacts(month, today, vm.calendar, vm.overlay) }
         vm.selected?.let { date ->
             item { DayDetails(date, vm.calendar, vm.overlay.edgeFor(date)) }
@@ -324,6 +327,57 @@ private fun Legend(hasOverlay: Boolean) {
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
+        }
+    }
+}
+
+/** The next five sessions ranked by historical tailwind — "when this week?" */
+@Composable
+private fun WeekAheadCard(
+    today: LocalDate,
+    calendar: TradingCalendar,
+    overlay: SeasonalOverlay,
+    symbol: String?,
+) {
+    val sessions = buildList {
+        var d: LocalDate? = if (calendar.isSession(today)) today else calendar.nextSession(today)
+        while (d != null && size < 5) {
+            add(d)
+            d = calendar.nextSession(d)
+        }
+    }
+    val scored = sessions.mapNotNull { d -> overlay.edgeFor(d)?.let { d to it } }
+    if (scored.isEmpty()) return
+    val best = scored.maxByOrNull { it.second.percentile }?.first
+    val worst = scored.minByOrNull { it.second.percentile }?.first
+    Card {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                "Next ${scored.size} sessions${symbol?.let { " — $it" } ?: ""}",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            scored.forEach { (d, edge) ->
+                val marker = when (d) {
+                    best -> "  ← strongest"
+                    worst -> "  ← weakest"
+                    else -> ""
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(10.dp).clip(CircleShape).background(heatColor(edge.percentile)),
+                    )
+                    Text(
+                        "  ${d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)} $d — " +
+                            "percentile ${"%.0f".format(edge.percentile * 100)}$marker",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            Text(
+                "Historical tilt for entries you already planned — not a forecast.",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray,
+            )
         }
     }
 }

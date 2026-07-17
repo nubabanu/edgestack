@@ -90,13 +90,24 @@ class InstrumentViewModel(
         }
     }
 
+    var leaderSymbolsDraft by mutableStateOf("")
+    var leaderHorizon by mutableStateOf("WEEK")
+
     fun scanLeaders() {
+        val custom = leaderSymbolsDraft
+            .split(',', ' ', ';')
+            .map { it.trim().uppercase() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(50)
+        val symbols = custom.ifEmpty { QUICK_SYMBOLS }
         loading = true
         viewModelScope.launch {
-            syncRepository.patternLeaders(QUICK_SYMBOLS).fold(
+            syncRepository.patternLeaders(symbols, horizon = leaderHorizon).fold(
                 onSuccess = {
                     leaders = it
-                    message = "Scanned ${it.searchedSymbols.size} symbols; research-only."
+                    message = "Scanned ${it.searchedSymbols.size} symbols at ${it.horizon} " +
+                        "horizon; research-only."
                 },
                 onFailure = { message = "Pattern scan unavailable: ${it.message}" },
             )
@@ -169,6 +180,27 @@ fun InstrumentScreen(vm: InstrumentViewModel) {
                 }
                 Button(onClick = vm::scanLeaders, enabled = !vm.loading) {
                     Text("Pattern leaders")
+                }
+            }
+            OutlinedTextField(
+                value = vm.leaderSymbolsDraft,
+                onValueChange = { vm.leaderSymbolsDraft = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Pattern scan symbols (comma-separated, blank = defaults)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    autoCorrect = false,
+                ),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("DAY", "WEEK", "MONTH").forEach { horizon ->
+                    AssistChip(
+                        onClick = { vm.leaderHorizon = horizon },
+                        label = {
+                            Text(if (vm.leaderHorizon == horizon) "✓ $horizon" else horizon)
+                        },
+                    )
                 }
             }
             if (vm.message.isNotBlank()) {
