@@ -5,9 +5,11 @@ import com.edgestack.app.core.AppJson
 import com.edgestack.app.data.local.JsonFileStore
 import com.edgestack.app.data.local.SeedAssets
 import com.edgestack.app.data.local.SettingsStore
+import com.edgestack.app.data.remote.YahooChartClient
 import com.edgestack.app.data.repo.CalendarRepository
 import com.edgestack.app.data.repo.EdgesRepository
 import com.edgestack.app.data.repo.InstrumentAnalysisRepository
+import com.edgestack.app.data.repo.PositionsRepository
 import com.edgestack.app.data.repo.RecommendationRepository
 import com.edgestack.app.data.repo.SniperRepository
 import com.edgestack.app.data.repo.SyncRepository
@@ -30,6 +32,8 @@ class AppContainer(context: Context) {
     val instrumentRepo = InstrumentAnalysisRepository(fileStore)
     val sniperRepo = SniperRepository(fileStore)
     val edgesRepo = EdgesRepository(fileStore)
+    val positionsRepo = PositionsRepository(fileStore)
+    val quotes = YahooChartClient(http)
     val calendarRepo = CalendarRepository(seed)
     val syncRepo = SyncRepository(
         settings, recommendationRepo, instrumentRepo, sniperRepo, edgesRepo, http,

@@ -36,11 +36,25 @@ def test_detects_missing_sessions(clean_panel: pd.DataFrame, cal: TradingCalenda
 def test_detects_split_like_cliff(clean_panel: pd.DataFrame, cal: TradingCalendar) -> None:
     df = clean_panel.copy()
     cliff_idx = len(df) // 2
-    factor = 0.5  # looks like an unadjusted 2:1 split
-    for col in ("open", "high", "low", "close", "adj_close"):
+    factor = 0.5  # unadjusted 2:1 split: raw closes cliff, adjusted closes stay smooth
+    for col in ("open", "high", "low", "close"):
         df.loc[df.index[cliff_idx:], col] *= factor
     report = assess_panel(df, cal)
     assert any("corporate action" in issue for issue in report.symbols[0].issues)
+
+
+def test_genuine_crash_in_both_series_is_not_quarantined(
+    clean_panel: pd.DataFrame, cal: TradingCalendar
+) -> None:
+    df = clean_panel.copy()
+    cliff_idx = len(df) // 2
+    factor = 0.5  # a real one-day -50% shows in raw AND adjusted closes alike
+    for col in ("open", "high", "low", "close", "adj_close"):
+        df.loc[df.index[cliff_idx:], col] *= factor
+    report = assess_panel(df, cal)
+    assert not any("corporate action" in issue for issue in report.symbols[0].issues), (
+        report.summary()
+    )
 
 
 def test_detects_stale_prices(clean_panel: pd.DataFrame, cal: TradingCalendar) -> None:

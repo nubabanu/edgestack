@@ -25,6 +25,7 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Body
 import retrofit2.http.POST
+import retrofit2.http.Path
 
 @Serializable
 data class VersionInfo(
@@ -57,8 +58,10 @@ interface EdgeStackApi {
         @Body request: PatternLeaderRequestV2,
     ): PatternLeaderBoardV2
     @GET("edges") suspend fun edges(): List<EdgeSummaryV2>
+    @GET("edges/{id}") suspend fun edgeDetail(@Path("id") id: String): JsonObject
     @GET("monitoring/edges") suspend fun monitoringEdges(): JsonObject
     @GET("backtests") suspend fun backtests(): List<BacktestRunV2>
+    @GET("backtests/{runId}") suspend fun backtestDetail(@Path("runId") runId: String): JsonObject
     @GET("sniper/latest")
     suspend fun latestSniper(): SniperPlanV2
     @POST("sniper/preview")

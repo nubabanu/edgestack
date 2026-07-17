@@ -104,7 +104,7 @@ Tabs:
 - **Analyze** — instrument timing: best/worst windows per horizon, chosen-time ratings, exit maps, tailwinds/headwinds, news context, automatic rechecks.
 - **Sniper** — staged shadow plan with equity/loss-budget preview; paper only.
 - **Edges** — validated edge catalog with search and status filters, monitoring health, backtest runs.
-- **Trades** — canonical paper account state.
+- **Trades** — canonical paper account state, plus a personal position tracker with delayed device quotes and unrealized P&L (device-side display only; never feeds signals).
 - **Settings** — server URL, risk-sizing profile, connection test, sync.
 
 Build and install:

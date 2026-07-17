@@ -246,6 +246,14 @@ class SyncRepository(
         api.monitoringEdges().also(edgesRepo::saveMonitoring)
     }
 
+    suspend fun edgeDetail(id: String): Result<JsonObject> = apiCatching {
+        (api() ?: error("server required for details")).edgeDetail(id)
+    }
+
+    suspend fun backtestDetail(runId: String): Result<JsonObject> = apiCatching {
+        (api() ?: error("server required for details")).backtestDetail(runId)
+    }
+
     suspend fun backtests(): Result<List<BacktestRunV2>> = apiCatching {
         val api = api() ?: error("no server URL configured")
         api.backtests()

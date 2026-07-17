@@ -56,7 +56,11 @@ class MainActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = when (modelClass) {
                 BoardViewModel::class.java ->
-                    BoardViewModel(container.recommendationRepo, container.syncRepo) as T
+                    BoardViewModel(
+                        container.recommendationRepo,
+                        container.syncRepo,
+                        container.settings,
+                    ) as T
                 OverlayViewModel::class.java ->
                     OverlayViewModel(
                         container.recommendationRepo,
@@ -64,7 +68,11 @@ class MainActivity : ComponentActivity() {
                         container.settings,
                     ) as T
                 TradesViewModel::class.java ->
-                    TradesViewModel(container.syncRepo) as T
+                    TradesViewModel(
+                        container.syncRepo,
+                        container.positionsRepo,
+                        container.quotes,
+                    ) as T
                 InstrumentViewModel::class.java ->
                     InstrumentViewModel(container.instrumentRepo, container.syncRepo) as T
                 CalendarViewModel::class.java ->
