@@ -36,10 +36,26 @@ class BoardViewModel(
     var status by mutableStateOf(""); private set
     var refreshing by mutableStateOf(false); private set
 
-    init { load() }
+    init {
+        load()
+        autoConnect()
+    }
 
     fun load() {
         bundle = runCatching { recommendationRepo.loadBundle() }.getOrNull()
+    }
+
+    /** Silently sync on app open when a server URL is saved; stay quiet otherwise. */
+    private fun autoConnect() {
+        viewModelScope.launch {
+            if (syncRepo.hasServerConfigured()) {
+                status = "auto-connecting…"
+                refreshing = true
+                status = syncRepo.syncAll().fold({ "synced: $it" }, { "offline: ${it.message}" })
+                load()
+                refreshing = false
+            }
+        }
     }
 
     fun sync() {

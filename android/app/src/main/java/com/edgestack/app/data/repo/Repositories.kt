@@ -158,6 +158,10 @@ class SyncRepository(
         return EdgeStackApi.create(url, http)
     }
 
+    /** True once the user saved a server URL; used to auto-connect on launch. */
+    suspend fun hasServerConfigured(): Boolean =
+        settingsStore.current().baseUrl.isNotBlank()
+
     suspend fun paper(): Result<PaperResponse> = apiCatching {
         (api() ?: error("no server URL configured")).paper()
     }

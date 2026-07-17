@@ -87,7 +87,20 @@ class SettingsViewModel(
         }
         settingsStore.setBaseUrl(urlDraft.trim())
         settingsStore.setRiskProfile(profile)
-        status = "Risk profile saved; refresh the server preview to apply sizing."
+        if (urlDraft.isNotBlank()) {
+            status = "Saved — connecting…"
+            status = syncRepo.testConnection().fold(
+                onSuccess = { version ->
+                    syncRepo.syncAll().fold(
+                        { "Connected: $version — synced $it" },
+                        { "Connected ($version) but sync failed: ${it.message}" },
+                    )
+                },
+                onFailure = { "Saved, but server unreachable: ${it.message}" },
+            )
+        } else {
+            status = "Risk profile saved; add a server URL to go live."
+        }
     }
 
     fun testConnection() = viewModelScope.launch {
