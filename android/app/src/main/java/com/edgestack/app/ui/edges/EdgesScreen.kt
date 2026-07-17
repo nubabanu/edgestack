@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,13 +18,16 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.edgestack.app.data.repo.EdgesRepository
@@ -47,6 +51,33 @@ class EdgesViewModel(
     var loading by mutableStateOf(false); private set
     var query by mutableStateOf("")
     var statusFilter by mutableStateOf<String?>(null)
+    var detailTitle by mutableStateOf<String?>(null); private set
+    var detail by mutableStateOf<JsonObject?>(null); private set
+    var detailError by mutableStateOf(""); private set
+
+    fun openEdgeDetail(edge: EdgeSummaryV2) =
+        openDetail(edge.name.ifBlank { edge.edgeId }) { syncRepository.edgeDetail(edge.edgeId) }
+
+    fun openBacktestDetail(run: BacktestRunV2) =
+        openDetail("Backtest ${run.runId}") { syncRepository.backtestDetail(run.runId) }
+
+    private fun openDetail(title: String, fetch: suspend () -> Result<JsonObject>) {
+        detailTitle = title
+        detail = null
+        detailError = ""
+        viewModelScope.launch {
+            fetch().fold(
+                onSuccess = { detail = it },
+                onFailure = { detailError = it.message ?: "unavailable" },
+            )
+        }
+    }
+
+    fun closeDetail() {
+        detailTitle = null
+        detail = null
+        detailError = ""
+    }
 
     fun refresh() {
         loading = true
@@ -176,7 +207,9 @@ private fun EdgesList(vm: EdgesViewModel) {
                 )
             }
         }
-        items(shown.take(EdgesViewModel.MAX_SHOWN)) { edge -> EdgeCard(edge) }
+        items(shown.take(EdgesViewModel.MAX_SHOWN)) { edge ->
+            EdgeCard(edge, onClick = { vm.openEdgeDetail(edge) })
+        }
         vm.monitoring?.let { payload ->
             item { Text("Monitoring", style = MaterialTheme.typography.titleMedium) }
             item { MonitoringCard(payload) }
@@ -184,11 +217,11 @@ private fun EdgesList(vm: EdgesViewModel) {
         if (vm.backtests.isNotEmpty()) {
             item { Text("Backtest runs", style = MaterialTheme.typography.titleMedium) }
             items(vm.backtests) { run ->
-                Card {
+                Card(onClick = { vm.openBacktestDetail(run) }) {
                     Column(Modifier.padding(10.dp)) {
                         Text(run.runId, style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "${run.createdAt} • ${run.costScenario}",
+                            "${run.createdAt} • ${run.costScenario} • tap for detail",
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
@@ -196,11 +229,61 @@ private fun EdgesList(vm: EdgesViewModel) {
             }
         }
     }
+    vm.detailTitle?.let { title ->
+        DetailDialog(
+            title = title,
+            payload = vm.detail,
+            error = vm.detailError,
+            onClose = vm::closeDetail,
+        )
+    }
 }
 
 @Composable
-private fun EdgeCard(edge: EdgeSummaryV2) {
-    Card {
+private fun DetailDialog(
+    title: String,
+    payload: JsonObject?,
+    error: String,
+    onClose: () -> Unit,
+) {
+    Dialog(onDismissRequest = onClose) {
+        Card {
+            Column(Modifier.padding(14.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                when {
+                    error.isNotBlank() -> Text(
+                        "Unavailable: $error",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                    payload == null -> Text(
+                        "Loading…",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                    else -> LazyColumn(
+                        Modifier.fillMaxWidth().heightIn(max = 480.dp).padding(top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        items(payload.entries.toList()) { (key, value) ->
+                            Text(
+                                "$key: ${render(value)}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+                TextButton(onClick = onClose, modifier = Modifier.align(Alignment.End)) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EdgeCard(edge: EdgeSummaryV2, onClick: () -> Unit) {
+    Card(onClick = onClick) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(
                 Modifier.fillMaxWidth(),

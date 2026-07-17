@@ -89,8 +89,19 @@ def _assess_symbol(
     if missing > max_missing_fraction * len(expected):
         issues.append(f"{missing}/{len(expected)} sessions missing")
 
-    log_ret = np.log(bars["close"].to_numpy()[1:] / bars["close"].to_numpy()[:-1])
-    jump_idx = np.where(np.abs(log_ret) > JUMP_THRESHOLD)[0]
+    close = bars["close"].to_numpy(dtype=float)
+    log_ret = np.log(close[1:] / close[:-1])
+    raw_jump = np.abs(log_ret) > JUMP_THRESHOLD
+    adj = bars["adj_close"].to_numpy(dtype=float) if "adj_close" in bars.columns else np.array([])
+    if adj.size == len(close) and np.all(np.isfinite(adj)) and np.all(adj > 0):
+        # A cliff in raw closes that is absent from adjusted closes is the
+        # signature of an unadjusted split. A jump in both series is a genuine
+        # market move (crash, squeeze, earnings shock) — real data, no issue.
+        adj_ret = np.log(adj[1:] / adj[:-1])
+        artifact = raw_jump & ~(np.abs(adj_ret) > JUMP_THRESHOLD)
+    else:
+        artifact = raw_jump
+    jump_idx = np.where(artifact)[0]
     jumps = tuple(str(dates[i + 1].date()) for i in jump_idx[:10])
     if len(jump_idx):
         issues.append(

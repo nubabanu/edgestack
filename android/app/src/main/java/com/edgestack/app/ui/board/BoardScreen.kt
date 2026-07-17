@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.repo.RecommendationRepository
 import com.edgestack.app.data.repo.SyncRepository
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
@@ -32,10 +33,12 @@ import kotlinx.coroutines.launch
 class BoardViewModel(
     private val recommendationRepo: RecommendationRepository,
     private val syncRepo: SyncRepository,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
     var bundle by mutableStateOf<CanonicalRecommendationBundleV2?>(null); private set
     var status by mutableStateOf(""); private set
     var refreshing by mutableStateOf(false); private set
+    var lastSyncEpochMs by mutableStateOf(0L); private set
 
     init {
         load()
@@ -44,6 +47,9 @@ class BoardViewModel(
 
     fun load() {
         bundle = runCatching { recommendationRepo.loadBundle() }.getOrNull()
+        viewModelScope.launch {
+            lastSyncEpochMs = settingsStore.current().lastSyncEpochMs
+        }
     }
 
     /** Silently sync on app open when a server URL is saved; stay quiet otherwise. */
@@ -66,6 +72,17 @@ class BoardViewModel(
             load()
             refreshing = false
         }
+    }
+}
+
+private fun syncAgeLabel(epochMs: Long): String {
+    if (epochMs <= 0L) return "never synced — pull down or open Settings"
+    val minutes = (System.currentTimeMillis() - epochMs) / 60_000
+    return when {
+        minutes < 1 -> "synced just now"
+        minutes < 60 -> "synced ${minutes}m ago"
+        minutes < 48 * 60 -> "synced ${minutes / 60}h ago"
+        else -> "synced ${minutes / (24 * 60)}d ago"
     }
 }
 
@@ -103,6 +120,11 @@ private fun BoardContent(
             }
         }
         AssistChip(onClick = {}, label = { Text(base.status) })
+        Text(
+            syncAgeLabel(vm.lastSyncEpochMs),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.Gray,
+        )
         if (vm.status.isNotBlank()) {
             Text(vm.status, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
         }
