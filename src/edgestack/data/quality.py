@@ -92,11 +92,7 @@ def _assess_symbol(
     close = bars["close"].to_numpy(dtype=float)
     log_ret = np.log(close[1:] / close[:-1])
     raw_jump = np.abs(log_ret) > JUMP_THRESHOLD
-    adj = (
-        bars["adj_close"].to_numpy(dtype=float)
-        if "adj_close" in bars.columns
-        else np.array([])
-    )
+    adj = bars["adj_close"].to_numpy(dtype=float) if "adj_close" in bars.columns else np.array([])
     if adj.size == len(close) and np.all(np.isfinite(adj)) and np.all(adj > 0):
         # A cliff in raw closes that is absent from adjusted closes is the
         # signature of an unadjusted split. A jump in both series is a genuine
