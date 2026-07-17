@@ -133,12 +133,10 @@ class TradingCalendar:
         df["is_post_holiday"] = gap_prev.to_numpy() > normal_prev
 
         month_key = sessions.to_period("M")
-        month_pos = pd.Series(np.arange(len(sessions)), index=sessions).groupby(
-            month_key
-        ).cumcount()
-        month_len = pd.Series(month_key, index=sessions).map(
-            pd.Series(month_key).value_counts()
+        month_pos = (
+            pd.Series(np.arange(len(sessions)), index=sessions).groupby(month_key).cumcount()
         )
+        month_len = pd.Series(month_key, index=sessions).map(pd.Series(month_key).value_counts())
         df["month"] = sessions.month
         df["quarter"] = sessions.quarter
         df["sessions_since_month_start"] = month_pos.to_numpy()
@@ -161,12 +159,8 @@ class TradingCalendar:
 
         # Santa window: last 5 sessions of the year + first 2 of the next.
         year_key = sessions.year
-        year_pos = pd.Series(np.arange(len(sessions)), index=sessions).groupby(
-            year_key
-        ).cumcount()
-        year_len = pd.Series(year_key, index=sessions).map(
-            pd.Series(year_key).value_counts()
-        )
+        year_pos = pd.Series(np.arange(len(sessions)), index=sessions).groupby(year_key).cumcount()
+        year_len = pd.Series(year_key, index=sessions).map(pd.Series(year_key).value_counts())
         sessions_to_year_end = (year_len - 1 - year_pos).to_numpy()
         df["is_santa_window"] = (sessions_to_year_end <= 4) | (year_pos.to_numpy() <= 1)
 

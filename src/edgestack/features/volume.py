@@ -34,7 +34,7 @@ def dollar_vol_log_20(df: pd.DataFrame) -> pd.Series:
 @feature("obv_slope_20", Family.VOLUME, inputs=("close", "volume"), min_history=41)
 def obv_slope_20(df: pd.DataFrame) -> pd.Series:
     """20-session on-balance-volume change, normalized by average volume."""
-    direction = np.sign(df["close"].diff()).fillna(0.0)
+    direction = pd.Series(np.sign(df["close"].diff()), index=df.index).fillna(0.0)
     obv = (direction * df["volume"]).cumsum()
     base = df["volume"].rolling(20).mean()
     return (obv - obv.shift(20)) / (20.0 * base.where(base > 0))

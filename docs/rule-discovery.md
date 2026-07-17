@@ -34,7 +34,7 @@ Within the training window: the first 80% of sessions is the discovery
 region; RuleFit runs on 3 expanding windows x 3 symbol subsamples of it.
 Rules canonicalize by structural signature — feature set + direction +
 threshold *decile* — so `vol<22%`, `vol<24%`, `vol<25%` are one rule. The
-final 20% of sessions (untouched by every discovery run) then scores each
+final 20% of sessions (held aside from each discovery run) then scores each
 structural survivor. Gates, all required:
 
 - selection frequency >= 70% of runs, sign consistency >= 90%;
@@ -52,7 +52,7 @@ tree (first importable wins; the verdict names which ran). Output: an ordered
 position policy with no-trade / small / normal tiers.
 
 ### 5. Outer evaluation (`scripts/rules_campaign.py`)
-The frozen policy trades the untouched outer year through the backtest
+The frozen policy trades the held-aside outer year through the backtest
 engine under conservative costs, judged against SPY, exposure-matched SPY and
 the equal-weight point-in-time universe, with Hansen-SPA over the model set,
 a Ledoit–Wolf-style Sharpe-difference test, Newey–West HAC alpha, and profit-

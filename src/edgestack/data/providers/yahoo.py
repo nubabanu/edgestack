@@ -22,9 +22,9 @@ import pandas as pd
 import requests
 
 from edgestack.config import EdgeStackConfig
-from edgestack.data.providers.base import PriceDataProvider, ProviderMetadata
+from edgestack.data.providers.base import IntradayDataProvider, PriceDataProvider, ProviderMetadata
 from edgestack.data.providers.registry import register_price_provider
-from edgestack.data.schemas import validate_bars
+from edgestack.data.schemas import validate_bars, validate_intraday_bars
 from edgestack.exceptions import ProviderError
 from edgestack.logging import get_logger, log_event
 
@@ -51,10 +51,7 @@ def parse_chart_payload(symbol: str, payload: dict[str, Any]) -> pd.DataFrame:
 
     tz = result.get("meta", {}).get("exchangeTimezoneName", "America/New_York")
     dates = (
-        pd.to_datetime(timestamps, unit="s", utc=True)
-        .tz_convert(tz)
-        .tz_localize(None)
-        .normalize()
+        pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(tz).tz_localize(None).normalize()
     )
     df = pd.DataFrame(
         {
@@ -79,20 +76,101 @@ def parse_chart_payload(symbol: str, payload: dict[str, Any]) -> pd.DataFrame:
         & (df["low"] <= df[["open", "close", "high"]].min(axis=1))
     )
     if (~ok).any():
-        log_event(log, 30, "malformed bars dropped", symbol=symbol,
-                  count=int((~ok).sum()))
+        log_event(log, 30, "malformed bars dropped", symbol=symbol, count=int((~ok).sum()))
     return df.loc[ok]
 
 
-class YahooProvider(PriceDataProvider):
-    def __init__(self, cache_dir: Path, *, timeout: float, max_retries: int,
-                 cache_ttl_days: int) -> None:
+def parse_corporate_actions(symbol: str, payload: dict[str, Any]) -> pd.DataFrame:
+    results = (payload.get("chart") or {}).get("result") or []
+    columns = ["symbol", "date", "action_type", "value"]
+    if not results:
+        return pd.DataFrame(columns=columns)
+    result = results[0]
+    timezone = result.get("meta", {}).get("exchangeTimezoneName", "America/New_York")
+    events = result.get("events") or {}
+    rows: list[dict[str, Any]] = []
+    for raw_timestamp, item in (events.get("dividends") or {}).items():
+        timestamp = int(item.get("date", raw_timestamp))
+        rows.append(
+            {
+                "symbol": symbol.upper(),
+                "date": _event_date(timestamp, timezone),
+                "action_type": "dividend",
+                "value": float(item["amount"]),
+            }
+        )
+    for raw_timestamp, item in (events.get("splits") or {}).items():
+        timestamp = int(item.get("date", raw_timestamp))
+        numerator = float(item.get("numerator", 0))
+        denominator = float(item.get("denominator", 0))
+        ratio = numerator / denominator if numerator > 0 and denominator > 0 else 0.0
+        if ratio <= 0 and ":" in str(item.get("splitRatio", "")):
+            left, right = str(item["splitRatio"]).split(":", maxsplit=1)
+            ratio = float(left) / float(right)
+        if ratio > 0:
+            rows.append(
+                {
+                    "symbol": symbol.upper(),
+                    "date": _event_date(timestamp, timezone),
+                    "action_type": "split",
+                    "value": ratio,
+                }
+            )
+    return pd.DataFrame(rows, columns=columns)
+
+
+def parse_intraday_chart_payload(
+    symbol: str, payload: dict[str, Any], *, interval_minutes: int = 60
+) -> pd.DataFrame:
+    chart = payload.get("chart") or {}
+    if chart.get("error"):
+        raise ProviderError(f"yahoo intraday error for {symbol}: {chart['error']}")
+    results = chart.get("result") or []
+    if not results:
+        raise ProviderError(f"yahoo returned no intraday data for {symbol}")
+    result = results[0]
+    timestamps = result.get("timestamp") or []
+    quote = (result.get("indicators", {}).get("quote") or [{}])[0]
+    if not timestamps or not quote.get("close"):
+        raise ProviderError(f"yahoo returned an empty intraday series for {symbol}")
+    output = pd.DataFrame(
+        {
+            "symbol": symbol.upper(),
+            "timestamp": pd.to_datetime(timestamps, unit="s", utc=True),
+            "interval_minutes": interval_minutes,
+            "open": quote.get("open"),
+            "high": quote.get("high"),
+            "low": quote.get("low"),
+            "close": quote.get("close"),
+            "volume": quote.get("volume"),
+        }
+    ).dropna(subset=["open", "high", "low", "close"])
+    output["volume"] = output["volume"].fillna(0.0)
+    return validate_intraday_bars(output, context=f"yahoo_intraday[{symbol}]")
+
+
+def _event_date(timestamp: int, timezone: str) -> pd.Timestamp:
+    return (
+        pd.to_datetime(timestamp, unit="s", utc=True)
+        .tz_convert(timezone)
+        .tz_localize(None)
+        .normalize()
+    )
+
+
+class YahooProvider(PriceDataProvider, IntradayDataProvider):
+    def __init__(
+        self, cache_dir: Path, *, timeout: float, max_retries: int, cache_ttl_days: int
+    ) -> None:
         self.cache_dir = cache_dir
         self.timeout = timeout
         self.max_retries = max_retries
         self.cache_ttl_s = cache_ttl_days * 86400
         self.session = requests.Session()
         self.session.headers["User-Agent"] = "Mozilla/5.0 (research; edgestack/0.1)"
+        self.last_corporate_actions = pd.DataFrame(
+            columns=["symbol", "date", "action_type", "value"]
+        )
         self.metadata = ProviderMetadata(
             name="yahoo",
             kind="price",
@@ -103,22 +181,31 @@ class YahooProvider(PriceDataProvider):
                 "OHLC split-adjusted only; adj_close is split+dividend adjusted",
                 "no delisted securities: survivorship-biased symbol coverage",
                 "no point-in-time universe membership",
+                "60m history is vendor-limited to 729 calendar days per request",
+                "15m history is vendor-limited to 59 calendar days per request",
             ),
+            frequencies=("1d", "60m"),
         )
 
-    def fetch_daily_bars(
-        self, symbols: tuple[str, ...], start: date, end: date
-    ) -> pd.DataFrame:
+    def fetch_daily_bars(self, symbols: tuple[str, ...], start: date, end: date) -> pd.DataFrame:
         frames = []
+        action_frames = []
         for i, symbol in enumerate(symbols):
             if i:
                 time.sleep(_POLITE_DELAY_S)
             try:
-                frames.append(self._fetch_symbol(symbol, start, end))
+                bars, actions = self._fetch_symbol(symbol, start, end)
+                frames.append(bars)
+                action_frames.append(actions)
             except ProviderError as exc:
                 log_event(log, 30, "symbol skipped", symbol=symbol, error=str(exc))
         if not frames:
             raise ProviderError(f"yahoo returned no data for any of {symbols!r}")
+        self.last_corporate_actions = (
+            pd.concat(action_frames, ignore_index=True)
+            if action_frames
+            else self.last_corporate_actions.iloc[0:0].copy()
+        )
         raw = pd.concat(frames, ignore_index=True)
         # Re-apply the malformed-bar guard: cached responses may predate it.
         ok = (
@@ -132,10 +219,17 @@ class YahooProvider(PriceDataProvider):
         mask = (bars["date"] >= pd.Timestamp(start)) & (bars["date"] <= pd.Timestamp(end))
         return bars.loc[mask].reset_index(drop=True)
 
-    def _fetch_symbol(self, symbol: str, start: date, end: date) -> pd.DataFrame:
+    def _fetch_symbol(
+        self, symbol: str, start: date, end: date
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         cache_file = self.cache_dir / f"{symbol.upper()}_{start:%Y%m%d}_{end:%Y%m%d}.parquet"
-        if cache_file.exists() and (time.time() - cache_file.stat().st_mtime) < self.cache_ttl_s:
-            return pd.read_parquet(cache_file)
+        actions_file = cache_file.with_name(f"{cache_file.stem}_actions.parquet")
+        if (
+            cache_file.exists()
+            and actions_file.exists()
+            and (time.time() - cache_file.stat().st_mtime) < self.cache_ttl_s
+        ):
+            return pd.read_parquet(cache_file), pd.read_parquet(actions_file)
         params = {
             "period1": str(int(pd.Timestamp(start, tz="UTC").timestamp())),
             # +1 day: period2 is exclusive of the final session otherwise.
@@ -145,9 +239,43 @@ class YahooProvider(PriceDataProvider):
         }
         payload = self._request_with_retries(symbol, params)
         df = parse_chart_payload(symbol, payload)
+        actions = parse_corporate_actions(symbol, payload)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         df.to_parquet(cache_file, index=False)
-        return df
+        actions.to_parquet(actions_file, index=False)
+        return df, actions
+
+    def fetch_intraday_bars(
+        self, symbols: tuple[str, ...], start: date, end: date, *, interval: str = "60m"
+    ) -> pd.DataFrame:
+        limits = {"15m": (15, 59), "60m": (60, 729)}
+        if interval not in limits:
+            raise ProviderError("the V2 timing workflow accepts only 15m or 60m Yahoo bars")
+        interval_minutes, maximum_days = limits[interval]
+        if (end - start).days > maximum_days:
+            raise ProviderError(
+                f"Yahoo {interval} requests are limited to at most {maximum_days} calendar days"
+            )
+        frames: list[pd.DataFrame] = []
+        params = {
+            "period1": str(int(pd.Timestamp(start, tz="UTC").timestamp())),
+            "period2": str(int(pd.Timestamp(end + timedelta(days=1), tz="UTC").timestamp())),
+            "interval": interval,
+            "includePrePost": "false",
+            "events": "div,splits",
+        }
+        for index, symbol in enumerate(symbols):
+            if index:
+                time.sleep(_POLITE_DELAY_S)
+            payload = self._request_with_retries(symbol, params)
+            frames.append(
+                parse_intraday_chart_payload(symbol, payload, interval_minutes=interval_minutes)
+            )
+        if not frames:
+            raise ProviderError(f"yahoo returned no intraday data for {symbols!r}")
+        return validate_intraday_bars(
+            pd.concat(frames, ignore_index=True), context="yahoo_intraday"
+        )
 
     def _request_with_retries(self, symbol: str, params: dict[str, str]) -> dict[str, Any]:
         delay = 1.0
@@ -168,8 +296,14 @@ class YahooProvider(PriceDataProvider):
                 if isinstance(exc, ProviderError) and "unknown symbol" in str(exc):
                     break
                 if attempt < self.max_retries:
-                    log_event(log, 30, "retrying yahoo request", symbol=symbol,
-                              attempt=attempt + 1, error=str(exc))
+                    log_event(
+                        log,
+                        30,
+                        "retrying yahoo request",
+                        symbol=symbol,
+                        attempt=attempt + 1,
+                        error=str(exc),
+                    )
                     time.sleep(delay)
                     delay *= 2
         raise ProviderError(f"yahoo request failed for {symbol}: {last_error}")

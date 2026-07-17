@@ -11,7 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,62 +22,39 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.edgestack.app.data.local.Settings
 import com.edgestack.app.data.local.SettingsStore
-import com.edgestack.app.data.repo.OverlayRepository
-import com.edgestack.app.domain.AlertPlanner
-import com.edgestack.app.domain.EnsembleCalculator
-import com.edgestack.app.domain.PlannedAlert
-import com.edgestack.app.domain.TradingCalendar
-import com.edgestack.app.domain.model.OverlayState
-import java.time.LocalDate
-import com.edgestack.app.ui.components.ExposureDial
-import com.edgestack.app.ui.components.Sparkline
+import com.edgestack.app.data.repo.RecommendationRepository
+import com.edgestack.app.data.repo.SyncRepository
+import com.edgestack.app.domain.model.PortfolioRecommendationV2
 import kotlinx.coroutines.launch
 
 class OverlayViewModel(
-    private val overlayRepo: OverlayRepository,
+    private val recommendationRepo: RecommendationRepository,
+    private val syncRepo: SyncRepository,
     private val settingsStore: SettingsStore,
-    private val calendar: TradingCalendar,
 ) : ViewModel() {
-
-    var state by mutableStateOf<OverlayState?>(null); private set
-    var ensembles by mutableStateOf<Map<String, EnsembleCalculator.State>>(emptyMap())
-        private set
-    var upcoming by mutableStateOf<List<PlannedAlert>>(emptyList()); private set
-    var base by mutableStateOf(1.0); private set
+    var recommendation by mutableStateOf<PortfolioRecommendationV2?>(null); private set
+    var settings by mutableStateOf(Settings()); private set
     var loading by mutableStateOf(false); private set
     var error by mutableStateOf(""); private set
 
     init {
-        viewModelScope.launch {
-            base = settingsStore.current().baseLeverage
-            upcoming = AlertPlanner.upcoming(calendar, LocalDate.now(), count = 3)
-            refresh()
-        }
+        recommendation = runCatching { recommendationRepo.displayedRecommendation() }.getOrNull()
+        viewModelScope.launch { settings = settingsStore.current() }
     }
 
-    fun setBaseLeverage(v: Double) {
-        base = v
-        viewModelScope.launch {
-            settingsStore.setBaseLeverage(v)
-            recomputeOnly()
-        }
-    }
-
-    private suspend fun recomputeOnly() {
-        state = overlayRepo.state(base)
-        if (state == null) error = "need SPY history — connect to the internet once"
-    }
-
-    fun refresh() {
+    fun preview() {
         loading = true
         error = ""
         viewModelScope.launch {
-            state = overlayRepo.state(base, forceRefresh = true)
-            if (state == null) error = "SPY fetch failed (offline?)"
-            ensembles = listOf("SPY", "QQQ", "XLK").mapNotNull { sym ->
-                overlayRepo.ensembleState(sym)?.let { sym to it }
-            }.toMap()
+            syncRepo.preview().fold(
+                {
+                    recommendation = it
+                    error = ""
+                },
+                { error = "Preview requires the PC API; showing last canonical/default result." },
+            )
             loading = false
         }
     }
@@ -86,96 +62,78 @@ class OverlayViewModel(
 
 @Composable
 fun OverlayScreen(vm: OverlayViewModel) {
-    val s = vm.state
+    val recommendation = vm.recommendation
     Column(
-        modifier = Modifier.fillMaxSize().padding(12.dp).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().padding(12.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Calendar-leverage overlay", style = MaterialTheme.typography.titleMedium)
+        Text("Portfolio & risk", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Server-calculated only. Offline mode never recalculates signals or leverage.",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.Gray,
+        )
+        Button(onClick = vm::preview, enabled = !vm.loading) { Text("Refresh custom preview") }
+        if (vm.error.isNotBlank()) Text(vm.error, color = MaterialTheme.colorScheme.error)
+        if (recommendation == null) {
+            Text("No canonical recommendation cached.")
+            return@Column
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = vm.base == 1.0, onClick = { vm.setBaseLeverage(1.0) },
-                label = { Text("base 1.0x") })
-            FilterChip(selected = vm.base == 1.3, onClick = { vm.setBaseLeverage(1.3) },
-                label = { Text("base 1.3x") })
-            Button(onClick = vm::refresh, enabled = !vm.loading) { Text("Refresh") }
+            AssistChip(onClick = {}, label = { Text(recommendation.status) })
+            AssistChip(
+                onClick = {},
+                label = { Text(recommendation.outputRiskState.drawdownState) },
+            )
         }
-        if (vm.error.isNotBlank()) {
-            Text(vm.error, color = MaterialTheme.colorScheme.error)
-        }
-        if (vm.ensembles.isNotEmpty()) {
-            Text("Ensemble4 — the validated signal",
-                style = MaterialTheme.typography.titleMedium)
-            vm.ensembles.forEach { (sym, e) ->
-                Card {
-                    Column(Modifier.padding(10.dp)) {
-                        Row {
-                            Text(sym, style = MaterialTheme.typography.titleMedium)
-                            Text("  exposure %.2f".format(e.exposure),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary)
-                        }
-                        Text(
-                            e.families.entries.joinToString("   ") { (k, v) ->
-                                val mark = when {
-                                    k == "vol_target" -> "%.2f".format(v)
-                                    v >= 1.0 -> "YES"
-                                    else -> "no"
-                                }
-                                "${k.removeSuffix("_20d").removeSuffix("_3dn")}: $mark"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.Gray,
-                        )
-                    }
+        Card {
+            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                Text("Leverage", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "requested ${"%.2f".format(vm.settings.maximumGrossLeverage)}x  •  " +
+                        "effective ${"%.2f".format(recommendation.effectiveLeverage)}x",
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    "Binding: ${recommendation.bindingConstraints.ifEmpty { listOf("none") }.joinToString()}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                recommendation.constraints.filter { it.binding }.forEach {
+                    Text("${it.name}: limit ${"%.2f".format(it.leverageLimit)}x")
                 }
             }
         }
-        if (vm.upcoming.isNotEmpty()) {
-            Text("Upcoming sniper windows",
-                style = MaterialTheme.typography.titleMedium)
-            Card {
-                Column(Modifier.padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    vm.upcoming.forEach { a ->
-                        val d = a.fireAt.toLocalDate()
-                        val days = java.time.temporal.ChronoUnit.DAYS
-                            .between(LocalDate.now(), d)
-                        Text("$d (in $days d) — ${a.title}",
-                            style = MaterialTheme.typography.bodySmall)
-                    }
+        Card {
+            Column(Modifier.padding(12.dp)) {
+                Text("Stress & financing", style = MaterialTheme.typography.titleMedium)
+                Text("One-day 99.5% loss  ${"%.2f".format(recommendation.oneDayStressLoss * 100)}%")
+                Text("20-session path loss  ${"%.2f".format(recommendation.multiSessionStressLoss * 100)}%")
+                Text("Expected volatility  ${"%.2f".format(recommendation.expectedVolatility * 100)}%")
+                Text("Annual funding cost  ${"%.2f".format(recommendation.fundingCost * 100)}%")
+                Text("Modeled active net  ${"%+.2f".format(recommendation.expectedNetReturn * 100)}%")
+            }
+        }
+        Card {
+            Column(Modifier.padding(12.dp)) {
+                Text("Canonical targets", style = MaterialTheme.typography.titleMedium)
+                recommendation.personalizedTargetWeights.forEach {
+                    Text("${it.symbol}  ${"%+.2f".format(it.weight * 100)}%")
                 }
             }
         }
-        if (s != null) {
-            ExposureDial(value = s.appliedL)
-            Text("as of ${s.date} (exposure applied to the NEXT session)",
-                style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                s.firedRules.forEach { AssistChip(onClick = {}, label = { Text(it) }) }
-                if (s.firedRules.isEmpty()) {
-                    AssistChip(onClick = {}, label = { Text("No special rules today") })
-                }
-            }
-            Card {
-                Column(Modifier.padding(12.dp)) {
-                    val smaText = s.sma200?.let { sma ->
-                        val pct = (s.spyClose / sma - 1) * 100
-                        "SPY %.2f vs 200-DMA %.2f (%+.1f%%)".format(s.spyClose, sma, pct)
-                    } ?: "200-DMA warming up"
-                    Text(smaText, style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        s.vol20?.let { "20d realized vol %.1f%%".format(it * 100) }
-                            ?: "vol warming up",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-            Text("Exposure — last ${s.history.size} sessions",
-                style = MaterialTheme.typography.labelMedium)
-            Sparkline(values = s.history.map { it.second },
-                modifier = Modifier.fillMaxWidth())
-        } else if (!vm.loading) {
-            Text("No overlay state yet.", color = Color.Gray)
+        Text(
+            "Evidence ${recommendation.evidenceGrade} • fresh ${recommendation.freshness.isFresh} " +
+                "(${recommendation.freshness.ageBusinessDays} business days) • " +
+                "drawdown ${"%.2f".format(recommendation.outputRiskState.currentDrawdown * 100)}%",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (recommendation.outputRiskState.cashLatched) {
+            Text(
+                "Cash latch active. Reset eligible: ${recommendation.outputRiskState.resetEligible}; " +
+                    "sessions latched: ${recommendation.outputRiskState.sessionsSinceLatch}",
+                color = MaterialTheme.colorScheme.error,
+            )
         }
+        recommendation.warnings.forEach { Text("⚠ $it", style = MaterialTheme.typography.bodySmall) }
     }
 }

@@ -1,4 +1,6 @@
-"""The validated 4-family ensemble ("ensemble4") and the optional seasonal
+"""Archived legacy ensemble and seasonal research, excluded from V2 actions.
+
+The historical 4-family ensemble ("ensemble4") and the optional seasonal
 multiplier — the distillation of every edge that survived this project's
 campaigns (see docs/strategy-zoo.md and artifacts/strategy_zoo.json).
 
@@ -31,8 +33,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-ENSEMBLE_FAMILIES = ("trend_or_dip", "breakout_20d", "vol_target",
-                     "reversion_3dn")
+ENSEMBLE_FAMILIES = ("trend_or_dip", "breakout_20d", "vol_target", "reversion_3dn")
 TRADE_COST = 0.0002
 
 
@@ -55,18 +56,18 @@ def family_positions(bars: pd.DataFrame) -> pd.DataFrame:
     rsi2 = _rsi(c, 2)
     hi20 = c.rolling(20).max()  # close-based: the validated zoo definition
     vol20 = ret.rolling(20).std() * np.sqrt(252)
-    return pd.DataFrame({
-        "trend_or_dip": np.maximum((c > sma200).astype(float),
-                                   (rsi2 < 10).astype(float)),
-        "breakout_20d": _hold_n((c > hi20.shift()).astype(float), 10),
-        "vol_target": (0.10 / vol20).clip(upper=1.5).fillna(0.0),
-        "reversion_3dn": ((ret < 0) & (ret.shift() < 0)
-                          & (ret.shift(2) < 0)).astype(float),
-    }, index=bars.index)
+    return pd.DataFrame(
+        {
+            "trend_or_dip": np.maximum((c > sma200).astype(float), (rsi2 < 10).astype(float)),
+            "breakout_20d": _hold_n((c > hi20.shift()).astype(float), 10),
+            "vol_target": (0.10 / vol20).clip(upper=1.5).fillna(0.0),
+            "reversion_3dn": ((ret < 0) & (ret.shift() < 0) & (ret.shift(2) < 0)).astype(float),
+        },
+        index=bars.index,
+    )
 
 
-def ensemble_exposure(bars: pd.DataFrame,
-                      weights: dict[str, float] | None = None) -> pd.Series:
+def ensemble_exposure(bars: pd.DataFrame, weights: dict[str, float] | None = None) -> pd.Series:
     """Equal-weight (or custom-weight) blend of the four family positions."""
     fams = family_positions(bars)
     if weights is None:
@@ -94,8 +95,9 @@ def seasonal_multiplier(index: pd.DatetimeIndex) -> pd.Series:
     return mult
 
 
-def backtest_exposure(position: pd.Series, returns: pd.Series,
-                      cost: float = TRADE_COST) -> pd.Series:
+def backtest_exposure(
+    position: pd.Series, returns: pd.Series, cost: float = TRADE_COST
+) -> pd.Series:
     """Net daily strategy returns: position decided at close t-1 earns t."""
     held = position.shift(1).fillna(0.0)
     return held * returns - cost * held.diff().abs().fillna(0.0)

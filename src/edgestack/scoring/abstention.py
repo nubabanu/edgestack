@@ -64,7 +64,6 @@ def gate_reasons(
         )
     if reward_to_risk is not None and reward_to_risk < cfg.signals.min_reward_to_risk:
         reasons.append(
-            f"reward-to-risk {reward_to_risk:.2f} below minimum "
-            f"{cfg.signals.min_reward_to_risk}"
+            f"reward-to-risk {reward_to_risk:.2f} below minimum {cfg.signals.min_reward_to_risk}"
         )
     return reasons

@@ -1,5 +1,7 @@
 # Statistical validation
 
+> The legacy `VALIDATED` lifecycle label below is not a V2 promotion decision. V2 uses annual nested folds, complete-family SPA/StepM, paired block-bootstrap Sharpe bounds, stress survival, and prospective stock gates documented in [Recommendation Engine V2](recommendation-engine-v2.md).
+
 ## Why so much machinery
 
 Searching a rule space over one historical path manufactures false positives.
@@ -79,7 +81,7 @@ where V is the cross-trial SR variance — approximated by `1/n` when unknown
 Failures are recorded verbatim in `lifecycle.failure_reasons`. "No edge
 survived" is a legitimate, common outcome.
 
-## The final untouched test period
+## The final guarded test period (legacy mechanism)
 
 Everything above runs strictly before `validation.final_test_start`. The
 `TestPeriodGuard` truncates all catalog reads at that boundary; access

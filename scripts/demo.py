@@ -34,8 +34,9 @@ def _step(title: str):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/demo.yaml")
-    parser.add_argument("--offline", action="store_true",
-                        help="use the synthetic provider instead of Yahoo")
+    parser.add_argument(
+        "--offline", action="store_true", help="use the synthetic provider instead of Yahoo"
+    )
     parser.add_argument("--start", default="2012-01-01")
     parser.add_argument("--end", default=str(date.today()))
     args = parser.parse_args()
@@ -48,13 +49,17 @@ def main() -> int:
     provider = "synthetic" if args.offline else None
     try:
         pipelines.run_data_download(
-            cfg, date.fromisoformat(args.start), date.fromisoformat(args.end),
+            cfg,
+            date.fromisoformat(args.start),
+            date.fromisoformat(args.end),
             provider=provider,
         )
     except (ProviderError, OSError) as exc:
         print(f"real-data provider unavailable ({exc}); falling back to synthetic data")
         pipelines.run_data_download(
-            cfg, date.fromisoformat(args.start), date.fromisoformat(args.end),
+            cfg,
+            date.fromisoformat(args.start),
+            date.fromisoformat(args.end),
             provider="synthetic",
         )
 
@@ -79,8 +84,10 @@ def main() -> int:
         pipelines.run_signals_rank(cfg, top=10)
     except EdgeStackError as exc:
         print(f"signal generation: {exc}")
-        print("(no validated edges on real data is a legitimate outcome — the "
-              "system abstains rather than inventing signals)")
+        print(
+            "(no validated edges on real data is a legitimate outcome — the "
+            "system abstains rather than inventing signals)"
+        )
 
     _step("8. out-of-sample backtest under conservative costs")
     try:
@@ -91,8 +98,10 @@ def main() -> int:
 
     _step("done")
     print(f"total wall time: {time.time() - t0:.0f}s")
-    print("Reminder: research and paper-trading output only; free data carries "
-          "survivorship bias; nothing here is investment advice.")
+    print(
+        "Reminder: research and paper-trading output only; free data carries "
+        "survivorship bias; nothing here is investment advice."
+    )
     return 0
 
 

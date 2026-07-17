@@ -26,4 +26,9 @@ class JsonFileStore(context: Context, private val json: Json) {
             tmp.renameTo(File(dir, name))
         }
     }
+
+    fun delete(name: String) {
+        File(dir, name).delete()
+        File(dir, "$name.tmp").delete()
+    }
 }

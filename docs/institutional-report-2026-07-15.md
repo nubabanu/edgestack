@@ -1,8 +1,10 @@
-# EdgeStack Institutional Research Report — 2026-07-15 (Wednesday)
+# EdgeStack Institutional Research Report — historical snapshot, 2026-07-15
+
+> Superseded by Recommendation Engine V2. The 2024–2026 period was previously accessed, manual search history may be incomplete, and historical confirmation/promotion claims are withdrawn. Values below are provenance only and cannot assign portfolio weight.
 
 > **RESEARCH OUTPUT — NOT INVESTMENT ADVICE.** Every number below comes from the
 > EdgeStack point-in-time research stack (Yahoo daily OHLCV, PIT S&P 500 membership,
-> purged walk-forward validation, 2024–2026 untouched holdout). Verified data and
+> purged walk-forward validation, 2024–2026 historical period). Verified data and
 > estimates are labeled. Nothing here is a guarantee of returns.
 
 ---
@@ -223,7 +225,7 @@ Is SPY above its 200-DMA?
 
 **The honest bottom line:** this project tested the "selective sniper with leverage
 beats passive" hypothesis with institutional discipline — nested validation, honest
-trial counting, untouched holdout, four cost scenarios — and the data said no.
+trial counting, a held-aside historical partition, four cost scenarios — and the data said no.
 What survives is humbler and real: own the market, gate the catastrophic drawdowns
 with the 200-DMA, tilt modestly toward momentum+quality if you accept unproven-but-
 positive holdout evidence, size small, and never leverage a signal whose conviction

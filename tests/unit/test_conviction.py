@@ -33,23 +33,40 @@ def _inputs(**overrides: float) -> ConvictionInputs:
 
 
 @given(
-    p=unit, net=st.floats(-0.05, 0.05, allow_nan=False),
+    p=unit,
+    net=st.floats(-0.05, 0.05, allow_nan=False),
     risk=st.floats(0.0, 0.2, allow_nan=False),
     ess=st.floats(0.0, 10000, allow_nan=False),
-    stability=unit, oos=unit, dsr=unit, regime=unit, liq=unit, dq=unit,
-    cost=unit, ci=st.floats(0.0, 0.5, allow_nan=False),
-    tail=st.floats(-0.5, 0.0, allow_nan=False), disagree=unit,
+    stability=unit,
+    oos=unit,
+    dsr=unit,
+    regime=unit,
+    liq=unit,
+    dq=unit,
+    cost=unit,
+    ci=st.floats(0.0, 0.5, allow_nan=False),
+    tail=st.floats(-0.5, 0.0, allow_nan=False),
+    disagree=unit,
 )
 def test_property_score_always_in_bounds(
     p, net, risk, ess, stability, oos, dsr, regime, liq, dq, cost, ci, tail, disagree
 ) -> None:
     result = conviction(
         ConvictionInputs(
-            calibrated_probability=p, expected_net_return=net, expected_risk=risk,
-            effective_sample_size=ess, stability_score=stability,
-            out_of_sample_score=oos, deflated_sharpe=dsr, regime_similarity=regime,
-            liquidity_score=liq, data_quality_score=dq, cost_survival_fraction=cost,
-            ci_width=ci, tail_risk=tail, model_edge_disagreement=disagree,
+            calibrated_probability=p,
+            expected_net_return=net,
+            expected_risk=risk,
+            effective_sample_size=ess,
+            stability_score=stability,
+            out_of_sample_score=oos,
+            deflated_sharpe=dsr,
+            regime_similarity=regime,
+            liquidity_score=liq,
+            data_quality_score=dq,
+            cost_survival_fraction=cost,
+            ci_width=ci,
+            tail_risk=tail,
+            model_edge_disagreement=disagree,
         )
     )
     assert 0.0 <= result.score <= 100.0
@@ -95,6 +112,13 @@ def test_regime_mismatch_and_costs_reduce_score() -> None:
 
 def test_components_are_reported() -> None:
     result = conviction(_inputs())
-    for key in ("base_edge", "reliability", "applicability", "tradability",
-                "risk_penalty", "shrink", "raw_shrunk"):
+    for key in (
+        "base_edge",
+        "reliability",
+        "applicability",
+        "tradability",
+        "risk_penalty",
+        "shrink",
+        "raw_shrunk",
+    ):
         assert key in result.components

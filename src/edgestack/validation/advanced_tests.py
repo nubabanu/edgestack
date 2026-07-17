@@ -48,17 +48,21 @@ def spa_test(
     """
     from arch.bootstrap import SPA
 
-    joined = pd.concat([benchmark_returns.rename("__bench__"), model_returns],
-                       axis=1).dropna()
+    joined = pd.concat([benchmark_returns.rename("__bench__"), model_returns], axis=1).dropna()
     if len(joined) < 60:
         raise ValidationError("need >=60 aligned observations for SPA")
     bench_losses = -joined["__bench__"].to_numpy()
     model_losses = -joined.drop(columns="__bench__").to_numpy()
-    spa = SPA(bench_losses, model_losses, reps=reps, block_size=block_size,
-              bootstrap="stationary", seed=seed)
+    spa = SPA(
+        bench_losses,
+        model_losses,
+        reps=reps,
+        block_size=block_size,
+        bootstrap="stationary",
+        seed=seed,
+    )
     spa.compute()
-    mean_excess = (joined.drop(columns="__bench__").mean()
-                   - joined["__bench__"].mean())
+    mean_excess = joined.drop(columns="__bench__").mean() - joined["__bench__"].mean()
     return {
         "p_lower": float(spa.pvalues["lower"]),
         "p_consistent": float(spa.pvalues["consistent"]),
@@ -82,14 +86,18 @@ def stepm_superior(
     """Romano-Wolf StepM: names of models genuinely superior to the benchmark."""
     from arch.bootstrap import StepM
 
-    joined = pd.concat([benchmark_returns.rename("__bench__"), model_returns],
-                       axis=1).dropna()
+    joined = pd.concat([benchmark_returns.rename("__bench__"), model_returns], axis=1).dropna()
     if len(joined) < 60:
         raise ValidationError("need >=60 aligned observations for StepM")
-    stepm = StepM(-joined["__bench__"].to_numpy(),
-                  -joined.drop(columns="__bench__"),
-                  size=size, reps=reps, block_size=block_size,
-                  bootstrap="stationary", seed=seed)
+    stepm = StepM(
+        -joined["__bench__"].to_numpy(),
+        -joined.drop(columns="__bench__"),
+        size=size,
+        reps=reps,
+        block_size=block_size,
+        bootstrap="stationary",
+        seed=seed,
+    )
     stepm.compute()
     return [str(name) for name in stepm.superior_models]
 

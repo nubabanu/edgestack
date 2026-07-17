@@ -66,7 +66,8 @@ class FillSimulator:
             is_sell=quantity < 0, participation=participation
         )
         order.status = (
-            OrderStatus.FILLED if abs(quantity) >= abs(order.quantity) - 1e-9
+            OrderStatus.FILLED
+            if abs(quantity) >= abs(order.quantity) - 1e-9
             else OrderStatus.PARTIAL
         )
         return Fill(
@@ -79,8 +80,7 @@ class FillSimulator:
             tag=order.tag,
         )
 
-    def _execution_price(self, order: Order, bar: Bar,
-                         at_open_phase: bool) -> float | None:
+    def _execution_price(self, order: Order, bar: Bar, at_open_phase: bool) -> float | None:
         kind = order.order_type
         if kind is OrderType.MARKET_ON_OPEN:
             return bar.open if at_open_phase else None
@@ -93,9 +93,9 @@ class FillSimulator:
                 raise ExecutionModelError("LIMIT order without limit_price")
             if order.is_buy:
                 if bar.open <= limit:
-                    return bar.open          # opened at or below the limit
+                    return bar.open  # opened at or below the limit
                 if bar.low <= limit:
-                    return limit             # touched intraday
+                    return limit  # touched intraday
             else:
                 if bar.open >= limit:
                     return bar.open
@@ -109,12 +109,12 @@ class FillSimulator:
                 raise ExecutionModelError("STOP order without stop_price")
             if order.is_buy:  # buy stop (covers a short)
                 if bar.open >= stop:
-                    return bar.open          # gapped through: worse than stop
+                    return bar.open  # gapped through: worse than stop
                 if bar.high >= stop:
                     return stop
             else:  # sell stop (protects a long)
                 if bar.open <= stop:
-                    return bar.open          # gapped through: worse than stop
+                    return bar.open  # gapped through: worse than stop
                 if bar.low <= stop:
                     return stop
             return None

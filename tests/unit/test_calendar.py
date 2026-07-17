@@ -16,12 +16,12 @@ def cal() -> TradingCalendar:
 
 
 def test_known_holidays_are_not_sessions(cal: TradingCalendar) -> None:
-    assert not cal.is_session(date(2023, 4, 7))     # Good Friday
-    assert not cal.is_session(date(2023, 11, 23))   # Thanksgiving
-    assert not cal.is_session(date(2023, 12, 25))   # Christmas
-    assert not cal.is_session(date(2023, 1, 16))    # MLK Day
-    assert cal.is_session(date(2023, 7, 3))         # early close, still a session
-    assert not cal.is_session(date(2023, 7, 8))     # Saturday
+    assert not cal.is_session(date(2023, 4, 7))  # Good Friday
+    assert not cal.is_session(date(2023, 11, 23))  # Thanksgiving
+    assert not cal.is_session(date(2023, 12, 25))  # Christmas
+    assert not cal.is_session(date(2023, 1, 16))  # MLK Day
+    assert cal.is_session(date(2023, 7, 3))  # early close, still a session
+    assert not cal.is_session(date(2023, 7, 8))  # Saturday
 
 
 def test_next_prev_session_skip_holidays(cal: TradingCalendar) -> None:

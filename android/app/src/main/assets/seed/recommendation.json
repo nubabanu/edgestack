@@ -1,0 +1,497 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-07-16T18:48:31.191600Z",
+  "session": "2026-07-16",
+  "as_of": "2026-07-16T20:00:00Z",
+  "execution_at": "2026-07-17T13:30:00Z",
+  "data_version": "a56dacd0609b94e443d3d613c985c91e893cf1dd0f5757d32a9c07c3299ce87d",
+  "artifact_version": "901d978448ec1e7224efbdc1b2e7a2360351b81aec5e2736e43389c0a75df8e7",
+  "policy_version": "baseline-diversified-v1",
+  "baseline_policy": {
+    "schema_version": 2,
+    "policy_version": "baseline-diversified-v1",
+    "effective_date": "2026-07-16",
+    "weights": [
+      {
+        "symbol": "SPY",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "broad_equity"
+      },
+      {
+        "symbol": "TLT",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "long_treasury"
+      },
+      {
+        "symbol": "SHY",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "short_treasury"
+      },
+      {
+        "symbol": "GLD",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "gold"
+      }
+    ],
+    "rebalance_schedule": "quarterly_next_open_or_drift",
+    "drift_threshold": 0.05,
+    "execution_policy": "next_open",
+    "total_return_treatment": "adjusted_open_with_explicit_corporate_actions",
+    "one_way_cost_bps": 5.0,
+    "participation_limit": 0.1,
+    "alpha_claimed": false
+  },
+  "default_risk_profile": {
+    "schema_version": 2,
+    "account_equity": 100000.0,
+    "target_volatility": 0.12,
+    "maximum_drawdown": 0.15,
+    "maximum_gross_leverage": 1.0,
+    "funding_spread_bps": 200.0,
+    "per_stock_cap": 0.03,
+    "sector_cap": 0.2
+  },
+  "base_recommendation": {
+    "schema_version": 2,
+    "status": "WATCHLIST_ONLY",
+    "as_of": "2026-07-16T20:00:00Z",
+    "execution_at": "2026-07-17T13:30:00Z",
+    "artifact_version": "901d978448ec1e7224efbdc1b2e7a2360351b81aec5e2736e43389c0a75df8e7",
+    "data_version": "a56dacd0609b94e443d3d613c985c91e893cf1dd0f5757d32a9c07c3299ce87d",
+    "policy_version": "baseline-diversified-v1",
+    "baseline_weights": [
+      {
+        "symbol": "SPY",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "broad_equity"
+      },
+      {
+        "symbol": "TLT",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "long_treasury"
+      },
+      {
+        "symbol": "SHY",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "short_treasury"
+      },
+      {
+        "symbol": "GLD",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "gold"
+      }
+    ],
+    "promoted_sleeves": [],
+    "promoted_compound_sleeves": [],
+    "unlevered_base_weights": [
+      {
+        "symbol": "SPY",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "broad_equity"
+      },
+      {
+        "symbol": "TLT",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "long_treasury"
+      },
+      {
+        "symbol": "SHY",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "short_treasury"
+      },
+      {
+        "symbol": "GLD",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "gold"
+      }
+    ],
+    "expected_returns": {},
+    "expected_net_return": 0.0,
+    "expected_volatility": 0.09739129565845579,
+    "covariance_version": "25d62b1fad6fd0d2",
+    "turnover_estimate": 0.0,
+    "evidence_grades": {},
+    "watchlist": [
+      {
+        "symbol": "NRG",
+        "asset_kind": "STOCK",
+        "horizon_sessions": 10,
+        "family": "legacy_incomplete_manual_search",
+        "thesis": "Previously accessed 2024-2026 research idea imported for observation only; legacy validation and search history are not promotion-compatible.",
+        "evidence_grade": "INSUFFICIENT",
+        "prospective_sessions": 0,
+        "effective_resolved_outcomes": 0.0,
+        "zero_weight_reason": "legacy artifact is ineligible; freeze V2 prospectively and accumulate 252 sessions plus ESS >= 100"
+      },
+      {
+        "symbol": "TEL",
+        "asset_kind": "STOCK",
+        "horizon_sessions": 10,
+        "family": "legacy_incomplete_manual_search",
+        "thesis": "Previously accessed 2024-2026 research idea imported for observation only; legacy validation and search history are not promotion-compatible.",
+        "evidence_grade": "INSUFFICIENT",
+        "prospective_sessions": 0,
+        "effective_resolved_outcomes": 0.0,
+        "zero_weight_reason": "legacy artifact is ineligible; freeze V2 prospectively and accumulate 252 sessions plus ESS >= 100"
+      },
+      {
+        "symbol": "NCLH",
+        "asset_kind": "STOCK",
+        "horizon_sessions": 10,
+        "family": "legacy_incomplete_manual_search",
+        "thesis": "Previously accessed 2024-2026 research idea imported for observation only; legacy validation and search history are not promotion-compatible.",
+        "evidence_grade": "INSUFFICIENT",
+        "prospective_sessions": 0,
+        "effective_resolved_outcomes": 0.0,
+        "zero_weight_reason": "legacy artifact is ineligible; freeze V2 prospectively and accumulate 252 sessions plus ESS >= 100"
+      },
+      {
+        "symbol": "HAS",
+        "asset_kind": "STOCK",
+        "horizon_sessions": 10,
+        "family": "legacy_incomplete_manual_search",
+        "thesis": "Previously accessed 2024-2026 research idea imported for observation only; legacy validation and search history are not promotion-compatible.",
+        "evidence_grade": "INSUFFICIENT",
+        "prospective_sessions": 0,
+        "effective_resolved_outcomes": 0.0,
+        "zero_weight_reason": "legacy artifact is ineligible; freeze V2 prospectively and accumulate 252 sessions plus ESS >= 100"
+      },
+      {
+        "symbol": "STZ",
+        "asset_kind": "STOCK",
+        "horizon_sessions": 10,
+        "family": "legacy_incomplete_manual_search",
+        "thesis": "Previously accessed 2024-2026 research idea imported for observation only; legacy validation and search history are not promotion-compatible.",
+        "evidence_grade": "INSUFFICIENT",
+        "prospective_sessions": 0,
+        "effective_resolved_outcomes": 0.0,
+        "zero_weight_reason": "legacy artifact is ineligible; freeze V2 prospectively and accumulate 252 sessions plus ESS >= 100"
+      },
+      {
+        "symbol": "MCD",
+        "asset_kind": "STOCK",
+        "horizon_sessions": 10,
+        "family": "legacy_incomplete_manual_search",
+        "thesis": "Previously accessed 2024-2026 research idea imported for observation only; legacy validation and search history are not promotion-compatible.",
+        "evidence_grade": "INSUFFICIENT",
+        "prospective_sessions": 0,
+        "effective_resolved_outcomes": 0.0,
+        "zero_weight_reason": "legacy artifact is ineligible; freeze V2 prospectively and accumulate 252 sessions plus ESS >= 100"
+      },
+      {
+        "symbol": "PEP",
+        "asset_kind": "STOCK",
+        "horizon_sessions": 10,
+        "family": "legacy_incomplete_manual_search",
+        "thesis": "Previously accessed 2024-2026 research idea imported for observation only; legacy validation and search history are not promotion-compatible.",
+        "evidence_grade": "INSUFFICIENT",
+        "prospective_sessions": 0,
+        "effective_resolved_outcomes": 0.0,
+        "zero_weight_reason": "legacy artifact is ineligible; freeze V2 prospectively and accumulate 252 sessions plus ESS >= 100"
+      },
+      {
+        "symbol": "HCA",
+        "asset_kind": "STOCK",
+        "horizon_sessions": 10,
+        "family": "legacy_incomplete_manual_search",
+        "thesis": "Previously accessed 2024-2026 research idea imported for observation only; legacy validation and search history are not promotion-compatible.",
+        "evidence_grade": "INSUFFICIENT",
+        "prospective_sessions": 0,
+        "effective_resolved_outcomes": 0.0,
+        "zero_weight_reason": "legacy artifact is ineligible; freeze V2 prospectively and accumulate 252 sessions plus ESS >= 100"
+      },
+      {
+        "symbol": "GEHC",
+        "asset_kind": "STOCK",
+        "horizon_sessions": 10,
+        "family": "legacy_incomplete_manual_search",
+        "thesis": "Previously accessed 2024-2026 research idea imported for observation only; legacy validation and search history are not promotion-compatible.",
+        "evidence_grade": "INSUFFICIENT",
+        "prospective_sessions": 0,
+        "effective_resolved_outcomes": 0.0,
+        "zero_weight_reason": "legacy artifact is ineligible; freeze V2 prospectively and accumulate 252 sessions plus ESS >= 100"
+      },
+      {
+        "symbol": "INTU",
+        "asset_kind": "STOCK",
+        "horizon_sessions": 10,
+        "family": "legacy_incomplete_manual_search",
+        "thesis": "Previously accessed 2024-2026 research idea imported for observation only; legacy validation and search history are not promotion-compatible.",
+        "evidence_grade": "INSUFFICIENT",
+        "prospective_sessions": 0,
+        "effective_resolved_outcomes": 0.0,
+        "zero_weight_reason": "legacy artifact is ineligible; freeze V2 prospectively and accumulate 252 sessions plus ESS >= 100"
+      }
+    ],
+    "freshness": {
+      "as_of": "2026-07-16T20:00:00Z",
+      "expected_session": "2026-07-16",
+      "is_fresh": true,
+      "age_business_days": 0,
+      "complete": true,
+      "compatible": true,
+      "reasons": []
+    },
+    "warnings": []
+  },
+  "default_recommendation": {
+    "schema_version": 2,
+    "status": "WATCHLIST_ONLY",
+    "as_of": "2026-07-16T20:00:00Z",
+    "execution_at": "2026-07-17T13:30:00Z",
+    "artifact_version": "901d978448ec1e7224efbdc1b2e7a2360351b81aec5e2736e43389c0a75df8e7",
+    "data_version": "a56dacd0609b94e443d3d613c985c91e893cf1dd0f5757d32a9c07c3299ce87d",
+    "policy_version": "baseline-diversified-v1",
+    "risk_profile_hash": "5a7ee2f4e3ec97528aade21076c9497c6c288ef0e8f61a70becf42c62c32b4ba",
+    "input_risk_state_version": 0,
+    "output_risk_state": {
+      "schema_version": 2,
+      "state_version": 1,
+      "previous_effective_leverage": 0.25,
+      "peak_equity": 100000.0,
+      "current_equity": 100000.0,
+      "current_drawdown": 0.0,
+      "drawdown_state": "NORMAL",
+      "cash_latched": false,
+      "reset_eligible": false,
+      "sessions_since_latch": 0,
+      "last_session": "2026-07-16",
+      "previous_target_weights": [
+        {
+          "symbol": "SPY",
+          "weight": 0.0625,
+          "asset_kind": "ETF",
+          "sector": "broad_equity"
+        },
+        {
+          "symbol": "TLT",
+          "weight": 0.0625,
+          "asset_kind": "ETF",
+          "sector": "long_treasury"
+        },
+        {
+          "symbol": "SHY",
+          "weight": 0.0625,
+          "asset_kind": "ETF",
+          "sector": "short_treasury"
+        },
+        {
+          "symbol": "GLD",
+          "weight": 0.0625,
+          "asset_kind": "ETF",
+          "sector": "gold"
+        },
+        {
+          "symbol": "CASH",
+          "weight": 0.75,
+          "asset_kind": "CASH",
+          "sector": "cash"
+        }
+      ]
+    },
+    "baseline_weights": [
+      {
+        "symbol": "SPY",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "broad_equity"
+      },
+      {
+        "symbol": "TLT",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "long_treasury"
+      },
+      {
+        "symbol": "SHY",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "short_treasury"
+      },
+      {
+        "symbol": "GLD",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "gold"
+      }
+    ],
+    "base_recommendation_weights": [
+      {
+        "symbol": "SPY",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "broad_equity"
+      },
+      {
+        "symbol": "TLT",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "long_treasury"
+      },
+      {
+        "symbol": "SHY",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "short_treasury"
+      },
+      {
+        "symbol": "GLD",
+        "weight": 0.25,
+        "asset_kind": "ETF",
+        "sector": "gold"
+      }
+    ],
+    "personalized_target_weights": [
+      {
+        "symbol": "SPY",
+        "weight": 0.0625,
+        "asset_kind": "ETF",
+        "sector": "broad_equity"
+      },
+      {
+        "symbol": "TLT",
+        "weight": 0.0625,
+        "asset_kind": "ETF",
+        "sector": "long_treasury"
+      },
+      {
+        "symbol": "SHY",
+        "weight": 0.0625,
+        "asset_kind": "ETF",
+        "sector": "short_treasury"
+      },
+      {
+        "symbol": "GLD",
+        "weight": 0.0625,
+        "asset_kind": "ETF",
+        "sector": "gold"
+      },
+      {
+        "symbol": "CASH",
+        "weight": 0.75,
+        "asset_kind": "CASH",
+        "sector": "cash"
+      }
+    ],
+    "effective_leverage": 0.25,
+    "constraints": [
+      {
+        "name": "user_cap",
+        "leverage_limit": 1.0,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "target_volatility",
+        "leverage_limit": 0.8792305973151988,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "one_day_loss_budget",
+        "leverage_limit": 2.52941536399208,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "remaining_drawdown_budget",
+        "leverage_limit": 2.4102805498783075,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "system_ceiling",
+        "leverage_limit": 5.0,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "liquidity",
+        "leverage_limit": 5.0,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "post_leverage_stock_cap",
+        "leverage_limit": 5.0,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "post_leverage_sector_cap",
+        "leverage_limit": 5.0,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "drawdown_state",
+        "leverage_limit": 5.0,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "market_freshness",
+        "leverage_limit": 5.0,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "funding_freshness",
+        "leverage_limit": 5.0,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "allocation_health",
+        "leverage_limit": 5.0,
+        "binding": false,
+        "detail": ""
+      },
+      {
+        "name": "session_increase",
+        "leverage_limit": 0.25,
+        "binding": true,
+        "detail": ""
+      }
+    ],
+    "binding_constraints": [
+      "session_increase"
+    ],
+    "expected_net_return": 0.0,
+    "expected_volatility": 0.03412074157974871,
+    "funding_cost": 0.0,
+    "turnover": 1.0,
+    "one_day_stress_loss": 0.0037063900747419335,
+    "multi_session_stress_loss": 0.01555835481553935,
+    "evidence_grade": "WATCHLIST",
+    "freshness": {
+      "as_of": "2026-07-16T20:00:00Z",
+      "expected_session": "2026-07-16",
+      "is_fresh": true,
+      "age_business_days": 0,
+      "complete": true,
+      "compatible": true,
+      "reasons": []
+    },
+    "warnings": [],
+    "compatibility_metadata": {
+      "funding_rate_as_of": "2026-07-14",
+      "funding_series": "DGS3MO",
+      "sizing_only": "true",
+      "stale_preservation": "false"
+    }
+  },
+  "disclaimer": "Research and paper-trading output only. Not investment advice; leverage can cause losses exceeding invested capital."
+}

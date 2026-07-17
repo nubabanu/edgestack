@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging as _stdlib_logging
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import typer
@@ -20,8 +20,11 @@ from edgestack.config import EdgeStackConfig, load_config
 from edgestack.exceptions import EdgeStackError
 from edgestack.logging import configure, get_logger, log_event
 
-app = typer.Typer(name="edgestack", help="EdgeStack — statistical edge research platform. "
-                                          "Research / paper trading only.", no_args_is_help=True)
+app = typer.Typer(
+    name="edgestack",
+    help="EdgeStack — statistical edge research platform. Research / paper trading only.",
+    no_args_is_help=True,
+)
 data_app = typer.Typer(help="Download and validate market data.", no_args_is_help=True)
 features_app = typer.Typer(help="Build feature datasets.", no_args_is_help=True)
 edges_app = typer.Typer(help="Discover and validate edges.", no_args_is_help=True)
@@ -31,14 +34,23 @@ backtest_app = typer.Typer(help="Run backtests.", no_args_is_help=True)
 monitor_app = typer.Typer(help="Monitor edge health and lifecycle.", no_args_is_help=True)
 report_app = typer.Typer(help="Produce reports.", no_args_is_help=True)
 paper_app = typer.Typer(help="Paper-trading session management.", no_args_is_help=True)
+risk_app = typer.Typer(help="Canonical risk-state management.", no_args_is_help=True)
 api_app = typer.Typer(help="Serve the read-only API.", no_args_is_help=True)
 dashboard_app = typer.Typer(help="Serve the research dashboard.", no_args_is_help=True)
 
 for name, sub in [
-    ("data", data_app), ("features", features_app), ("edges", edges_app),
-    ("models", models_app), ("signals", signals_app), ("backtest", backtest_app),
-    ("monitor", monitor_app), ("report", report_app), ("paper", paper_app),
-    ("api", api_app), ("dashboard", dashboard_app),
+    ("data", data_app),
+    ("features", features_app),
+    ("edges", edges_app),
+    ("models", models_app),
+    ("signals", signals_app),
+    ("backtest", backtest_app),
+    ("monitor", monitor_app),
+    ("report", report_app),
+    ("paper", paper_app),
+    ("risk", risk_app),
+    ("api", api_app),
+    ("dashboard", dashboard_app),
 ]:
     app.add_typer(sub, name=name)
 
@@ -50,8 +62,13 @@ _CONFIG_OPT = typer.Option(None, "--config", "-c", help="Path to YAML config fil
 def _setup(config_path: Path | None) -> EdgeStackConfig:
     configure()
     cfg = load_config(config_path)
-    log_event(log, _stdlib_logging.INFO, "config loaded",
-              config_hash=cfg.config_hash()[:12], seed=cfg.project.random_seed)
+    log_event(
+        log,
+        _stdlib_logging.INFO,
+        "config loaded",
+        config_hash=cfg.config_hash()[:12],
+        seed=cfg.project.random_seed,
+    )
     return cfg
 
 
@@ -93,8 +110,43 @@ def data_download(
     from edgestack.pipelines import run_data_download
 
     sym = tuple(s.strip().upper() for s in symbols.split(",")) if symbols else None
-    _run(run_data_download, cfg, date.fromisoformat(start), date.fromisoformat(end),
-         provider=provider, symbols=sym)
+    _run(
+        run_data_download,
+        cfg,
+        date.fromisoformat(start),
+        date.fromisoformat(end),
+        provider=provider,
+        symbols=sym,
+    )
+
+
+@data_app.command("intraday-download")
+def intraday_download(
+    symbols: str = typer.Option(..., help="Comma-separated symbols or tradable proxies."),
+    start: str = typer.Option(
+        str(date.today() - timedelta(days=365)), help="Start date YYYY-MM-DD."
+    ),
+    end: str = typer.Option(str(date.today()), help="End date YYYY-MM-DD."),
+    provider: str = typer.Option("yahoo", help="Intraday-capable provider."),
+    interval: str = typer.Option("60m", help="Bar interval: 15m or 60m."),
+    config: Path | None = _CONFIG_OPT,
+) -> None:
+    """Download hourly bars used by day/hour timing analysis."""
+    cfg = _setup(config)
+    from edgestack.pipelines import run_intraday_download
+
+    wanted = tuple(item.strip().upper() for item in symbols.split(",") if item.strip())
+    if not wanted:
+        raise typer.BadParameter("at least one symbol is required")
+    _run(
+        run_intraday_download,
+        cfg,
+        date.fromisoformat(start),
+        date.fromisoformat(end),
+        symbols=wanted,
+        provider=provider,
+        interval=interval,
+    )
 
 
 @data_app.command("validate")
@@ -215,6 +267,16 @@ def paper_run(
     _run(run_paper_session, cfg, as_of=date.fromisoformat(as_of) if as_of else None)
 
 
+@risk_app.command("reset-latch")
+def risk_reset_latch(config: Path | None = _CONFIG_OPT) -> None:
+    """Reset the persisted cash latch only after all eligibility gates pass."""
+    cfg = _setup(config)
+    from edgestack.recommendation.reset import reset_persisted_risk_state
+
+    publication = reset_persisted_risk_state(cfg)
+    typer.echo(f"risk latch reset in canonical run {publication.run_id}")
+
+
 @api_app.command("serve")
 def api_serve(
     host: str = typer.Option("127.0.0.1"),
@@ -236,14 +298,16 @@ def dashboard_serve(config: Path | None = _CONFIG_OPT) -> None:
     import subprocess
 
     if importlib.util.find_spec("streamlit") is None:
-        typer.secho("streamlit is not installed; install with: "
-                    "pip install edgestack[dashboard]", fg=typer.colors.YELLOW, err=True)
+        typer.secho(
+            "streamlit is not installed; install with: pip install edgestack[dashboard]",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
         raise typer.Exit(2)
     from edgestack import dashboard as dashboard_pkg
 
     script = Path(dashboard_pkg.__file__).parent / "app.py"
-    raise typer.Exit(subprocess.call([sys.executable, "-m", "streamlit", "run",
-                                      str(script)]))
+    raise typer.Exit(subprocess.call([sys.executable, "-m", "streamlit", "run", str(script)]))
 
 
 if __name__ == "__main__":

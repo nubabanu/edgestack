@@ -63,8 +63,9 @@ class QualityReport:
         return "\n".join(lines)
 
 
-def assess_panel(panel: pd.DataFrame, calendar: TradingCalendar,
-                 *, max_missing_fraction: float = 0.02) -> QualityReport:
+def assess_panel(
+    panel: pd.DataFrame, calendar: TradingCalendar, *, max_missing_fraction: float = 0.02
+) -> QualityReport:
     """Assess a validated bar panel symbol by symbol."""
     results = []
     for symbol, group in panel.groupby("symbol", sort=True):
@@ -72,8 +73,9 @@ def assess_panel(panel: pd.DataFrame, calendar: TradingCalendar,
     return QualityReport(symbols=tuple(results))
 
 
-def _assess_symbol(symbol: str, bars: pd.DataFrame, calendar: TradingCalendar,
-                   max_missing_fraction: float) -> SymbolQuality:
+def _assess_symbol(
+    symbol: str, bars: pd.DataFrame, calendar: TradingCalendar, max_missing_fraction: float
+) -> SymbolQuality:
     bars = bars.sort_values("date")
     dates = pd.DatetimeIndex(bars["date"])
     first, last = dates[0].date(), dates[-1].date()

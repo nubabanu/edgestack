@@ -90,8 +90,7 @@ def validate_batch(
 
     available = set(features.columns)
     binnable = tuple(
-        c for c in {*CONTINUOUS_RULE_FEATURES, "bench_trend_200", "bench_vol_20"}
-        if c in available
+        c for c in {*CONTINUOUS_RULE_FEATURES, "bench_trend_200", "bench_vol_20"} if c in available
     )
 
     # Evaluate every candidate out of sample, grouped by horizon so folds and
@@ -185,14 +184,24 @@ def validate_batch(
 
         if study is None:
             reasons.append(f"insufficient out-of-sample signals (n={len(net)})")
-            edges.append(_build_edge(cand, None, outcome, float(q), 0.0, cfg,
-                                     discovery_start, discovery_end, tuple(reasons)))
+            edges.append(
+                _build_edge(
+                    cand,
+                    None,
+                    outcome,
+                    float(q),
+                    0.0,
+                    cfg,
+                    discovery_start,
+                    discovery_end,
+                    tuple(reasons),
+                )
+            )
             continue
 
         dsr = deflated_sharpe_ratio(net, n_trials=batch.trial_count)
         survival = {
-            s.value: bool(len(r) and r.mean() > 0)
-            for s, r in outcome.returns_by_scenario.items()
+            s.value: bool(len(r) and r.mean() > 0) for s, r in outcome.returns_by_scenario.items()
         }
 
         if q > cfg.validation.fdr_alpha:
@@ -212,15 +221,25 @@ def validate_batch(
         n_folds_pos = sum(1 for m in outcome.fold_net_means if m > 0)
         n_folds_obs = max(1, len(outcome.fold_net_means))
         if n_folds_pos / n_folds_obs < cfg.validation.min_subperiod_consistency:
-            reasons.append(
-                f"positive in only {n_folds_pos}/{n_folds_obs} walk-forward folds"
-            )
+            reasons.append(f"positive in only {n_folds_pos}/{n_folds_obs} walk-forward folds")
         if dsr < 0.5:
-            reasons.append(f"deflated Sharpe probability {dsr:.2f} < 0.50 "
-                           f"(searched {batch.trial_count} rules)")
+            reasons.append(
+                f"deflated Sharpe probability {dsr:.2f} < 0.50 (searched {batch.trial_count} rules)"
+            )
 
-        edges.append(_build_edge(cand, study, outcome, float(q), dsr, cfg,
-                                 discovery_start, discovery_end, tuple(reasons)))
+        edges.append(
+            _build_edge(
+                cand,
+                study,
+                outcome,
+                float(q),
+                dsr,
+                cfg,
+                discovery_start,
+                discovery_end,
+                tuple(reasons),
+            )
+        )
     return edges
 
 
@@ -253,8 +272,7 @@ def _build_edge(
             sum(1 for v in regime_vals if v > 0) / len(regime_vals) if regime_vals else 0.0
         )
         survival = {
-            s.value: bool(len(r) and r.mean() > 0)
-            for s, r in outcome.returns_by_scenario.items()
+            s.value: bool(len(r) and r.mean() > 0) for s, r in outcome.returns_by_scenario.items()
         }
         cost_robustness = sum(survival.values()) / len(survival)
         half = len(net) // 2
@@ -289,8 +307,9 @@ def _build_edge(
             regime_stability_score=regime_stability,
             cost_robustness_score=cost_robustness,
             parameter_robustness_score=study.subperiod_consistency,
-            out_of_sample_score=min(1.0, stability * min(
-                1.0, study.effective_n / cfg.signals.min_effective_sample_size)),
+            out_of_sample_score=min(
+                1.0, stability * min(1.0, study.effective_n / cfg.signals.min_effective_sample_size)
+            ),
             decay_score=decay,
             cost_scenario_survival=survival,
             regime_performance=outcome.regime_performance,
@@ -302,19 +321,31 @@ def _build_edge(
             effective_sample_size=float(len(net)),
             gross_mean_return=gross_mean,
             net_mean_return=float(net.mean()) if len(net) else 0.0,
-            median_return=0.0, return_std=0.0, downside_deviation=0.0,
-            probability_of_profit=0.0, probability_of_positive_net_return=0.0,
-            expected_shortfall=0.0, value_at_risk=0.0, max_drawdown=0.0,
-            sharpe_ratio=0.0, sortino_ratio=0.0,
-            p_value=1.0, adjusted_p_value=q_value, q_value=q_value,
+            median_return=0.0,
+            return_std=0.0,
+            downside_deviation=0.0,
+            probability_of_profit=0.0,
+            probability_of_positive_net_return=0.0,
+            expected_shortfall=0.0,
+            value_at_risk=0.0,
+            max_drawdown=0.0,
+            sharpe_ratio=0.0,
+            sortino_ratio=0.0,
+            p_value=1.0,
+            adjusted_p_value=q_value,
+            q_value=q_value,
             bayesian_posterior_probability=0.0,
             bayesian_credible_interval=(0.0, 0.0),
             bootstrap_confidence_interval=(0.0, 0.0),
             deflated_sharpe_ratio=0.0,
         )
         robustness = EdgeRobustness(
-            stability_score=0.0, regime_stability_score=0.0, cost_robustness_score=0.0,
-            parameter_robustness_score=0.0, out_of_sample_score=0.0, decay_score=0.0,
+            stability_score=0.0,
+            regime_stability_score=0.0,
+            cost_robustness_score=0.0,
+            parameter_robustness_score=0.0,
+            out_of_sample_score=0.0,
+            decay_score=0.0,
             fold_net_means=outcome.fold_net_means,
         )
 

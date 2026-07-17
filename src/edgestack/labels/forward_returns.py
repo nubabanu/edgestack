@@ -20,8 +20,14 @@ import pandas as pd
 from edgestack.exceptions import DataError
 
 LABEL_COLUMNS = (
-    "symbol", "date", "horizon", "entry_date", "label_end",
-    "gross_ret", "bench_ret", "excess_ret",
+    "symbol",
+    "date",
+    "horizon",
+    "entry_date",
+    "label_end",
+    "gross_ret",
+    "bench_ret",
+    "excess_ret",
 )
 
 
@@ -65,17 +71,23 @@ def forward_return_labels(
     frames = []
     for symbol, group in panel.groupby("symbol", sort=True):
         df = group.set_index("date").sort_index()
+        adjustment = (df["adj_close"] / df["close"]).where(df["adj_close"].notna(), 1.0)
+        adjusted_open = df["open"] * adjustment
         for horizon in horizons:
             shift_in = -execution_delay
             shift_out = -(execution_delay + horizon)
-            entry_open = df["open"].shift(shift_in)
-            exit_open = df["open"].shift(shift_out)
+            entry_open = adjusted_open.shift(shift_in)
+            exit_open = adjusted_open.shift(shift_out)
             entry_date = df.index.to_series().shift(shift_in)
             label_end = df.index.to_series().shift(shift_out)
             gross = exit_open / entry_open - 1.0
 
-            bench_entry = bench["open"].reindex(df.index).shift(shift_in)
-            bench_exit = bench["open"].reindex(df.index).shift(shift_out)
+            bench_adjustment = (bench["adj_close"] / bench["close"]).where(
+                bench["adj_close"].notna(), 1.0
+            )
+            bench_adjusted_open = bench["open"] * bench_adjustment
+            bench_entry = bench_adjusted_open.reindex(df.index).shift(shift_in)
+            bench_exit = bench_adjusted_open.reindex(df.index).shift(shift_out)
             bench_ret = bench_exit / bench_entry - 1.0
 
             frame = pd.DataFrame(

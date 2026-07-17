@@ -64,21 +64,22 @@ def generate_signal_report(
     feature_dates = pd.to_datetime(features["date"])
     as_of_ts = pd.Timestamp(as_of) if as_of else feature_dates.max()
     if as_of_ts not in set(feature_dates):
-        raise DataError(f"{as_of_ts.date()} is not a feature date; latest is "
-                        f"{feature_dates.max().date()}")
+        raise DataError(
+            f"{as_of_ts.date()} is not a feature date; latest is {feature_dates.max().date()}"
+        )
 
     history = features.loc[feature_dates <= as_of_ts]
     today = history.loc[pd.to_datetime(history["date"]) == as_of_ts].set_index("symbol")
 
     binnable = tuple(
-        c for c in (*CONTINUOUS_RULE_FEATURES, "bench_trend_200", "bench_vol_20")
+        c
+        for c in (*CONTINUOUS_RULE_FEATURES, "bench_trend_200", "bench_vol_20")
         if c in features.columns
     )
     binner = QuantileBinner(quantiles=cfg.discovery.quantile_bins).fit(history, binnable)
 
     active_edges = [
-        e for e in edges
-        if e.lifecycle.status in (EdgeStatus.VALIDATED, EdgeStatus.ACTIVE)
+        e for e in edges if e.lifecycle.status in (EdgeStatus.VALIDATED, EdgeStatus.ACTIVE)
     ]
     model_lookup = {(m.horizon, m.side): m for m in models}
 
@@ -93,16 +94,24 @@ def generate_signal_report(
     for symbol in sorted(today.index):
         row = today.loc[symbol]
         matched = [
-            e for e in active_edges
-            if bool(evaluate_condition(e.identity.condition, today.loc[[symbol]],
-                                       binner).iloc[0])
+            e
+            for e in active_edges
+            if bool(evaluate_condition(e.identity.condition, today.loc[[symbol]], binner).iloc[0])
         ]
         for side in (Side.LONG, Side.SHORT):
             side_edges = [e for e in matched if e.identity.direction is side]
             outcome = _assess(
-                cfg, calendar, symbol, row, side, side_edges, model_lookup,
-                closes.get(symbol, float("nan")), dollar_volume.get(symbol, 0.0),
-                as_of_ts, universe.limitations,
+                cfg,
+                calendar,
+                symbol,
+                row,
+                side,
+                side_edges,
+                model_lookup,
+                closes.get(symbol, float("nan")),
+                dollar_volume.get(symbol, 0.0),
+                as_of_ts,
+                universe.limitations,
             )
             if isinstance(outcome, SignalCandidate):
                 (longs if side is Side.LONG else shorts).append(outcome)
@@ -142,23 +151,29 @@ def _assess(
 
     if evidence is None or not np.isfinite(close):
         reasons = gate_reasons(
-            cfg=cfg, price=close if np.isfinite(close) else 0.0,
-            median_dollar_volume=median_dv, data_quality_score=data_quality,
-            n_matched_edges=0, calibrated_probability=None,
-            expected_net_return=None, conviction_score=None,
-            reward_to_risk=None, effective_sample_size=None,
+            cfg=cfg,
+            price=close if np.isfinite(close) else 0.0,
+            median_dollar_volume=median_dv,
+            data_quality_score=data_quality,
+            n_matched_edges=0,
+            calibrated_probability=None,
+            expected_net_return=None,
+            conviction_score=None,
+            reward_to_risk=None,
+            effective_sample_size=None,
         )
-        return Abstention(as_of_date=as_of_ts.date(), symbol=symbol, side=side,
-                          reasons=tuple(reasons))
+        return Abstention(
+            as_of_date=as_of_ts.date(), symbol=symbol, side=side, reasons=tuple(reasons)
+        )
 
     horizon = evidence.recommended_horizon
     # Per-trade probability implied by the historical edge evidence (hit rate
     # of net returns) — comparable with the model's per-trade P(net > 0).
     # The posterior-of-the-mean is a different quantity and must not be
     # compared against per-trade probabilities.
-    edge_probability = float(np.mean([
-        e.stats.probability_of_positive_net_return for e in side_edges
-    ]))
+    edge_probability = float(
+        np.mean([e.stats.probability_of_positive_net_return for e in side_edges])
+    )
     model = model_lookup.get((horizon, side.value))
     if model is not None:
         probability = float(model.predict_probability(row.to_frame().T)[0])
@@ -175,17 +190,22 @@ def _assess(
 
     risk_plan = build_risk_plan(side, close, atr, cfg)
     entry_plan = build_entry_plan(
-        side, close, atr, as_of_ts.date(), calendar,
+        side,
+        close,
+        atr,
+        as_of_ts.date(),
+        calendar,
         cfg.signals.execution_delay_sessions,
     )
 
     liquidity = float(np.clip((np.log10(max(median_dv, 1.0)) - 6.0) / 3.0, 0.0, 1.0))
-    similarity = float(np.mean([
-        edge_regime_similarity(e, label_row(row)) for e in side_edges
-    ]))
+    similarity = float(np.mean([edge_regime_similarity(e, label_row(row)) for e in side_edges]))
     per_trade_vol = float(row.get("realized_vol_20", np.nan))
-    per_trade_vol = (per_trade_vol / np.sqrt(252) * np.sqrt(horizon)
-                     if np.isfinite(per_trade_vol) else 0.02 * np.sqrt(horizon))
+    per_trade_vol = (
+        per_trade_vol / np.sqrt(252) * np.sqrt(horizon)
+        if np.isfinite(per_trade_vol)
+        else 0.02 * np.sqrt(horizon)
+    )
 
     result = conviction(
         ConvictionInputs(
@@ -209,8 +229,11 @@ def _assess(
     )
 
     reasons = gate_reasons(
-        cfg=cfg, price=close, median_dollar_volume=median_dv,
-        data_quality_score=data_quality, n_matched_edges=len(side_edges),
+        cfg=cfg,
+        price=close,
+        median_dollar_volume=median_dv,
+        data_quality_score=data_quality,
+        n_matched_edges=len(side_edges),
         calibrated_probability=probability,
         expected_net_return=evidence.expected_net_return,
         conviction_score=result.score,
@@ -218,23 +241,28 @@ def _assess(
         effective_sample_size=evidence.effective_n,
     )
     if reasons:
-        return Abstention(as_of_date=as_of_ts.date(), symbol=symbol, side=side,
-                          reasons=tuple(reasons))
+        return Abstention(
+            as_of_date=as_of_ts.date(), symbol=symbol, side=side, reasons=tuple(reasons)
+        )
 
     warnings = list(universe_limitations)
     if side is Side.SHORT:
         warnings.append(BORROW_WARNING)
     if not is_calibrated:
-        warnings.append("Probability is a shrinkage posterior, not an "
-                        "independently calibrated model output.")
+        warnings.append(
+            "Probability is a shrinkage posterior, not an independently calibrated model output."
+        )
     if disagreement > 0.15:
         warnings.append(
             f"Model and edge evidence disagree ({disagreement:.0%}); conviction "
             "was penalized accordingly."
         )
 
-    status = (CandidateStatus.SHORT_RESEARCH_CANDIDATE if side is Side.SHORT
-              else CandidateStatus.RESEARCH_CANDIDATE)
+    status = (
+        CandidateStatus.SHORT_RESEARCH_CANDIDATE
+        if side is Side.SHORT
+        else CandidateStatus.RESEARCH_CANDIDATE
+    )
     cost = evidence.expected_net_return  # net already includes conservative costs
     candidate = SignalCandidate(
         as_of_date=as_of_ts.date(),
@@ -265,8 +293,9 @@ def _roundtrip(cfg: EdgeStackConfig, side: Side, horizon: int) -> float:
     return CostModel.from_config(cfg).roundtrip_cost(side, horizon)
 
 
-def _median_dollar_volume(panel: pd.DataFrame, as_of: pd.Timestamp,
-                          window: int = 60) -> dict[str, float]:
+def _median_dollar_volume(
+    panel: pd.DataFrame, as_of: pd.Timestamp, window: int = 60
+) -> dict[str, float]:
     recent = panel.loc[pd.to_datetime(panel["date"]) <= as_of]
     out: dict[str, float] = {}
     for symbol, group in recent.groupby("symbol"):

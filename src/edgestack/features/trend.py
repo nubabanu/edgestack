@@ -68,7 +68,8 @@ def trend_consistency_60(df: pd.DataFrame) -> pd.Series:
 @feature("trend_slope_60", Family.TREND, min_history=61)
 def trend_slope_60(df: pd.DataFrame) -> pd.Series:
     """Annualized 60-session log-price slope."""
-    return np.log(df["close"] / df["close"].shift(60)) / 60.0 * 252.0
+    values = np.log(df["close"] / df["close"].shift(60)) / 60.0 * 252.0
+    return pd.Series(values, index=df.index)
 
 
 @feature("di_diff_14", Family.TREND, inputs=("high", "low", "close"), min_history=28)

@@ -25,8 +25,7 @@ def test_vanished_edge_is_degraded_or_suspended() -> None:
 
     # ...then monitor it against a market where the effect no longer exists.
     _, dead_features, dead_labels = build_frames(effects=(), seed=7, cfg=cfg)
-    health = assess_edge(edge, dead_features, dead_labels, cfg,
-                         sessions_since_status=10)
+    health = assess_edge(edge, dead_features, dead_labels, cfg, sessions_since_status=10)
     assert health.n_recent >= 5
     assert health.recent_posterior < cfg.monitoring.degrade_posterior_threshold
 

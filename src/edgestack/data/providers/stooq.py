@@ -46,16 +46,23 @@ def parse_stooq_csv(symbol: str, text: str) -> pd.DataFrame:
     if "Volume" not in raw.columns:  # very illiquid series omit volume
         raw["Volume"] = 0.0
     out = raw.rename(
-        columns={"Date": "date", "Open": "open", "High": "high", "Low": "low",
-                 "Close": "close", "Volume": "volume"}
+        columns={
+            "Date": "date",
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
+            "Close": "close",
+            "Volume": "volume",
+        }
     )[["date", "open", "high", "low", "close", "volume"]]
     out["symbol"] = symbol.upper()
     return out
 
 
 class StooqProvider(PriceDataProvider):
-    def __init__(self, cache_dir: Path, *, timeout: float, max_retries: int,
-                 cache_ttl_days: int) -> None:
+    def __init__(
+        self, cache_dir: Path, *, timeout: float, max_retries: int, cache_ttl_days: int
+    ) -> None:
         self.cache_dir = cache_dir
         self.timeout = timeout
         self.max_retries = max_retries
@@ -75,9 +82,7 @@ class StooqProvider(PriceDataProvider):
             ),
         )
 
-    def fetch_daily_bars(
-        self, symbols: tuple[str, ...], start: date, end: date
-    ) -> pd.DataFrame:
+    def fetch_daily_bars(self, symbols: tuple[str, ...], start: date, end: date) -> pd.DataFrame:
         frames = []
         for i, symbol in enumerate(symbols):
             if i:
@@ -129,8 +134,14 @@ class StooqProvider(PriceDataProvider):
             except (requests.RequestException, ProviderError) as exc:
                 last_error = exc
                 if attempt < self.max_retries:
-                    log_event(log, 30, "retrying stooq request", symbol=symbol,
-                              attempt=attempt + 1, error=str(exc))
+                    log_event(
+                        log,
+                        30,
+                        "retrying stooq request",
+                        symbol=symbol,
+                        attempt=attempt + 1,
+                        error=str(exc),
+                    )
                     time.sleep(delay)
                     delay *= 2
         raise ProviderError(f"stooq request failed for {symbol}: {last_error}")

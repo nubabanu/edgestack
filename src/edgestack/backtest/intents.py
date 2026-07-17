@@ -7,6 +7,8 @@ a rule on data that shaped it.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import numpy as np
 import pandas as pd
 
@@ -19,8 +21,9 @@ from edgestack.types import Edge, Side
 from edgestack.validation.splits import PurgedWalkForwardSplitter
 
 
-def build_trade_intents(features: pd.DataFrame, panel: pd.DataFrame,
-                        edges: list[Edge], cfg: EdgeStackConfig) -> list[TradeIntent]:
+def build_trade_intents(
+    features: pd.DataFrame, panel: pd.DataFrame, edges: list[Edge], cfg: EdgeStackConfig
+) -> list[TradeIntent]:
     if not edges:
         return []
     merged = features.merge(
@@ -31,7 +34,8 @@ def build_trade_intents(features: pd.DataFrame, panel: pd.DataFrame,
     # interval is the signal date itself.
     folds = splitter.split_frame(merged["date"], merged["date"])
     binnable = tuple(
-        c for c in (*CONTINUOUS_RULE_FEATURES, "bench_trend_200", "bench_vol_20")
+        c
+        for c in (*CONTINUOUS_RULE_FEATURES, "bench_trend_200", "bench_vol_20")
         if c in merged.columns
     )
 
@@ -45,11 +49,14 @@ def build_trade_intents(features: pd.DataFrame, panel: pd.DataFrame,
         for edge in ordered:
             mask = evaluate_condition(edge.identity.condition, test, binner)
             for row in test.loc[mask].itertuples(index=False):
-                key = (row.symbol, row.date)
+                record = cast(Any, row)
+                symbol = str(record.symbol)
+                session = pd.Timestamp(record.date)
+                key = (symbol, session)
                 if key in intents:
                     continue
-                close = float(row.close)
-                natr = getattr(row, "natr_14", np.nan)
+                close = float(record.close)
+                natr = getattr(record, "natr_14", np.nan)
                 atr = float(natr) * close if np.isfinite(natr) and natr > 0 else 0.02 * close
                 side = edge.identity.direction
                 stop_mult = cfg.risk.atr_stop_multiple
@@ -61,8 +68,11 @@ def build_trade_intents(features: pd.DataFrame, panel: pd.DataFrame,
                     stop = close + stop_mult * atr
                     target = close - target_mult * atr
                 intents[key] = TradeIntent(
-                    symbol=str(row.symbol), signal_session=pd.Timestamp(row.date),
-                    side=side, horizon=edge.identity.holding_horizon,
-                    stop_price=max(stop, 0.01), target_price=max(target, 0.01),
+                    symbol=symbol,
+                    signal_session=session,
+                    side=side,
+                    horizon=edge.identity.holding_horizon,
+                    stop_price=max(stop, 0.01),
+                    target_price=max(target, 0.01),
                 )
     return sorted(intents.values(), key=lambda i: (i.signal_session, i.symbol))

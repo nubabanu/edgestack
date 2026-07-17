@@ -22,8 +22,11 @@ def beta_binomial_posterior(
 
 
 def prob_win_rate_above(
-    wins: int, losses: int, threshold: float = 0.5,
-    prior_a: float = 1.0, prior_b: float = 1.0,
+    wins: int,
+    losses: int,
+    threshold: float = 0.5,
+    prior_a: float = 1.0,
+    prior_b: float = 1.0,
 ) -> float:
     """P(true win rate > threshold | data) under a Beta prior."""
     a, b = beta_binomial_posterior(wins, losses, prior_a, prior_b)
@@ -31,8 +34,11 @@ def prob_win_rate_above(
 
 
 def beta_credible_interval(
-    wins: int, losses: int, alpha: float = 0.05,
-    prior_a: float = 1.0, prior_b: float = 1.0,
+    wins: int,
+    losses: int,
+    alpha: float = 0.05,
+    prior_a: float = 1.0,
+    prior_b: float = 1.0,
 ) -> tuple[float, float]:
     a, b = beta_binomial_posterior(wins, losses, prior_a, prior_b)
     lo, hi = sps.beta.ppf([alpha / 2, 1 - alpha / 2], a, b)
@@ -74,8 +80,10 @@ def prob_mean_positive(
 
 
 def normal_credible_interval(
-    values: np.ndarray, alpha: float = 0.05,
-    prior_mean: float = 0.0, prior_pseudo_n: float = 30.0,
+    values: np.ndarray,
+    alpha: float = 0.05,
+    prior_mean: float = 0.0,
+    prior_pseudo_n: float = 30.0,
 ) -> tuple[float, float]:
     mean, sd = normal_posterior_mean(values, prior_mean, prior_pseudo_n)
     lo, hi = sps.norm.ppf([alpha / 2, 1 - alpha / 2], loc=mean, scale=sd)

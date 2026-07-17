@@ -87,6 +87,8 @@ class TrainedModel:
     featureset_id: str
     config_hash: str
     seed: int
+    calibration_fold_assignments: tuple[int, ...] = ()
+    cross_fitted_calibrated_predictions: tuple[float, ...] = ()
 
     def predict_probability(self, features: pd.DataFrame) -> np.ndarray:
         """Calibrated P(net return > 0) for feature rows."""

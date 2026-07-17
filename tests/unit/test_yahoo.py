@@ -6,7 +6,11 @@ from datetime import date
 
 import pytest
 
-from edgestack.data.providers.yahoo import parse_chart_payload
+from edgestack.data.providers.yahoo import (
+    parse_chart_payload,
+    parse_corporate_actions,
+    parse_intraday_chart_payload,
+)
 from edgestack.exceptions import ProviderError
 
 FIXTURE = {
@@ -28,6 +32,17 @@ FIXTURE = {
                     ],
                     "adjclose": [{"adjclose": [183.20, 180.87, 180.15]}],
                 },
+                "events": {
+                    "dividends": {"1704292200": {"date": 1704292200, "amount": 0.24}},
+                    "splits": {
+                        "1704378600": {
+                            "date": 1704378600,
+                            "numerator": 4.0,
+                            "denominator": 1.0,
+                            "splitRatio": "4:1",
+                        }
+                    },
+                },
             }
         ],
     }
@@ -48,6 +63,27 @@ def test_parse_rejects_error_and_empty() -> None:
         parse_chart_payload("x", {"chart": {"error": {"code": "Not Found"}}})
     with pytest.raises(ProviderError, match="no data"):
         parse_chart_payload("x", {"chart": {"result": []}})
+
+
+def test_parse_corporate_actions_preserves_dividends_and_split_ratios() -> None:
+    actions = parse_corporate_actions("aapl", FIXTURE)
+
+    assert actions[["action_type", "value"]].to_dict(orient="records") == [
+        {"action_type": "dividend", "value": 0.24},
+        {"action_type": "split", "value": 4.0},
+    ]
+    assert actions["symbol"].tolist() == ["AAPL", "AAPL"]
+
+
+def test_parse_intraday_payload_preserves_timezone_aware_timestamp() -> None:
+    bars = parse_intraday_chart_payload("aapl", FIXTURE)
+
+    assert len(bars) == 2
+    assert str(bars["timestamp"].dt.tz) == "UTC"
+    assert bars["interval_minutes"].unique().tolist() == [60]
+    assert bars["symbol"].unique().tolist() == ["AAPL"]
+    bars_15 = parse_intraday_chart_payload("aapl", FIXTURE, interval_minutes=15)
+    assert bars_15["interval_minutes"].unique().tolist() == [15]
 
 
 @pytest.mark.network

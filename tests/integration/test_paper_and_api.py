@@ -6,11 +6,9 @@ import pandas as pd
 import pytest
 
 from edgestack.config import EdgeStackConfig
-from edgestack.data.calendar import TradingCalendar
-from edgestack.data.catalog import DataCatalog
 from edgestack.exceptions import DataError
 from edgestack.paper.broker import SimulatedBroker, get_broker
-from edgestack.paper.session import load_state, run_session
+from edgestack.paper.session import run_session
 from edgestack.pipelines import load_feature_frame, run_signals_generate
 
 
@@ -26,45 +24,14 @@ def test_broker_is_always_simulated(prepared: EdgeStackConfig) -> None:
     assert broker.is_live is False
 
 
-def test_paper_session_full_cycle(prepared: EdgeStackConfig, capsys) -> None:
+def test_legacy_signal_report_cannot_drive_paper_orders(prepared: EdgeStackConfig, capsys) -> None:
     cfg = prepared
-    catalog = DataCatalog(cfg)
-    calendar = TradingCalendar(cfg.data.calendar)
-
     signal_day = _last_thursday(cfg)
     run_signals_generate(cfg, as_of=signal_day.date())
     capsys.readouterr()
 
-    entry_day = calendar.next_session(signal_day.date())
-    report = run_session(cfg, entry_day.date())
-    assert "PAPER session" in report
-    assert "not advice" in report
-    assert "opened" in report  # Thursday signals -> Friday entries
-
-    state = load_state(catalog, cfg)
-    assert state.positions, "expected an open paper position"
-    position = state.positions[0]
-    assert position.side.value == "LONG"
-    assert position.quantity >= 1
-    assert position.predicted_probability > 0
-    assert state.cash < cfg.paper.initial_cash  # cash consumed by the entry
-
-    # A 1-session horizon exits at the next session's open.
-    exit_day = calendar.next_session(entry_day.date())
-    report2 = run_session(cfg, exit_day.date())
-    assert "closed" in report2
-    state2 = load_state(catalog, cfg)
-    assert state2.trades, "expected a completed paper trade"
-    trade = state2.trades[-1]
-    assert trade.exit_reason in ("time_exit", "stop_loss", "target")
-    assert trade.predicted_net_return != 0
-
-    # Sessions cannot be double-processed.
-    with pytest.raises(DataError, match="already processed"):
-        run_session(cfg, exit_day.date())
-
-    # Paper sessions are audited.
-    assert len(catalog.audit_events("paper_session")) == 2
+    with pytest.raises(DataError, match="canonical recommendation has not been published"):
+        run_session(cfg, signal_day.date())
 
 
 def test_api_read_only_surface(prepared: EdgeStackConfig) -> None:
@@ -83,15 +50,16 @@ def test_api_read_only_surface(prepared: EdgeStackConfig) -> None:
     assert detail["identity"]["edge_id"] == edges[0]["edge_id"]
     assert client.get("/edges/nope").status_code == 404
 
-    latest = client.get("/signals/latest").json()
-    assert "long_candidates" in latest and "abstentions" in latest
-    assert client.get("/candidates/long").status_code == 200
-    assert client.get("/candidates/short").status_code == 200
+    # Legacy candidates fail closed until an atomic V2 bundle is published;
+    # the old signal report is no longer an actionable API fallback.
+    assert client.get("/recommendations/latest").status_code == 404
+    assert client.get("/signals/latest").status_code == 404
+    assert client.get("/candidates/long").status_code == 404
+    assert client.get("/candidates/short").status_code == 404
 
     runs = client.get("/backtests").json()
     assert isinstance(runs, list)
     if runs:
         payload = client.get(f"/backtests/{runs[0]['run_id']}").json()
         assert "metrics" in payload
-    statuses = client.get("/monitoring/edges").json()
-    assert isinstance(statuses, list) and statuses
+    assert client.get("/monitoring/edges").status_code == 404

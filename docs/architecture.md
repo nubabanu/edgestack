@@ -1,5 +1,7 @@
 # Architecture
 
+> This document includes the retained legacy research pipeline. It is non-actionable: only `CanonicalRecommendationBundleV2` can supply API, Android, dashboard, or paper targets. See [Recommendation Engine V2](recommendation-engine-v2.md).
+
 ## Layers and data flow
 
 ```

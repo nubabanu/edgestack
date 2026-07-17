@@ -26,7 +26,8 @@ def bench_mom_60(df: pd.DataFrame) -> pd.Series:
 @feature("bench_vol_20", Family.REGIME, inputs=("bench_close",), min_history=21)
 def bench_vol_20(df: pd.DataFrame) -> pd.Series:
     """Annualized 20-session benchmark volatility (market vol proxy)."""
-    return np.log(df["bench_close"] / df["bench_close"].shift()).rolling(20).std() * ANN
+    values = pd.Series(np.log(df["bench_close"] / df["bench_close"].shift()), index=df.index)
+    return values.rolling(20).std() * ANN
 
 
 @feature("bench_drawdown_252", Family.REGIME, inputs=("bench_close",), min_history=252)

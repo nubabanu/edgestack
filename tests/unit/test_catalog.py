@@ -85,3 +85,62 @@ def test_atomic_write_and_path_safety(tmp_path) -> None:
     assert not leftovers
     with pytest.raises(DataError, match="unsafe path"):
         safe_child_path(tmp_path, "..\\..\\evil.parquet")
+    with pytest.raises(DataError, match="unsafe path"):
+        safe_child_path(tmp_path, "nested/..\\../evil.parquet")
+    with pytest.raises(DataError, match="unsafe path"):
+        safe_child_path(tmp_path, "C:\\evil.parquet")
+    assert (
+        safe_child_path(tmp_path, "nested\\safe.parquet")
+        == (tmp_path / "nested" / "safe.parquet").resolve()
+    )
+
+
+def test_corporate_actions_round_trip_and_change_data_version(catalog: DataCatalog) -> None:
+    before = catalog.data_manifest_hash()
+    actions = pd.DataFrame(
+        {
+            "symbol": ["AAA", "AAA"],
+            "date": ["2019-06-03", "2019-09-03"],
+            "action_type": ["dividend", "split"],
+            "value": [0.25, 2.0],
+        }
+    )
+    catalog.write_corporate_actions(actions, provider="fixture")
+
+    loaded = catalog.load_corporate_actions(("AAA",))
+    assert loaded[["action_type", "value"]].to_dict(orient="records") == [
+        {"action_type": "dividend", "value": 0.25},
+        {"action_type": "split", "value": 2.0},
+    ]
+    assert catalog.data_manifest_hash() != before
+
+
+def test_intraday_round_trip_changes_data_version(catalog: DataCatalog) -> None:
+    before = catalog.data_manifest_hash()
+    timestamps = pd.date_range("2026-07-16T13:30:00Z", periods=3, freq="h")
+    bars = pd.DataFrame(
+        {
+            "symbol": "AAA",
+            "timestamp": timestamps,
+            "interval_minutes": 60,
+            "open": [100.0, 101.0, 100.5],
+            "high": [101.2, 101.5, 101.0],
+            "low": [99.8, 100.4, 99.9],
+            "close": [101.0, 100.5, 100.8],
+            "volume": [10_000.0, 11_000.0, 9_000.0],
+        }
+    )
+
+    catalog.write_intraday_bars(bars, provider="fixture")
+    catalog.write_intraday_bars(
+        bars.assign(interval_minutes=15),
+        provider="fixture",
+    )
+    loaded = catalog.load_intraday_bars("AAA")
+    loaded_15 = catalog.load_intraday_bars("AAA", interval_minutes=15)
+
+    assert len(loaded) == 3
+    assert str(loaded["timestamp"].dt.tz) == "UTC"
+    assert set(loaded["interval_minutes"]) == {60}
+    assert set(loaded_15["interval_minutes"]) == {15}
+    assert catalog.data_manifest_hash() != before

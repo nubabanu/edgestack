@@ -12,9 +12,14 @@ from datetime import date
 from edgestack.config import EdgeStackConfig
 
 
-def run_data_download(cfg: EdgeStackConfig, start: date, end: date, *,
-                      provider: str | None = None,
-                      symbols: tuple[str, ...] | None = None) -> None:
+def run_data_download(
+    cfg: EdgeStackConfig,
+    start: date,
+    end: date,
+    *,
+    provider: str | None = None,
+    symbols: tuple[str, ...] | None = None,
+) -> None:
     from edgestack.data.catalog import DataCatalog
     from edgestack.data.providers.registry import get_price_provider
     from edgestack.data.universe import static_universe
@@ -32,13 +37,40 @@ def run_data_download(cfg: EdgeStackConfig, start: date, end: date, *,
     bars = price_provider.fetch_daily_bars(tuple(wanted), start, end)
     catalog = DataCatalog(cfg)
     written = catalog.write_bars(bars, provider=provider_name)
-    catalog.audit("data_download", reason=provider_name,
-                  symbols=len(written), rows=len(bars))
+    actions = getattr(price_provider, "last_corporate_actions", None)
+    if actions is not None:
+        catalog.write_corporate_actions(actions, provider=provider_name)
+    catalog.audit("data_download", reason=provider_name, symbols=len(written), rows=len(bars))
     got = set(written)
     for symbol in wanted:
         status = f"{written[symbol]} rows" if symbol in got else "NO DATA"
         print(f"  {symbol}: {status}")
     print(f"catalog now holds {len(catalog.list_symbols())} symbols")
+
+
+def run_intraday_download(
+    cfg: EdgeStackConfig,
+    start: date,
+    end: date,
+    *,
+    symbols: tuple[str, ...],
+    provider: str = "yahoo",
+    interval: str = "60m",
+) -> None:
+    from edgestack.data.catalog import DataCatalog
+    from edgestack.data.providers.base import IntradayDataProvider
+    from edgestack.data.providers.registry import get_price_provider
+    from edgestack.exceptions import ProviderError
+
+    price_provider = get_price_provider(provider, cfg)
+    if not isinstance(price_provider, IntradayDataProvider):
+        raise ProviderError(f"provider {provider!r} has no intraday capability")
+    bars = price_provider.fetch_intraday_bars(symbols, start, end, interval=interval)
+    catalog = DataCatalog(cfg)
+    written = catalog.write_intraday_bars(bars, provider=provider)
+    catalog.audit("intraday_data_download", reason=provider, symbols=len(written), rows=len(bars))
+    for symbol in symbols:
+        print(f"  {symbol}: {written.get(symbol, 0)} {interval} rows")
 
 
 def run_data_validate(cfg: EdgeStackConfig) -> None:
@@ -54,7 +86,9 @@ def run_data_validate(cfg: EdgeStackConfig) -> None:
     report = assess_panel(panel, TradingCalendar(cfg.data.calendar))
     print(report.summary())
     if report.quarantined:
-        print("some symbols failed quality gates; fix or exclude them before research")
+        from edgestack.exceptions import DataError
+
+        raise DataError("some symbols failed quality gates; fix or exclude them before research")
 
 
 def run_features_build(cfg: EdgeStackConfig) -> None:
@@ -66,16 +100,22 @@ def run_features_build(cfg: EdgeStackConfig) -> None:
     catalog = DataCatalog(cfg)
     panel = catalog.load_panel()  # guard-truncated: features never see the test period
     specs = all_specs()
-    print(f"building {len(specs)} features over {panel['symbol'].nunique()} symbols, "
-          f"{len(panel)} bars (featureset {featureset_id(specs)})")
+    print(
+        f"building {len(specs)} features over {panel['symbol'].nunique()} symbols, "
+        f"{len(panel)} bars (featureset {featureset_id(specs)})"
+    )
     feats = build_features(panel, cfg, specs)
 
     out_path = catalog.data_dir / "features" / "features.parquet"
     buf = io.BytesIO()
     feats.to_parquet(buf, index=False)
     atomic_write_bytes(out_path, buf.getvalue())
-    catalog.audit("features_build", reason=featureset_id(specs),
-                  rows=len(feats), columns=len(feats.columns) - 2)
+    catalog.audit(
+        "features_build",
+        reason=featureset_id(specs),
+        rows=len(feats),
+        columns=len(feats.columns) - 2,
+    )
     non_null = feats.drop(columns=["symbol", "date"]).notna().mean().mean()
     print(f"wrote {len(feats)} rows x {len(feats.columns) - 2} features to {out_path}")
     print(f"average feature coverage: {non_null:.1%}")
@@ -108,7 +148,8 @@ def _load_research_frames(cfg: EdgeStackConfig):
     panel = catalog.load_panel()
     horizons = tuple(sorted(set(cfg.signals.horizons) | set(cfg.discovery.horizons)))
     labels = forward_return_labels(
-        panel, horizons,
+        panel,
+        horizons,
         benchmark_symbol=cfg.universe.benchmark_symbol,
         execution_delay=cfg.signals.execution_delay_sessions,
     )
@@ -128,8 +169,10 @@ def run_edges_discover(cfg: EdgeStackConfig) -> None:
     batch = generate_candidates(features, labels, cfg, experiment_id)
     save_batch(catalog, batch)
     promising = sum(1 for c in batch.candidates if c.in_sample_p_value < 0.05)
-    print(f"discovery batch {batch.batch_id}: {batch.trial_count} rules evaluated "
-          f"({promising} look promising in-sample — expect most to die out of sample)")
+    print(
+        f"discovery batch {batch.batch_id}: {batch.trial_count} rules evaluated "
+        f"({promising} look promising in-sample — expect most to die out of sample)"
+    )
     print(f"validate with: edgestack edges validate --batch {batch.batch_id}")
 
 
@@ -140,8 +183,10 @@ def run_edges_validate(cfg: EdgeStackConfig, *, batch_id: str | None = None) -> 
 
     catalog, features, labels = _load_research_frames(cfg)
     batch = load_batch(catalog, batch_id)
-    print(f"validating batch {batch.batch_id}: {batch.trial_count} candidates "
-          f"(trial count for FDR/DSR = {batch.trial_count})")
+    print(
+        f"validating batch {batch.batch_id}: {batch.trial_count} candidates "
+        f"(trial count for FDR/DSR = {batch.trial_count})"
+    )
     edges = validate_batch(batch, features, labels, cfg)
     save_edges(catalog, edges)
 
@@ -149,9 +194,11 @@ def run_edges_validate(cfg: EdgeStackConfig, *, batch_id: str | None = None) -> 
     print(f"result: {len(validated)} VALIDATED, {len(edges) - len(validated)} REJECTED")
     for edge in sorted(validated, key=lambda e: -e.stats.net_mean_return)[:15]:
         s = edge.stats
-        print(f"  {edge.identity.name}: net {s.net_mean_return:+.4f}/trade, "
-              f"n={s.sample_size} (eff {s.effective_sample_size:.0f}), "
-              f"q={s.q_value:.3f}, DSR={s.deflated_sharpe_ratio:.2f}")
+        print(
+            f"  {edge.identity.name}: net {s.net_mean_return:+.4f}/trade, "
+            f"n={s.sample_size} (eff {s.effective_sample_size:.0f}), "
+            f"q={s.q_value:.3f}, DSR={s.deflated_sharpe_ratio:.2f}"
+        )
     if not validated:
         print("no edges survived — that is a valid (and common) research outcome")
 
@@ -174,12 +221,16 @@ def run_models_train(cfg: EdgeStackConfig) -> None:
     save_models(models_dir, models)
     catalog.audit("models_train", reason=f"{len(models)} models")
     print(f"trained {len(models)} models -> {models_dir}")
-    print(f"{'horizon':>7} {'side':>5} {'model':>18} {'OOF logloss':>12} "
-          f"{'Brier':>7} {'ECE':>6} {'n':>6}")
+    print(
+        f"{'horizon':>7} {'side':>5} {'model':>18} {'OOF logloss':>12} "
+        f"{'Brier':>7} {'ECE':>6} {'n':>6}"
+    )
     for m in models:
-        print(f"{m.horizon:>7} {m.side:>5} {m.name:>18} "
-              f"{m.metrics['oof_log_loss']:>12.4f} {m.metrics['oof_brier']:>7.4f} "
-              f"{m.metrics['oof_ece']:>6.3f} {int(m.metrics['oof_n']):>6}")
+        print(
+            f"{m.horizon:>7} {m.side:>5} {m.name:>18} "
+            f"{m.metrics['oof_log_loss']:>12.4f} {m.metrics['oof_brier']:>7.4f} "
+            f"{m.metrics['oof_ece']:>6.3f} {int(m.metrics['oof_n']):>6}"
+        )
 
 
 def run_signals_generate(cfg: EdgeStackConfig, *, as_of: date | None = None) -> None:
@@ -205,18 +256,25 @@ def run_signals_generate(cfg: EdgeStackConfig, *, as_of: date | None = None) -> 
             "discover` and `edgestack edges validate` first"
         )
     try:
-        models = load_models(Path(cfg.paths.artifacts_dir) / "models",
-                             expected_config_hash=cfg.config_hash())
+        models = load_models(
+            Path(cfg.paths.artifacts_dir) / "models", expected_config_hash=cfg.config_hash()
+        )
     except DataError:
         models = []
-        print("note: no trained models found — probabilities fall back to edge "
-              "posteriors and are flagged as uncalibrated")
+        print(
+            "note: no trained models found — probabilities fall back to edge "
+            "posteriors and are flagged as uncalibrated"
+        )
 
     report = generate_signal_report(cfg, features, panel, edges, models, as_of)
     path = save_report(catalog, report)
-    catalog.audit("signals_generate", reason=str(report.as_of_date),
-                  longs=len(report.long_candidates), shorts=len(report.short_candidates),
-                  abstentions=len(report.abstentions))
+    catalog.audit(
+        "signals_generate",
+        reason=str(report.as_of_date),
+        longs=len(report.long_candidates),
+        shorts=len(report.short_candidates),
+        abstentions=len(report.abstentions),
+    )
     print(render_tables(report))
     print(f"\nfull machine-readable report: {path}")
 
@@ -228,7 +286,7 @@ def run_signals_rank(cfg: EdgeStackConfig, *, top: int = 20, as_of: date | None 
     report = load_report(DataCatalog(cfg), as_of)
     print(render_tables(report, top=top))
     # Show the strongest explanation as a sample of the reasoning trail.
-    best = (report.long_candidates or report.short_candidates)
+    best = report.long_candidates or report.short_candidates
     if best:
         print("\n--- top candidate explanation ---")
         print(best[0].explanation)
@@ -256,8 +314,10 @@ def run_backtest(cfg: EdgeStackConfig, *, scenario: str | None = None) -> None:
 
     chosen = CostScenario(scenario.upper()) if scenario else cfg.costs.scenario
     intents = build_trade_intents(features, panel, edges, cfg)
-    print(f"replaying {len(intents)} out-of-sample intents from {len(edges)} edges "
-          f"under {chosen.value} costs")
+    print(
+        f"replaying {len(intents)} out-of-sample intents from {len(edges)} edges "
+        f"under {chosen.value} costs"
+    )
     if not intents:
         print("no out-of-sample signals — nothing to backtest")
         return
@@ -267,15 +327,28 @@ def run_backtest(cfg: EdgeStackConfig, *, scenario: str | None = None) -> None:
     rng = np.random.default_rng(cfg.project.random_seed)
     metrics = compute_metrics(ledger, rng=rng)
     run_id, out_dir = save_backtest_report(catalog, ledger, metrics, chosen)
-    catalog.audit("backtest_run", reason=run_id, scenario=chosen.value,
-                  trades=metrics.get("n_trades", 0))
+    catalog.audit(
+        "backtest_run", reason=run_id, scenario=chosen.value, trades=metrics.get("n_trades", 0)
+    )
 
     print(f"backtest run {run_id} -> {out_dir}")
-    for key in ("cumulative_return", "cagr", "sharpe", "sortino", "max_drawdown",
-                "hit_rate", "profit_factor", "expectancy", "n_trades"):
+    for key in (
+        "cumulative_return",
+        "cagr",
+        "sharpe",
+        "sortino",
+        "max_drawdown",
+        "hit_rate",
+        "profit_factor",
+        "expectancy",
+        "n_trades",
+    ):
         if key in metrics and metrics[key] is not None:
-            print(f"  {key}: {metrics[key]:.4f}" if isinstance(metrics[key], float)
-                  else f"  {key}: {metrics[key]}")
+            print(
+                f"  {key}: {metrics[key]:.4f}"
+                if isinstance(metrics[key], float)
+                else f"  {key}: {metrics[key]}"
+            )
     if "daily_sharpe_ci" in metrics:
         lo, hi = metrics["daily_sharpe_ci"]
         print(f"  daily sharpe 95% CI: [{lo:.3f}, {hi:.3f}] (block bootstrap)")
@@ -289,8 +362,10 @@ def run_monitor(cfg: EdgeStackConfig) -> None:
     transitions = run_monitoring(catalog, features, labels, cfg)
     catalog.audit("monitor_run", reason=f"{len(transitions)} transitions")
     if not transitions:
-        print("monitoring: no lifecycle transitions (edges healthy or too few "
-              "recent signals to judge)")
+        print(
+            "monitoring: no lifecycle transitions (edges healthy or too few "
+            "recent signals to judge)"
+        )
         return
     print(f"monitoring: {len(transitions)} lifecycle transitions")
     for edge_id, old, new, rule in transitions:
@@ -342,6 +417,5 @@ def run_api_serve(cfg: EdgeStackConfig, *, host: str, port: int) -> None:
         raise DataError(
             "uvicorn is not installed; install the api extra: pip install edgestack[api]"
         ) from exc
-    print(f"serving read-only EdgeStack API on http://{host}:{port} "
-          "(research output only)")
+    print(f"serving read-only EdgeStack API on http://{host}:{port} (research output only)")
     uvicorn.run(app, host=host, port=port)

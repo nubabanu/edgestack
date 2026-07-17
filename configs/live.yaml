@@ -1,6 +1,7 @@
-# NOTE: live-scoring config. Edges are FROZEN from pre-2024 research; the
-# guard boundary is moved only so current prices can be scored. Gates are
-# relaxed deliberately: output is tilt-ranked research, not filtered advice.# Broad point-in-time S&P 500 research configuration (roadmap phases 1-4).
+# NOTE: legacy research configuration retained for provenance. Legacy edge
+# statuses and 2024-2026 results are previously accessed and promotion-incompatible.
+# The V2 nightly action path publishes the fixed baseline plus zero-weight ideas.
+# Broad point-in-time S&P 500 research configuration (roadmap phases 1-4).
 # Universe symbols are supplied by the PIT membership module, not this list.
 
 project:

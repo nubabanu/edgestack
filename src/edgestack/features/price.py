@@ -12,7 +12,7 @@ ANN = np.sqrt(252.0)
 
 
 def _log_ret(df: pd.DataFrame) -> pd.Series:
-    return np.log(df["close"] / df["close"].shift())
+    return pd.Series(np.log(df["close"] / df["close"].shift()), index=df.index)
 
 
 @feature("ret_1d", Family.MOMENTUM, description="1-session close-to-close return")

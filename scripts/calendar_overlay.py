@@ -1,4 +1,6 @@
-"""Calendar-conditioned leverage overlay on SPY/QQQ — the combination test.
+"""Archived, non-actionable calendar overlay; excluded from V2 actions.
+
+Historical calendar-conditioned leverage overlay on SPY/QQQ.
 
 Pre-registered rules (all documented in decades-old literature — Halloween
 effect, September weakness, turn-of-month, trend filter — NOT tuned here):
@@ -17,7 +19,7 @@ Costs: 2 bps per unit of exposure traded; borrowing on (L-1)+ at 13-week
 T-bill + 150 bps (IBKR-like); idle cash (1-L)+ earns the T-bill rate.
 
 Splits: full history, pre-2016 "development era", 2016-2023 OOS,
-2024-2026 untouched holdout. Benchmark: unlevered buy-and-hold.
+2024-2026 previously accessed historical partition. Benchmark: unlevered buy-and-hold.
 """
 
 from __future__ import annotations
@@ -39,16 +41,16 @@ from edgestack.data.catalog import atomic_write_bytes
 from edgestack.validation.advanced_tests import newey_west_alpha
 from edgestack.validation.metrics import max_drawdown, sharpe_ratio
 
-TRADE_COST = 0.0002          # 2 bps per unit exposure change (SPY/QQQ spreads)
-BORROW_SPREAD = 0.015        # broker margin spread over T-bills
+TRADE_COST = 0.0002  # 2 bps per unit exposure change (SPY/QQQ spreads)
+BORROW_SPREAD = 0.015  # broker margin spread over T-bills
 
 
 def tbill_series(session: requests.Session, index: pd.DatetimeIndex) -> pd.Series:
     try:
-        irx = fetch(session, "^IRX", interval="1d", period1=0,
-                    period2=int(time.time()))
-        s = pd.Series(irx["close"].to_numpy() / 100.0,
-                      index=irx["dt"].dt.tz_localize(None).dt.normalize())
+        irx = fetch(session, "^IRX", interval="1d", period1=0, period2=int(time.time()))
+        s = pd.Series(
+            irx["close"].to_numpy() / 100.0, index=irx["dt"].dt.tz_localize(None).dt.normalize()
+        )
         return s.reindex(index).ffill().fillna(0.02)
     except Exception:
         return pd.Series(0.02, index=index)
@@ -75,10 +77,10 @@ def build_exposure(df: pd.DataFrame, base: float = 1.0) -> pd.Series:
     vol20 = ret.rolling(20).std() * np.sqrt(252)
     L = L.mask(d["close"] < sma200, L.clip(upper=0.5))
     L = L.mask(vol20 > 0.20, L.clip(upper=1.0))
-    L.iloc[:200] = 1.0                     # warmup: plain buy-and-hold
+    L.iloc[:200] = 1.0  # warmup: plain buy-and-hold
     # decided at close t-1, applied to session t
     applied = L.shift(1).fillna(1.0)
-    if base != 1.0:                        # levered variant: scale whole series
+    if base != 1.0:  # levered variant: scale whole series
         applied = (applied * base).clip(upper=2.5)
     return applied, ret
 
@@ -125,19 +127,25 @@ def main() -> int:
     session.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     results = [run(sym, session) for sym in ("SPY", "QQQ")]
     for r in results:
-        print(f"\n=== {r['symbol']} calendar-leverage overlay "
-              f"(avg exposure {r['avg_exposure']}x) ===")
-        print(f"{'period':<22}{'strat':>8}{'B&H':>8}{'Sh(s)':>7}{'Sh(b)':>7}"
-              f"{'DD(s)':>8}{'DD(b)':>8}{'alpha':>8}{'t':>6}")
+        print(
+            f"\n=== {r['symbol']} calendar-leverage overlay (avg exposure {r['avg_exposure']}x) ==="
+        )
+        print(
+            f"{'period':<22}{'strat':>8}{'B&H':>8}{'Sh(s)':>7}{'Sh(b)':>7}"
+            f"{'DD(s)':>8}{'DD(b)':>8}{'alpha':>8}{'t':>6}"
+        )
         for k, v in r.items():
             if not isinstance(v, dict):
                 continue
-            print(f"{k:<22}{v['strat_cagr']:>8.1%}{v['bh_cagr']:>8.1%}"
-                  f"{v['strat_sharpe']:>7.2f}{v['bh_sharpe']:>7.2f}"
-                  f"{v['strat_maxdd']:>8.1%}{v['bh_maxdd']:>8.1%}"
-                  f"{v['nw_alpha_ann']:>8.1%}{v['alpha_t']:>6.2f}")
-    atomic_write_bytes(Path("artifacts") / "calendar_overlay.json",
-                       json.dumps(results, indent=2).encode())
+            print(
+                f"{k:<22}{v['strat_cagr']:>8.1%}{v['bh_cagr']:>8.1%}"
+                f"{v['strat_sharpe']:>7.2f}{v['bh_sharpe']:>7.2f}"
+                f"{v['strat_maxdd']:>8.1%}{v['bh_maxdd']:>8.1%}"
+                f"{v['nw_alpha_ann']:>8.1%}{v['alpha_t']:>6.2f}"
+            )
+    atomic_write_bytes(
+        Path("artifacts") / "calendar_overlay.json", json.dumps(results, indent=2).encode()
+    )
     print("\nsaved -> artifacts/calendar_overlay.json")
     return 0
 

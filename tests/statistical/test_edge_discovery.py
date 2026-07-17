@@ -40,7 +40,8 @@ def test_persistent_injected_edge_is_detected() -> None:
     assert edge.robustness.stability_score >= 2 / 3
     # The mirrored SHORT rule must NOT validate.
     short_thursday = [
-        e for e in edges
+        e
+        for e in edges
         if e.identity.direction is Side.SHORT
         and e.identity.name.startswith("short_h1: cal_weekday == 3.0")
     ]
@@ -66,6 +67,5 @@ def test_cost_destroyed_edge_is_not_activated() -> None:
     assert survival.get(CostScenario.OPTIMISTIC.value) is True
     assert survival.get(CostScenario.CONSERVATIVE.value) is False
     assert any(
-        "conservative costs" in r or "economic floor" in r
-        for r in edge.lifecycle.failure_reasons
+        "conservative costs" in r or "economic floor" in r for r in edge.lifecycle.failure_reasons
     )

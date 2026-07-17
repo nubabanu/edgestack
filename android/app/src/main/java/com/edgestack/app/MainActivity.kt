@@ -9,38 +9,37 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.edgestack.app.ui.board.BoardScreen
 import com.edgestack.app.ui.board.BoardViewModel
+import com.edgestack.app.ui.calendar.CalendarScreen
+import com.edgestack.app.ui.calendar.CalendarViewModel
 import com.edgestack.app.ui.components.DisclaimerFooter
 import com.edgestack.app.ui.edges.EdgesScreen
 import com.edgestack.app.ui.edges.EdgesViewModel
+import com.edgestack.app.ui.instrument.InstrumentScreen
+import com.edgestack.app.ui.instrument.InstrumentViewModel
 import com.edgestack.app.ui.overlay.OverlayScreen
 import com.edgestack.app.ui.overlay.OverlayViewModel
 import com.edgestack.app.ui.settings.SettingsScreen
 import com.edgestack.app.ui.settings.SettingsViewModel
+import com.edgestack.app.ui.sniper.SniperScreen
+import com.edgestack.app.ui.sniper.SniperViewModel
 import com.edgestack.app.ui.trades.TradesScreen
 import com.edgestack.app.ui.trades.TradesViewModel
 import com.edgestack.app.ui.theme.EdgeStackTheme
-import com.edgestack.app.work.AlertNotifier
 
 class MainActivity : ComponentActivity() {
 
@@ -57,15 +56,23 @@ class MainActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = when (modelClass) {
                 BoardViewModel::class.java ->
-                    BoardViewModel(container.boardRepo, container.syncRepo) as T
+                    BoardViewModel(container.recommendationRepo, container.syncRepo) as T
                 OverlayViewModel::class.java ->
-                    OverlayViewModel(container.overlayRepo, container.settings,
-                                     container.calendarRepo.calendar) as T
+                    OverlayViewModel(
+                        container.recommendationRepo,
+                        container.syncRepo,
+                        container.settings,
+                    ) as T
                 TradesViewModel::class.java ->
-                    TradesViewModel(container.positionsRepo, container.syncRepo,
-                                    container.yahoo,
-                                    container.calendarRepo.calendar) as T
-                EdgesViewModel::class.java -> EdgesViewModel(container.edgesRepo) as T
+                    TradesViewModel(container.syncRepo) as T
+                InstrumentViewModel::class.java ->
+                    InstrumentViewModel(container.instrumentRepo, container.syncRepo) as T
+                CalendarViewModel::class.java ->
+                    CalendarViewModel(container.calendarRepo, container.instrumentRepo) as T
+                SniperViewModel::class.java ->
+                    SniperViewModel(container.sniperRepo, container.syncRepo) as T
+                EdgesViewModel::class.java ->
+                    EdgesViewModel(container.edgesRepo, container.syncRepo) as T
                 SettingsViewModel::class.java ->
                     SettingsViewModel(container.settings, container.syncRepo) as T
                 else -> throw IllegalArgumentException("unknown $modelClass")
@@ -76,41 +83,31 @@ class MainActivity : ComponentActivity() {
             EdgeStackTheme {
                 var tab by remember { mutableIntStateOf(0) }
                 val tabs = listOf(
-                    "Board" to Icons.Filled.Home,
-                    "Overlay" to Icons.Filled.Star,
-                    "Trades" to Icons.Filled.ShoppingCart,
-                    "Edges" to Icons.AutoMirrored.Filled.List,
-                    "Settings" to Icons.Filled.Settings,
+                    "Portfolio", "Calendar", "Risk", "Analyze",
+                    "Sniper", "Edges", "Trades", "Settings",
                 )
                 Scaffold(
-                    bottomBar = {
-                        Column {
-                            DisclaimerFooter()
-                            NavigationBar {
-                                tabs.forEachIndexed { i, (label, icon) ->
-                                    NavigationBarItem(
-                                        selected = tab == i,
-                                        onClick = { tab = i },
-                                        icon = { Icon(icon, contentDescription = label) },
-                                        label = { Text(label) },
-                                    )
-                                }
-                            }
-                        }
-                    },
+                    bottomBar = { DisclaimerFooter() },
                 ) { padding ->
                     Column(Modifier.fillMaxSize().padding(padding)) {
+                        ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
+                            tabs.forEachIndexed { i, label ->
+                                Tab(
+                                    selected = tab == i,
+                                    onClick = { tab = i },
+                                    text = { Text(label) },
+                                )
+                            }
+                        }
                         when (tab) {
                             0 -> BoardScreen(viewModel(factory = factory))
-                            1 -> OverlayScreen(viewModel(factory = factory))
-                            2 -> TradesScreen(viewModel(factory = factory))
-                            3 -> EdgesScreen(viewModel(factory = factory))
-                            else -> SettingsScreen(viewModel(factory = factory)) {
-                                AlertNotifier.notify(
-                                    this@MainActivity, AlertNotifier.CHANNEL_CALENDAR,
-                                    999, "Test notification",
-                                    "Channels work. Alerts fire 15:45 New York time.")
-                            }
+                            1 -> CalendarScreen(viewModel(factory = factory))
+                            2 -> OverlayScreen(viewModel(factory = factory))
+                            3 -> InstrumentScreen(viewModel(factory = factory))
+                            4 -> SniperScreen(viewModel(factory = factory))
+                            5 -> EdgesScreen(viewModel(factory = factory))
+                            6 -> TradesScreen(viewModel(factory = factory))
+                            else -> SettingsScreen(viewModel(factory = factory))
                         }
                     }
                 }

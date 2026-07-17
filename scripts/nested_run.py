@@ -59,10 +59,19 @@ F_GRID = (2, 3, 4, 5)
 HORIZON = 10
 RANDOM_REPS = 10
 
-FEATURE_SET = tuple(dict.fromkeys([
-    *CONTINUOUS_RULE_FEATURES, *BINARY_RULE_FEATURES,
-    "bench_trend_200", "bench_vol_20", "natr_14", "realized_vol_20", "mom_60",
-]))
+FEATURE_SET = tuple(
+    dict.fromkeys(
+        [
+            *CONTINUOUS_RULE_FEATURES,
+            *BINARY_RULE_FEATURES,
+            "bench_trend_200",
+            "bench_vol_20",
+            "natr_14",
+            "realized_vol_20",
+            "mom_60",
+        ]
+    )
+)
 
 
 def eligible(merged: pd.DataFrame, member: pd.Series) -> pd.Series:
@@ -75,20 +84,31 @@ def make_intents(rows: pd.DataFrame, cfg) -> list[TradeIntent]:
         close = float(row.close)
         natr = getattr(row, "natr_14", np.nan)
         atr = natr * close if np.isfinite(natr) and natr > 0 else 0.02 * close
-        out.append(TradeIntent(
-            symbol=str(row.symbol), signal_session=pd.Timestamp(row.date),
-            side=Side.LONG, horizon=HORIZON,
-            stop_price=max(close - 2 * atr, 0.01), target_price=close + 2.5 * atr))
+        out.append(
+            TradeIntent(
+                symbol=str(row.symbol),
+                signal_session=pd.Timestamp(row.date),
+                side=Side.LONG,
+                horizon=HORIZON,
+                stop_price=max(close - 2 * atr, 0.01),
+                target_price=close + 2.5 * atr,
+            )
+        )
     return out
 
 
-def run_window(panel: pd.DataFrame, intents: list[TradeIntent], cfg,
-               start: pd.Timestamp, end: pd.Timestamp, sessions: pd.DatetimeIndex):
+def run_window(
+    panel: pd.DataFrame,
+    intents: list[TradeIntent],
+    cfg,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    sessions: pd.DatetimeIndex,
+):
     """Engine over [start, end]; returns (daily returns, trades frame, avg gross)."""
     lo = sessions[max(0, sessions.searchsorted(start) - 30)]
     hi = sessions[min(len(sessions) - 1, sessions.searchsorted(end) + 15)]
-    p = panel.loc[(pd.to_datetime(panel["date"]) >= lo)
-                  & (pd.to_datetime(panel["date"]) <= hi)]
+    p = panel.loc[(pd.to_datetime(panel["date"]) >= lo) & (pd.to_datetime(panel["date"]) <= hi)]
     engine = BacktestEngine(p, cfg, None)
     ledger = engine.run(intents, initial_cash=1_000_000)
     eq = ledger.equity_frame()
@@ -120,18 +140,23 @@ def stage_prep(cfg, catalog) -> None:
             features[c] = features[c].astype(np.float32)
     labels = forward_return_labels(panel, (HORIZON,), benchmark_symbol="SPY")
 
-    merged = features.merge(
-        labels[["symbol", "date", "label_end", "gross_ret"]],
-        on=["symbol", "date"], how="inner",
-    ).merge(panel[["symbol", "date", "close"]], on=["symbol", "date"]).reset_index(drop=True)
-    print(f"research frame: {len(merged):,} rows ({time.time()-t0:.0f}s)")
+    merged = (
+        features.merge(
+            labels[["symbol", "date", "label_end", "gross_ret"]],
+            on=["symbol", "date"],
+            how="inner",
+        )
+        .merge(panel[["symbol", "date", "close"]], on=["symbol", "date"])
+        .reset_index(drop=True)
+    )
+    print(f"research frame: {len(merged):,} rows ({time.time() - t0:.0f}s)")
 
     member = universe.membership_mask(merged["symbol"], merged["date"])
     merged = merged.loc[eligible(merged, member).to_numpy()].reset_index(drop=True)
     print(f"eligible point-in-time rows: {len(merged):,}")
     MERGED_PATH.parent.mkdir(parents=True, exist_ok=True)
     merged.to_parquet(MERGED_PATH, index=False)
-    print(f"persisted -> {MERGED_PATH} ({time.time()-t0:.0f}s)")
+    print(f"persisted -> {MERGED_PATH} ({time.time() - t0:.0f}s)")
 
 
 def stage_year(cfg, catalog, only_year: int) -> None:
@@ -142,8 +167,11 @@ def stage_year(cfg, catalog, only_year: int) -> None:
     spy = daily_total_returns(panel, "SPY")
     pm = universe.membership_mask(panel["symbol"], panel["date"])
     ew = equal_weight_pit_returns(panel, pm & (panel["close"] >= 5.0))
-    binnable = tuple(c for c in (*CONTINUOUS_RULE_FEATURES, "bench_trend_200",
-                                 "bench_vol_20") if c in merged.columns)
+    binnable = tuple(
+        c
+        for c in (*CONTINUOUS_RULE_FEATURES, "bench_trend_200", "bench_vol_20")
+        if c in merged.columns
+    )
     WINDOWS_DIR.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
 
@@ -151,38 +179,52 @@ def stage_year(cfg, catalog, only_year: int) -> None:
         cutoff = pd.Timestamp(f"{year}-01-01")
         year_end = pd.Timestamp(f"{year}-12-31")
         pre = merged.loc[merged["date"] < cutoff].reset_index(drop=True)
-        outer = merged.loc[(merged["date"] >= cutoff)
-                           & (merged["date"] <= year_end)].reset_index(drop=True)
-        print(f"\n=== OUTER {year}: research on {len(pre):,} pre rows, trade "
-              f"{len(outer):,} outer rows ===")
+        outer = merged.loc[(merged["date"] >= cutoff) & (merged["date"] <= year_end)].reset_index(
+            drop=True
+        )
+        print(
+            f"\n=== OUTER {year}: research on {len(pre):,} pre rows, trade "
+            f"{len(outer):,} outer rows ==="
+        )
 
         experiment_id = catalog.record_experiment(
-            "nested_outer", start_date=pre["date"].min().date(),
-            end_date=date(year, 12, 31), notes=f"outer={year}")
+            "nested_outer",
+            start_date=pre["date"].min().date(),
+            end_date=date(year, 12, 31),
+            notes=f"outer={year}",
+        )
 
         # discovery/validation expect a pure feature frame; they merge labels
         # themselves, so the label columns must not ride along.
         features_pre = pre.drop(columns=["label_end", "gross_ret", "close"])
-        labels_frame = merged[["symbol", "date", "label_end", "gross_ret"]].assign(
-            horizon=HORIZON)
+        labels_frame = merged[["symbol", "date", "label_end", "gross_ret"]].assign(horizon=HORIZON)
         batch = generate_candidates(features_pre, labels_frame, cfg, experiment_id)
         print(f"  candidates: {batch.trial_count}")
         edges = validate_batch(batch, features_pre, labels_frame, cfg)
-        validated = [e for e in edges
-                     if e.lifecycle.status is EdgeStatus.VALIDATED
-                     and e.identity.direction is Side.LONG]
-        print(f"  validated long edges: {len(validated)} "
-              f"({time.time()-t0:.0f}s elapsed)")
+        validated = [
+            e
+            for e in edges
+            if e.lifecycle.status is EdgeStatus.VALIDATED and e.identity.direction is Side.LONG
+        ]
+        print(f"  validated long edges: {len(validated)} ({time.time() - t0:.0f}s elapsed)")
         if not validated:
-            _persist_window(year, {"year": year, "validated_long_edges": 0,
-                                   "note": "no validated edges: abstained all year"},
-                            pd.Series(dtype=float), pd.DataFrame())
+            _persist_window(
+                year,
+                {
+                    "year": year,
+                    "validated_long_edges": 0,
+                    "note": "no validated edges: abstained all year",
+                },
+                pd.Series(dtype=float),
+                pd.DataFrame(),
+            )
             continue
 
         families = sorted({e.identity.family for e in validated})
 
-        def fam_votes(frame: pd.DataFrame, binner, *, validated=validated,
-                      families=families) -> np.ndarray:
+        def fam_votes(
+            frame: pd.DataFrame, binner, *, validated=validated, families=families
+        ) -> np.ndarray:
             votes = np.zeros((len(frame), len(families)), dtype=bool)
             for e in validated:
                 mask = evaluate_condition(e.identity.condition, frame, binner).to_numpy()
@@ -196,24 +238,22 @@ def stage_year(cfg, catalog, only_year: int) -> None:
         for fold in folds:
             train = pre.iloc[fold.train_idx]
             test = pre.iloc[fold.test_idx]
-            binner = QuantileBinner(quantiles=cfg.discovery.quantile_bins).fit(
-                train, binnable)
+            binner = QuantileBinner(quantiles=cfg.discovery.quantile_bins).fit(train, binnable)
             votes = fam_votes(test, binner)
             for f in F_GRID:
                 intents = make_intents(test.loc[votes >= f], cfg)
                 if len(intents) < 20:
                     inner_scores[f].append(-9.0)
                     continue
-                rets, _, _ = run_window(panel, intents, cfg,
-                                        fold.test_start, fold.test_end, sessions)
-                inner_scores[f].append(sharpe_ratio(rets.to_numpy())
-                                       if len(rets) > 30 else -9.0)
+                rets, _, _ = run_window(
+                    panel, intents, cfg, fold.test_start, fold.test_end, sessions
+                )
+                inner_scores[f].append(sharpe_ratio(rets.to_numpy()) if len(rets) > 30 else -9.0)
         mean_scores = {f: float(np.mean(v)) for f, v in inner_scores.items()}
         best_f = max(mean_scores, key=mean_scores.get)
 
         # --- freeze and trade the outer year
-        pre_binner = QuantileBinner(quantiles=cfg.discovery.quantile_bins).fit(
-            pre, binnable)
+        pre_binner = QuantileBinner(quantiles=cfg.discovery.quantile_bins).fit(pre, binnable)
         votes = fam_votes(outer, pre_binner)
         chosen_rows = outer.loc[votes >= best_f]
         intents = make_intents(chosen_rows, cfg)
@@ -227,12 +267,10 @@ def stage_year(cfg, catalog, only_year: int) -> None:
         pool = outer.reset_index(drop=True)
         for rep in range(RANDOM_REPS):
             rrng = np.random.default_rng(1000 + rep)
-            idx = rrng.choice(len(pool), size=min(len(intents), len(pool)),
-                              replace=False)
+            idx = rrng.choice(len(pool), size=min(len(intents), len(pool)), replace=False)
             r_intents = make_intents(pool.iloc[idx], cfg)
             r_rets, _, _ = run_window(panel, r_intents, cfg, cutoff, year_end, sessions)
-            rand_sharpes.append(sharpe_ratio(r_rets.to_numpy())
-                                if len(r_rets) > 30 else 0.0)
+            rand_sharpes.append(sharpe_ratio(r_rets.to_numpy()) if len(r_rets) > 30 else 0.0)
 
         row = {
             "year": year,
@@ -255,20 +293,23 @@ def stage_year(cfg, catalog, only_year: int) -> None:
         }
         _persist_window(year, row, rets, trades)
         print(f"  F chosen={best_f} (inner scores {mean_scores})")
-        print(f"  outer: {len(trades)} trades, return "
-              f"{row['strategy_return']:+.1%} (SPY {row['spy_return']:+.1%}, "
-              f"exposure-matched {row['exposure_matched_spy_return']:+.1%}, "
-              f"EW-PIT {row['equal_weight_pit_return']:+.1%}), "
-              f"Sharpe {row['strategy_sharpe']}")
+        print(
+            f"  outer: {len(trades)} trades, return "
+            f"{row['strategy_return']:+.1%} (SPY {row['spy_return']:+.1%}, "
+            f"exposure-matched {row['exposure_matched_spy_return']:+.1%}, "
+            f"EW-PIT {row['equal_weight_pit_return']:+.1%}), "
+            f"Sharpe {row['strategy_sharpe']}"
+        )
 
 
-def _persist_window(year: int, row: dict, rets: pd.Series,
-                    trades: pd.DataFrame) -> None:
+def _persist_window(year: int, row: dict, rets: pd.Series, trades: pd.DataFrame) -> None:
     WINDOWS_DIR.mkdir(parents=True, exist_ok=True)
-    atomic_write_bytes(WINDOWS_DIR / f"{year}.json",
-                       json.dumps(row, indent=2, default=str).encode())
+    atomic_write_bytes(
+        WINDOWS_DIR / f"{year}.json", json.dumps(row, indent=2, default=str).encode()
+    )
     pd.DataFrame({"date": rets.index, "ret": rets.to_numpy()}).to_parquet(
-        WINDOWS_DIR / f"returns_{year}.parquet", index=False)
+        WINDOWS_DIR / f"returns_{year}.parquet", index=False
+    )
     trades.to_parquet(WINDOWS_DIR / f"trades_{year}.parquet", index=False)
 
 
@@ -283,8 +324,7 @@ def stage_report(cfg, catalog) -> None:
             continue
         windows.append(json.loads(path.read_text()))
         r = pd.read_parquet(WINDOWS_DIR / f"returns_{year}.parquet")
-        rets_list.append(pd.Series(r["ret"].to_numpy(),
-                                   index=pd.to_datetime(r["date"])))
+        rets_list.append(pd.Series(r["ret"].to_numpy(), index=pd.to_datetime(r["date"])))
         t = pd.read_parquet(WINDOWS_DIR / f"trades_{year}.parquet")
         if not t.empty:
             trades_list.append(t)
@@ -294,19 +334,24 @@ def stage_report(cfg, catalog) -> None:
     if len(pooled) > 60:
         rng2 = np.random.default_rng(7)
         report["pooled_strategy"] = summarize_returns(pooled, rng=rng2, label="strategy")
-        spy_pool = spy.loc[pooled.index.min():pooled.index.max()]
+        spy_pool = spy.loc[pooled.index.min() : pooled.index.max()]
         report["pooled_spy"] = summarize_returns(spy_pool, rng=rng2, label="SPY")
         alpha = alpha_regression(pooled, spy, rng=rng2)
         report["alpha_vs_spy"] = {
-            "beta": alpha.beta, "annualized_alpha": alpha.annualized_alpha,
-            "alpha_ci": list(alpha.alpha_ci), "correlation": alpha.correlation,
+            "beta": alpha.beta,
+            "annualized_alpha": alpha.annualized_alpha,
+            "alpha_ci": list(alpha.alpha_ci),
+            "correlation": alpha.correlation,
         }
     if trades_list:
         report["concentration"] = concentration_diagnostics(
-            pd.concat(trades_list, ignore_index=True))
+            pd.concat(trades_list, ignore_index=True)
+        )
 
-    atomic_write_bytes(Path(cfg.paths.artifacts_dir) / "nested_run.json",
-                       json.dumps(report, indent=2, default=str).encode())
+    atomic_write_bytes(
+        Path(cfg.paths.artifacts_dir) / "nested_run.json",
+        json.dumps(report, indent=2, default=str).encode(),
+    )
     catalog.audit("nested_run", reason="phases 3-4", windows=len(windows))
     print("full report -> artifacts/nested_run.json")
     print(json.dumps(report, indent=2, default=str))

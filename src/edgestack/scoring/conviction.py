@@ -28,20 +28,20 @@ TAIL_SCALE = 0.10
 
 @dataclass(frozen=True)
 class ConvictionInputs:
-    calibrated_probability: float          # P(net > 0), 0..1
-    expected_net_return: float             # per trade, signed
-    expected_risk: float                   # per-trade return std, >= 0
+    calibrated_probability: float  # P(net > 0), 0..1
+    expected_net_return: float  # per trade, signed
+    expected_risk: float  # per-trade return std, >= 0
     effective_sample_size: float
-    stability_score: float                 # fraction of positive OOS folds, 0..1
-    out_of_sample_score: float             # 0..1
-    deflated_sharpe: float                 # 0..1
-    regime_similarity: float               # 0..1
-    liquidity_score: float                 # 0..1
-    data_quality_score: float              # 0..1
-    cost_survival_fraction: float          # scenarios survived / total, 0..1
-    ci_width: float                        # bootstrap CI width of the net mean
-    tail_risk: float                       # |expected shortfall| per trade
-    model_edge_disagreement: float = 0.0   # |model P - edge posterior|, 0..1
+    stability_score: float  # fraction of positive OOS folds, 0..1
+    out_of_sample_score: float  # 0..1
+    deflated_sharpe: float  # 0..1
+    regime_similarity: float  # 0..1
+    liquidity_score: float  # 0..1
+    data_quality_score: float  # 0..1
+    cost_survival_fraction: float  # scenarios survived / total, 0..1
+    ci_width: float  # bootstrap CI width of the net mean
+    tail_risk: float  # |expected shortfall| per trade
+    model_edge_disagreement: float = 0.0  # |model P - edge posterior|, 0..1
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,7 @@ def conviction(
     logistic_slope: float = 6.0,
 ) -> ConvictionResult:
     p = _clip01(inputs.calibrated_probability)
-    prob_edge = _clip01(2.0 * (p - 0.5))          # 0 at coin flip, 1 at certainty
+    prob_edge = _clip01(2.0 * (p - 0.5))  # 0 at coin flip, 1 at certainty
     econ_edge = _clip01(inputs.expected_net_return / NET_RETURN_SCALE)
     base_edge = prob_edge * econ_edge
 
@@ -70,8 +70,7 @@ def conviction(
     )
     applicability = _clip01(inputs.regime_similarity)
     tradability = _clip01(
-        (inputs.liquidity_score + inputs.data_quality_score
-         + inputs.cost_survival_fraction) / 3.0
+        (inputs.liquidity_score + inputs.data_quality_score + inputs.cost_survival_fraction) / 3.0
     )
 
     denom = max(abs(inputs.expected_net_return), 1e-6)

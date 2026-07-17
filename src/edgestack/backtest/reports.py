@@ -7,6 +7,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from string import Template
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -31,8 +32,7 @@ DISCLAIMER = (
 )
 
 
-def compute_metrics(ledger: Ledger, *, rng: np.random.Generator,
-                    n_boot: int = 1000) -> dict:
+def compute_metrics(ledger: Ledger, *, rng: np.random.Generator, n_boot: int = 1000) -> dict:
     equity = ledger.equity_frame()
     trades = ledger.trades_frame()
     out: dict = {"n_sessions": len(equity), "n_trades": len(trades)}
@@ -58,18 +58,18 @@ def compute_metrics(ledger: Ledger, *, rng: np.random.Generator,
         out["daily_es_95"] = es
         calmar_denom = abs(out["max_drawdown"])
         out["calmar"] = float(out["cagr"] / calmar_denom) if calmar_denom > 0 else None
-        lo, hi = block_bootstrap_ci(returns, rng=rng, block_length=20,
-                                    n_boot=n_boot, stat=np.mean)
+        lo, hi = block_bootstrap_ci(returns, rng=rng, block_length=20, n_boot=n_boot, stat=np.mean)
         out["mean_daily_return_ci"] = [float(lo), float(hi)]
         sr_lo, sr_hi = block_bootstrap_ci(
-            returns, rng=rng, block_length=20, n_boot=n_boot,
+            returns,
+            rng=rng,
+            block_length=20,
+            n_boot=n_boot,
             stat=lambda x: float(x.mean() / x.std(ddof=1)) if x.std(ddof=1) > 0 else 0.0,
         )
         out["daily_sharpe_ci"] = [float(sr_lo), float(sr_hi)]
     out["total_borrow_paid"] = float(equity["borrow_paid"].sum())
-    out["avg_gross_exposure"] = float(
-        (equity["gross_exposure"] / equity["equity"]).mean()
-    )
+    out["avg_gross_exposure"] = float((equity["gross_exposure"] / equity["equity"]).mean())
 
     if not trades.empty:
         pnl = trades["net_pnl"].to_numpy()
@@ -109,8 +109,9 @@ th{background:#f0f0f0}.warn{background:#fff3cd;padding:.75rem;border:1px solid #
 )
 
 
-def save_backtest_report(catalog: DataCatalog, ledger: Ledger, metrics: dict,
-                         scenario: CostScenario) -> tuple[str, Path]:
+def save_backtest_report(
+    catalog: DataCatalog, ledger: Ledger, metrics: dict, scenario: CostScenario
+) -> tuple[str, Path]:
     run_id = uuid.uuid4().hex[:12]
     out_dir = catalog.data_dir / "reports" / "backtests" / run_id
     generated = datetime.now(UTC).isoformat(timespec="seconds")
@@ -124,8 +125,7 @@ def save_backtest_report(catalog: DataCatalog, ledger: Ledger, metrics: dict,
         "metrics": metrics,
         "trades": ledger.trades_frame().to_dict(orient="records"),
     }
-    atomic_write_bytes(out_dir / "report.json",
-                       json.dumps(payload, indent=2, default=str).encode())
+    atomic_write_bytes(out_dir / "report.json", json.dumps(payload, indent=2, default=str).encode())
 
     metric_rows = "".join(
         f"<tr><td style='text-align:left'>{k}</td><td>{_fmt(v)}</td></tr>"
@@ -133,22 +133,39 @@ def save_backtest_report(catalog: DataCatalog, ledger: Ledger, metrics: dict,
     )
     equity = ledger.equity_frame()
     step = max(1, len(equity) // 40)
-    equity_rows = "".join(
-        f"<tr><td>{row.session.date()}</td><td>{row.equity:,.0f}</td>"
-        f"<td>{row.gross_exposure:,.0f}</td></tr>"
-        for row in equity.iloc[::step].itertuples(index=False)
-    ) if not equity.empty else ""
+
+    def equity_html_row(row: Any) -> str:
+        session = pd.Timestamp(row.session)
+        return (
+            f"<tr><td>{session.date()}</td><td>{float(row.equity):,.0f}</td>"
+            f"<td>{float(row.gross_exposure):,.0f}</td></tr>"
+        )
+
+    equity_rows = (
+        "".join(equity_html_row(row) for row in equity.iloc[::step].itertuples(index=False))
+        if not equity.empty
+        else ""
+    )
     html = _HTML.substitute(
-        run_id=run_id, scenario=scenario.value, generated=generated,
-        disclaimer=DISCLAIMER, metric_rows=metric_rows, equity_rows=equity_rows,
+        run_id=run_id,
+        scenario=scenario.value,
+        generated=generated,
+        disclaimer=DISCLAIMER,
+        metric_rows=metric_rows,
+        equity_rows=equity_rows,
     )
     atomic_write_bytes(out_dir / "report.html", html.encode("utf-8"))
 
     with catalog.connect() as con:
         con.execute(
             "INSERT INTO backtests VALUES (?, ?, ?, ?, ?)",
-            [run_id, datetime.now(UTC), catalog.cfg.config_hash(),
-             scenario.value, json.dumps(payload, default=str)],
+            [
+                run_id,
+                datetime.now(UTC),
+                catalog.cfg.config_hash(),
+                scenario.value,
+                json.dumps(payload, default=str),
+            ],
         )
     return run_id, out_dir
 

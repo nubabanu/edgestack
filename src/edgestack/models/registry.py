@@ -33,8 +33,11 @@ def save_models(models_dir: Path, models: list[TrainedModel]) -> list[Path]:
         base = _artifact_name(model)
         payload = pickle.dumps(model)
         digest = hashlib.sha256(payload).hexdigest()
-        meta = {k: v for k, v in asdict(model).items()
-                if k in _META_KEYS or k in ("metrics", "reliability_bins")}
+        meta = {
+            k: v
+            for k, v in asdict(model).items()
+            if k in _META_KEYS or k in ("metrics", "reliability_bins")
+        }
         pkl_path = safe_child_path(models_dir, f"{base}.pkl")
         atomic_write_bytes(pkl_path, payload)
         atomic_write_bytes(safe_child_path(models_dir, f"{base}.sha256"), digest.encode())
@@ -46,8 +49,11 @@ def save_models(models_dir: Path, models: list[TrainedModel]) -> list[Path]:
     return paths
 
 
-def load_models(models_dir: Path, *, expected_config_hash: str | None = None,
-                ) -> list[TrainedModel]:
+def load_models(
+    models_dir: Path,
+    *,
+    expected_config_hash: str | None = None,
+) -> list[TrainedModel]:
     """Load all model artifacts, verifying checksum and metadata first."""
     if not models_dir.exists():
         raise DataError(f"no model artifacts at {models_dir}; run `edgestack models train`")

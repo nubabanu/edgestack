@@ -64,28 +64,46 @@ def _edge(status: EdgeStatus = EdgeStatus.VALIDATED) -> Edge:
             holding_horizon=cand.horizon,
         ),
         stats=EdgeStats(
-            sample_size=400, effective_sample_size=350.0, gross_mean_return=0.003,
-            net_mean_return=0.001, median_return=0.001, return_std=0.02,
-            downside_deviation=0.01, probability_of_profit=0.55,
-            probability_of_positive_net_return=0.54, expected_shortfall=-0.03,
-            value_at_risk=-0.02, max_drawdown=-0.1, sharpe_ratio=1.1,
-            sortino_ratio=1.4, p_value=0.004, adjusted_p_value=0.02, q_value=0.02,
+            sample_size=400,
+            effective_sample_size=350.0,
+            gross_mean_return=0.003,
+            net_mean_return=0.001,
+            median_return=0.001,
+            return_std=0.02,
+            downside_deviation=0.01,
+            probability_of_profit=0.55,
+            probability_of_positive_net_return=0.54,
+            expected_shortfall=-0.03,
+            value_at_risk=-0.02,
+            max_drawdown=-0.1,
+            sharpe_ratio=1.1,
+            sortino_ratio=1.4,
+            p_value=0.004,
+            adjusted_p_value=0.02,
+            q_value=0.02,
             bayesian_posterior_probability=0.9,
             bayesian_credible_interval=(0.0002, 0.002),
             bootstrap_confidence_interval=(0.0001, 0.0021),
             deflated_sharpe_ratio=0.8,
         ),
         robustness=EdgeRobustness(
-            stability_score=0.8, regime_stability_score=0.5, cost_robustness_score=0.75,
-            parameter_robustness_score=0.7, out_of_sample_score=0.8, decay_score=1.0,
+            stability_score=0.8,
+            regime_stability_score=0.5,
+            cost_robustness_score=0.75,
+            parameter_robustness_score=0.7,
+            out_of_sample_score=0.8,
+            decay_score=1.0,
             cost_scenario_survival={"CONSERVATIVE": True},
             fold_net_means=(0.001, 0.002),
         ),
         lifecycle=EdgeLifecycle(
             status=status,
-            discovery_start=date(2010, 1, 1), discovery_end=date(2019, 12, 31),
-            validation_start=date(2010, 1, 1), validation_end=date(2019, 12, 31),
-            discovery_batch_id="batch01", experiment_id="exp01",
+            discovery_start=date(2010, 1, 1),
+            discovery_end=date(2019, 12, 31),
+            validation_start=date(2010, 1, 1),
+            validation_end=date(2019, 12, 31),
+            discovery_batch_id="batch01",
+            experiment_id="exp01",
         ),
     )
 
@@ -93,8 +111,7 @@ def _edge(status: EdgeStatus = EdgeStatus.VALIDATED) -> Edge:
 def test_batch_round_trip(cfg: EdgeStackConfig) -> None:
     catalog = DataCatalog(cfg)
     exp = catalog.record_experiment("discovery")
-    batch = DiscoveryBatch(batch_id="batch01", experiment_id=exp,
-                           candidates=(_candidate(),))
+    batch = DiscoveryBatch(batch_id="batch01", experiment_id=exp, candidates=(_candidate(),))
     save_batch(catalog, batch)
     loaded = load_batch(catalog)
     assert loaded.batch_id == "batch01"
@@ -120,8 +137,13 @@ def test_edge_lifecycle_is_event_sourced(cfg: EdgeStackConfig) -> None:
     assert [e.identity.edge_id for e in load_edges(catalog)] == [edge.identity.edge_id]
 
     # Status changes append events; the edge row itself is never rewritten.
-    record_edge_event(catalog, edge.identity.edge_id, EdgeStatus.VALIDATED,
-                      EdgeStatus.DEGRADED, "rolling net mean below expectation")
+    record_edge_event(
+        catalog,
+        edge.identity.edge_id,
+        EdgeStatus.VALIDATED,
+        EdgeStatus.DEGRADED,
+        "rolling net mean below expectation",
+    )
     statuses = current_statuses(catalog)
     assert statuses.loc[statuses["edge_id"] == edge.identity.edge_id, "status"].iloc[0] == (
         EdgeStatus.DEGRADED.value

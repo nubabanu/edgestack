@@ -1,4 +1,6 @@
-"""Strategy zoo: test every daily-bar-testable strategy family from the
+"""Historical, non-actionable strategy zoo; no result is V2 promotion evidence.
+
+Test every daily-bar-testable strategy family from the
 canonical retail catalogue, on SPY/QQQ + 11 sector ETFs, 1999->present.
 
 Families covered here (time-series, long/flat, signal at close t -> earns
@@ -11,8 +13,9 @@ session t+1, 2 bps per unit exposure change):
   position management (trailing/chandelier stop, fixed stop + reentry)
   composites (trend+dip, trend+ToM, dual momentum)
 
-Splits: DEV 1999-2015, VAL 2016-2023, HOLDOUT 2024+ (untouched by design
-decisions). Survivor bar: Sharpe >= buy-and-hold in ALL THREE splits AND
+Splits: DEV 1999-2015, VAL 2016-2023, HISTORICAL 2024+ (previously accessed;
+not used for V2 promotion decisions). Historical survivor bar: Sharpe >=
+buy-and-hold in all three splits AND
 pooled Newey-West alpha t >= 2 vs the same instrument's buy-and-hold.
 Every (rule, instrument) run is counted as a trial for the multiplicity note.
 """
@@ -37,17 +40,22 @@ from edgestack.validation.advanced_tests import newey_west_alpha
 from edgestack.validation.metrics import max_drawdown, sharpe_ratio
 
 COST = 0.0002
-TICKERS = ["SPY", "QQQ", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI",
-           "XLU", "XLB"]
-SPLITS = {"dev_1999_2015": ("1999-01-01", "2015-12-31"),
-          "val_2016_2023": ("2016-01-01", "2023-12-31"),
-          "holdout_2024": ("2024-01-01", "2026-12-31")}
+TICKERS = ["SPY", "QQQ", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI", "XLU", "XLB"]
+SPLITS = {
+    "dev_1999_2015": ("1999-01-01", "2015-12-31"),
+    "val_2016_2023": ("2016-01-01", "2023-12-31"),
+    "holdout_2024": ("2024-01-01", "2026-12-31"),
+}
 CACHE = Path("data/cache/zoo")
 
 
 # ---------------------------------------------------------------- indicators
-def sma(s, n): return s.rolling(n).mean()
-def ema(s, n): return s.ewm(span=n, adjust=False).mean()
+def sma(s, n):
+    return s.rolling(n).mean()
+
+
+def ema(s, n):
+    return s.ewm(span=n, adjust=False).mean()
 
 
 def rsi(close: pd.Series, n: int) -> pd.Series:
@@ -58,9 +66,14 @@ def rsi(close: pd.Series, n: int) -> pd.Series:
 
 
 def atr(df: pd.DataFrame, n: int = 14) -> pd.Series:
-    tr = pd.concat([df["high"] - df["low"],
-                    (df["high"] - df["close"].shift()).abs(),
-                    (df["low"] - df["close"].shift()).abs()], axis=1).max(axis=1)
+    tr = pd.concat(
+        [
+            df["high"] - df["low"],
+            (df["high"] - df["close"].shift()).abs(),
+            (df["low"] - df["close"].shift()).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
     return tr.ewm(alpha=1 / n, adjust=False).mean()
 
 
@@ -124,7 +137,7 @@ def hold_n(trigger: pd.Series, n: int) -> pd.Series:
 
 # ---------------------------------------------------------------- rule library
 def build_rules(df: pd.DataFrame) -> dict[str, pd.Series]:
-    c, h, low, o = df["close"], df["high"], df["low"], df["open"]
+    c, h, low = df["close"], df["high"], df["low"]
     ret = df["adj"].pct_change()
     vol20 = ret.rolling(20).std() * np.sqrt(252)
     s200, s50, s20, s10 = sma(c, 200), sma(c, 50), sma(c, 20), sma(c, 10)
@@ -150,8 +163,7 @@ def build_rules(df: pd.DataFrame) -> dict[str, pd.Series]:
         "trend_px_gt_sma200": (c > s200).astype(float),
         "trend_px_gt_sma50": (c > s50).astype(float),
         "trend_ema9x20": (ema(c, 9) > ema(c, 20)).astype(float),
-        "trend_macd": (ema(c, 12) - ema(c, 26) >
-                       ema(ema(c, 12) - ema(c, 26), 9)).astype(float),
+        "trend_macd": (ema(c, 12) - ema(c, 26) > ema(ema(c, 12) - ema(c, 26), 9)).astype(float),
         "trend_supertrend": supertrend(df),
         "trend_psar": psar(df),
         "trend_adx25_di": ((adx14 > 25) & (pdi > mdi)).astype(float),
@@ -167,32 +179,39 @@ def build_rules(df: pd.DataFrame) -> dict[str, pd.Series]:
         "brk_52w_high_hold21": hold_n((c > hi52.shift()).astype(float), 21),
         "brk_nr7_up_hold5": hold_n(((c > h.shift()) & nr7.shift()).astype(float), 5),
         "brk_inside_up_hold5": hold_n(((c > h.shift()) & inside.shift()).astype(float), 5),
-        "brk_bb_squeeze": hold_n(((c > bb_mid + 2 * bb_sd)
-                                  & ((4 * bb_sd / bb_mid).rolling(120)
-                                     .rank(pct=True).shift() < 0.2)).astype(float), 10),
+        "brk_bb_squeeze": hold_n(
+            (
+                (c > bb_mid + 2 * bb_sd)
+                & ((4 * bb_sd / bb_mid).rolling(120).rank(pct=True).shift() < 0.2)
+            ).astype(float),
+            10,
+        ),
         # --- mean reversion (long-only, trend-gated where classic) ---
         "mr_rsi2_dip_uptrend": ((r2 < 10) & (c > s200)).astype(float),
         "mr_rsi14_30": (r14 < 30).astype(float),
         "mr_bb_fade_uptrend": ((c < bb_mid - 2 * bb_sd) & (c > s200)).astype(float),
         "mr_ibs_low": (ibs < 0.2).astype(float),
-        "mr_3down_days": ((ret < 0) & (ret.shift() < 0)
-                          & (ret.shift(2) < 0)).astype(float),
-        "mr_5d_low_uptrend": ((c <= low.rolling(5).min().shift() * 1.001)
-                              & (c > s200)).astype(float),
+        "mr_3down_days": ((ret < 0) & (ret.shift() < 0) & (ret.shift(2) < 0)).astype(float),
+        "mr_5d_low_uptrend": ((c <= low.rolling(5).min().shift() * 1.001) & (c > s200)).astype(
+            float
+        ),
         # --- volatility management ---
         "vol_target_10pct": (0.10 / vol20).clip(upper=1.5).fillna(0.0),
         "vol_regime_lt20": (vol20 < 0.20).astype(float),
         # --- composites ---
-        "cmb_trend_or_rsi2dip": np.maximum((c > s200).astype(float) * 1.0,
-                                           (r2 < 10).astype(float) * 1.0),
+        "cmb_trend_or_rsi2dip": np.maximum(
+            (c > s200).astype(float) * 1.0, (r2 < 10).astype(float) * 1.0
+        ),
         "cmb_trend_and_lowvol": ((c > s200) & (vol20 < 0.20)).astype(float),
         "cmb_trend_plus_tom": ((c > s200) | tom).astype(float),
         "cmb_trend_dip_buy": ((c > s200) & ((r2 < 25) | (ibs < 0.3))).astype(float),
     }
 
     # Donchian stateful long/flat: enter on N-high, exit on M-low
-    for name, ehi, xlo in (("brk_donchian_20_10", dc_hi20, dc_lo10),
-                           ("brk_donchian_55_20", dc_hi55, dc_lo20)):
+    for name, ehi, xlo in (
+        ("brk_donchian_20_10", dc_hi20, dc_lo10),
+        ("brk_donchian_55_20", dc_hi55, dc_lo20),
+    ):
         e = (c > ehi.shift()).to_numpy()
         x = (c < xlo.shift()).to_numpy()
         pos = np.zeros(len(c))
@@ -207,7 +226,7 @@ def build_rules(df: pd.DataFrame) -> dict[str, pd.Series]:
 
     # Chandelier trailing stop on buy-and-hold (position mgmt family)
     a22 = atr(df, 22)
-    chand = (c.rolling(22).max() - 3 * a22)
+    chand = c.rolling(22).max() - 3 * a22
     e = (c > hi20.shift()).to_numpy()
     x = (c < chand.shift()).to_numpy()
     pos = np.zeros(len(c))
@@ -227,19 +246,27 @@ def build_rules(df: pd.DataFrame) -> dict[str, pd.Series]:
 
 
 CANDLES = {
-    "cs_bull_engulf": lambda o, h, low, c: (c > o) & (c.shift() < o.shift())
-        & (c > o.shift()) & (o < c.shift()),
-    "cs_bear_engulf": lambda o, h, low, c: (c < o) & (c.shift() > o.shift())
-        & (c < o.shift()) & (o > c.shift()),
-    "cs_hammer": lambda o, h, low, c: ((np.minimum(o, c) - low)
-        > 2 * (c - o).abs()) & ((h - np.maximum(o, c)) < (c - o).abs()),
-    "cs_shooting_star": lambda o, h, low, c: ((h - np.maximum(o, c))
-        > 2 * (c - o).abs()) & ((np.minimum(o, c) - low) < (c - o).abs()),
+    "cs_bull_engulf": lambda o, h, low, c: (
+        (c > o) & (c.shift() < o.shift()) & (c > o.shift()) & (o < c.shift())
+    ),
+    "cs_bear_engulf": lambda o, h, low, c: (
+        (c < o) & (c.shift() > o.shift()) & (c < o.shift()) & (o > c.shift())
+    ),
+    "cs_hammer": lambda o, h, low, c: (
+        ((np.minimum(o, c) - low) > 2 * (c - o).abs()) & ((h - np.maximum(o, c)) < (c - o).abs())
+    ),
+    "cs_shooting_star": lambda o, h, low, c: (
+        ((h - np.maximum(o, c)) > 2 * (c - o).abs()) & ((np.minimum(o, c) - low) < (c - o).abs())
+    ),
     "cs_doji": lambda o, h, low, c: (c - o).abs() < 0.1 * (h - low),
-    "cs_3_white_soldiers": lambda o, h, low, c: (c > o) & (c.shift() > o.shift())
-        & (c.shift(2) > o.shift(2)) & (c > c.shift()) & (c.shift() > c.shift(2)),
-    "cs_outside_up": lambda o, h, low, c: (h > h.shift()) & (low < low.shift())
-        & (c > c.shift()),
+    "cs_3_white_soldiers": lambda o, h, low, c: (
+        (c > o)
+        & (c.shift() > o.shift())
+        & (c.shift(2) > o.shift(2))
+        & (c > c.shift())
+        & (c.shift() > c.shift(2))
+    ),
+    "cs_outside_up": lambda o, h, low, c: (h > h.shift()) & (low < low.shift()) & (c > c.shift()),
 }
 
 
@@ -260,20 +287,21 @@ def main() -> int:
         if cache_f.exists():
             df = pd.read_parquet(cache_f)
         else:
-            df = fetch(session, sym, interval="1d", period1=0,
-                       period2=int(time.time()))
+            df = fetch(session, sym, interval="1d", period1=0, period2=int(time.time()))
             df = df[["dt", "open", "high", "low", "close", "adj"]]
             df.to_parquet(cache_f, index=False)
             time.sleep(0.3)
-        df = df.assign(date=df["dt"].dt.tz_localize(None).dt.normalize()
-                       ).set_index("date").drop(columns="dt")
+        df = (
+            df.assign(date=df["dt"].dt.tz_localize(None).dt.normalize())
+            .set_index("date")
+            .drop(columns="dt")
+        )
         ret = df["adj"].pct_change()
         rules = build_rules(df)
         for name, pos in rules.items():
             trials += 1
             strat = run_rule(pos, ret)
-            row = {"rule": name, "symbol": sym,
-                   "avg_exposure": round(float(pos.mean()), 2)}
+            row = {"rule": name, "symbol": sym, "avg_exposure": round(float(pos.mean()), 2)}
             ok_all = True
             for split, (lo, hi) in SPLITS.items():
                 s = strat.loc[lo:hi].dropna()
@@ -282,10 +310,12 @@ def main() -> int:
                     ok_all = False
                     continue
                 sh_s, sh_b = sharpe_ratio(s.to_numpy()), sharpe_ratio(b.to_numpy())
-                row[split] = {"sharpe": round(sh_s, 2), "bh_sharpe": round(sh_b, 2),
-                              "cagr": round(float(np.prod(1 + s))
-                                            ** (252 / len(s)) - 1, 4),
-                              "maxdd": round(max_drawdown(s.to_numpy()), 3)}
+                row[split] = {
+                    "sharpe": round(sh_s, 2),
+                    "bh_sharpe": round(sh_b, 2),
+                    "cagr": round(float(np.prod(1 + s)) ** (252 / len(s)) - 1, 4),
+                    "maxdd": round(max_drawdown(s.to_numpy()), 3),
+                }
                 if sh_s < sh_b:
                     ok_all = False
             pooled = strat.dropna()
@@ -307,49 +337,68 @@ def main() -> int:
                 continue
             edge = hit.mean() - base.mean()
             t = edge / (hit.std(ddof=1) / np.sqrt(len(hit)))
-            candle_rows.append({"pattern": name, "symbol": sym, "n": int(len(hit)),
-                                "next_day_excess_bps": round(edge * 1e4, 1),
-                                "t": round(float(t), 2)})
-        print(f"{sym}: {len(rules)} rules + {len(CANDLES)} patterns "
-              f"({time.time()-t0:.0f}s)")
+            candle_rows.append(
+                {
+                    "pattern": name,
+                    "symbol": sym,
+                    "n": len(hit),
+                    "next_day_excess_bps": round(edge * 1e4, 1),
+                    "t": round(float(t), 2),
+                }
+            )
+        print(f"{sym}: {len(rules)} rules + {len(CANDLES)} patterns ({time.time() - t0:.0f}s)")
 
     survivors = [r for r in results if r["SURVIVOR"]]
     print(f"\ntrials: {trials} (expect ~{trials * 0.025:.0f} false |t|>2 by chance)")
     print(f"survivors (Sharpe>=B&H in all 3 splits AND alpha t>=2): {len(survivors)}")
     for r in survivors:
-        print(f"  {r['rule']:<26}{r['symbol']:<6}alpha {r['alpha_ann']:+.1%}/yr "
-              f"t={r['alpha_t']:.2f} exp={r['avg_exposure']}")
+        print(
+            f"  {r['rule']:<26}{r['symbol']:<6}alpha {r['alpha_ann']:+.1%}/yr "
+            f"t={r['alpha_t']:.2f} exp={r['avg_exposure']}"
+        )
 
     # near-survivors: pass 2 of 3 splits with pooled alpha_t >= 1.5
     def n_splits_ok(r):
-        return sum(1 for s in SPLITS if s in r
-                   and r[s]["sharpe"] >= r[s]["bh_sharpe"])
-    near = [r for r in results if not r["SURVIVOR"]
-            and n_splits_ok(r) >= 2 and r["alpha_t"] >= 1.5]
+        return sum(1 for s in SPLITS if s in r and r[s]["sharpe"] >= r[s]["bh_sharpe"])
+
+    near = [r for r in results if not r["SURVIVOR"] and n_splits_ok(r) >= 2 and r["alpha_t"] >= 1.5]
     near.sort(key=lambda r: -r["alpha_t"])
     print(f"\nnear-survivors (2/3 splits, t>=1.5): {len(near)}; top 12:")
     for r in near[:12]:
-        print(f"  {r['rule']:<26}{r['symbol']:<6}alpha {r['alpha_ann']:+.1%}/yr "
-              f"t={r['alpha_t']:.2f}")
+        print(
+            f"  {r['rule']:<26}{r['symbol']:<6}alpha {r['alpha_ann']:+.1%}/yr t={r['alpha_t']:.2f}"
+        )
 
     cdf = pd.DataFrame(candle_rows)
     if len(cdf):
         pooled = cdf.groupby("pattern").apply(
-            lambda g: pd.Series({
-                "n": g["n"].sum(),
-                "mean_bps": round(float(np.average(g["next_day_excess_bps"],
-                                                   weights=g["n"])), 1),
-                "median_t": round(float(g["t"].median()), 2)}),
-            include_groups=False)
-        print("\n=== candlestick patterns: next-day EXCESS return "
-              "(pooled across 11 ETFs) ===")
+            lambda g: pd.Series(
+                {
+                    "n": g["n"].sum(),
+                    "mean_bps": round(
+                        float(np.average(g["next_day_excess_bps"], weights=g["n"])), 1
+                    ),
+                    "median_t": round(float(g["t"].median()), 2),
+                }
+            ),
+            include_groups=False,
+        )
+        print("\n=== candlestick patterns: next-day EXCESS return (pooled across 11 ETFs) ===")
         print(pooled.sort_values("mean_bps", ascending=False).to_string())
 
-    atomic_write_bytes(Path("artifacts") / "strategy_zoo.json", json.dumps({
-        "trials": trials, "results": results, "candles": candle_rows,
-        "survivors": [f"{r['rule']}/{r['symbol']}" for r in survivors],
-    }, indent=1).encode())
-    print(f"\nsaved -> artifacts/strategy_zoo.json ({time.time()-t0:.0f}s)")
+    atomic_write_bytes(
+        Path("artifacts") / "strategy_zoo.json",
+        json.dumps(
+            {
+                "trials": trials,
+                "results": results,
+                "candles": candle_rows,
+                "survivors": [f"{r['rule']}/{r['symbol']}" for r in survivors],
+            },
+            indent=1,
+        ).encode(),
+    )
+    print(f"\nsaved -> artifacts/strategy_zoo.json ({time.time() - t0:.0f}s)")
     return 0
 
 

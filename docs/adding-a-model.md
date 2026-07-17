@@ -1,5 +1,7 @@
 # Adding a model
 
+> Models added through this legacy guide remain research-only until registered in a V2 manifest/trial family and passed through the frozen nested promotion protocol.
+
 Models estimate `P(net trade return > 0)` for one (horizon, side) target and
 plug into the ladder in `src/edgestack/models/base.py`:
 

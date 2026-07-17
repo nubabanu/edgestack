@@ -47,8 +47,9 @@ def _mutate_after(panel: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
     return mutated
 
 
-def test_every_registered_feature_is_causal(feature_cfg: EdgeStackConfig,
-                                            panel: pd.DataFrame) -> None:
+def test_every_registered_feature_is_causal(
+    feature_cfg: EdgeStackConfig, panel: pd.DataFrame
+) -> None:
     specs = all_specs()
     base = build_features(panel, feature_cfg, specs)
     mutated = build_features(_mutate_after(panel, CUTOFF), feature_cfg, specs)
@@ -73,8 +74,9 @@ def test_every_registered_feature_is_causal(feature_cfg: EdgeStackConfig,
     assert not leaking, f"features leaked future information: {leaking}"
 
 
-def test_removing_future_rows_does_not_change_past(feature_cfg: EdgeStackConfig,
-                                                   panel: pd.DataFrame) -> None:
+def test_removing_future_rows_does_not_change_past(
+    feature_cfg: EdgeStackConfig, panel: pd.DataFrame
+) -> None:
     specs = all_specs()
     base = build_features(panel, feature_cfg, specs)
     truncated_panel = panel.loc[panel["date"] <= CUTOFF].reset_index(drop=True)
@@ -102,8 +104,7 @@ def test_removing_future_rows_does_not_change_past(feature_cfg: EdgeStackConfig,
     pd.testing.assert_frame_equal(base_past, trunc_past, check_exact=False, rtol=1e-12)
 
 
-def test_labels_never_enter_features(feature_cfg: EdgeStackConfig,
-                                     panel: pd.DataFrame) -> None:
+def test_labels_never_enter_features(feature_cfg: EdgeStackConfig, panel: pd.DataFrame) -> None:
     """Label columns must not appear in the feature dataset, and feature
     engineering must not consume label frames at all."""
     from edgestack.labels.forward_returns import LABEL_COLUMNS
@@ -115,8 +116,9 @@ def test_labels_never_enter_features(feature_cfg: EdgeStackConfig,
     assert not any(s.name in forbidden for s in all_specs())
 
 
-def test_pivot_confirmation_respects_availability_delay(feature_cfg: EdgeStackConfig,
-                                                        panel: pd.DataFrame) -> None:
+def test_pivot_confirmation_respects_availability_delay(
+    feature_cfg: EdgeStackConfig, panel: pd.DataFrame
+) -> None:
     """A confirmed pivot must not be visible before its confirming bars exist."""
     feats = build_features(panel, feature_cfg)
     one = feats.loc[feats["symbol"] == "AAA"].set_index("date")

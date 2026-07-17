@@ -22,9 +22,17 @@ from edgestack.logging import get_logger, log_event
 log = get_logger("provider.local")
 
 _ALIASES = {
-    "date": "date", "open": "open", "high": "high", "low": "low", "close": "close",
-    "volume": "volume", "vol": "volume", "adj close": "adj_close",
-    "adj_close": "adj_close", "adjclose": "adj_close", "adjusted close": "adj_close",
+    "date": "date",
+    "open": "open",
+    "high": "high",
+    "low": "low",
+    "close": "close",
+    "volume": "volume",
+    "vol": "volume",
+    "adj close": "adj_close",
+    "adj_close": "adj_close",
+    "adjclose": "adj_close",
+    "adjusted close": "adj_close",
 }
 
 
@@ -42,9 +50,7 @@ class LocalFilesProvider(PriceDataProvider):
             ),
         )
 
-    def fetch_daily_bars(
-        self, symbols: tuple[str, ...], start: date, end: date
-    ) -> pd.DataFrame:
+    def fetch_daily_bars(self, symbols: tuple[str, ...], start: date, end: date) -> pd.DataFrame:
         frames = []
         for symbol in symbols:
             path = self._find(symbol)

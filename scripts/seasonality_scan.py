@@ -30,24 +30,51 @@ import requests
 
 from edgestack.data.catalog import atomic_write_bytes
 
-TICKERS = ["SPY", "QQQ", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI",
-           "XLU", "XLB", "XLRE", "XLC"]
+TICKERS = [
+    "SPY",
+    "QQQ",
+    "XLK",
+    "XLF",
+    "XLE",
+    "XLV",
+    "XLY",
+    "XLP",
+    "XLI",
+    "XLU",
+    "XLB",
+    "XLRE",
+    "XLC",
+]
 NY = ZoneInfo("America/New_York")
 CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
 
 
-def fetch(session: requests.Session, sym: str, *, interval: str,
-          period1: int, period2: int) -> pd.DataFrame:
-    r = session.get(CHART.format(sym=sym), timeout=30, params={
-        "period1": period1, "period2": period2, "interval": interval,
-        "events": "div,splits", "includeAdjustedClose": "true"})
+def fetch(
+    session: requests.Session, sym: str, *, interval: str, period1: int, period2: int
+) -> pd.DataFrame:
+    r = session.get(
+        CHART.format(sym=sym),
+        timeout=30,
+        params={
+            "period1": period1,
+            "period2": period2,
+            "interval": interval,
+            "events": "div,splits",
+            "includeAdjustedClose": "true",
+        },
+    )
     r.raise_for_status()
     res = r.json()["chart"]["result"][0]
     q = res["indicators"]["quote"][0]
-    df = pd.DataFrame({
-        "ts": res["timestamp"], "open": q["open"], "high": q["high"],
-        "low": q["low"], "close": q["close"],
-    })
+    df = pd.DataFrame(
+        {
+            "ts": res["timestamp"],
+            "open": q["open"],
+            "high": q["high"],
+            "low": q["low"],
+            "close": q["close"],
+        }
+    )
     adj = res["indicators"].get("adjclose")
     df["adj"] = adj[0]["adjclose"] if adj else df["close"]
     df = df.dropna(subset=["open", "close"])
@@ -64,16 +91,15 @@ def tstat(x: pd.Series) -> float:
 
 def cell(x: pd.Series) -> dict:
     x = x.dropna()
-    return {"mean_bps": round(float(x.mean()) * 1e4, 2), "t": round(tstat(x), 2),
-            "n": int(len(x))}
+    return {"mean_bps": round(float(x.mean()) * 1e4, 2), "t": round(tstat(x), 2), "n": len(x)}
 
 
 def daily_tables(df: pd.DataFrame) -> dict:
     d = df.copy()
     d["date"] = d["dt"].dt.tz_localize(None).dt.normalize()
-    d["cc"] = d["adj"].pct_change()                      # session total return
+    d["cc"] = d["adj"].pct_change()  # session total return
     d["overnight"] = d["open"] / d["close"].shift(1) - 1  # prev close -> open
-    d["intraday"] = d["close"] / d["open"] - 1            # open -> close
+    d["intraday"] = d["close"] / d["open"] - 1  # open -> close
     d["weekday"] = d["dt"].dt.day_name()
     d["month"] = d["dt"].dt.month
 
@@ -83,13 +109,18 @@ def daily_tables(df: pd.DataFrame) -> dict:
     d["tdom_end"] = d.groupby(ym).cumcount(ascending=False) + 1
     d["tom_window"] = (d["tdom"] <= 3) | (d["tdom_end"] == 1)  # last + first 3
 
-    out: dict = {"start": str(d["date"].iloc[0].date()),
-                 "end": str(d["date"].iloc[-1].date()), "n": len(d)}
+    out: dict = {
+        "start": str(d["date"].iloc[0].date()),
+        "end": str(d["date"].iloc[-1].date()),
+        "n": len(d),
+    }
     for name in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"):
         sub = d[d["weekday"] == name]
         out.setdefault("weekday", {})[name] = {
-            "session": cell(sub["cc"]), "overnight": cell(sub["overnight"]),
-            "intraday": cell(sub["intraday"])}
+            "session": cell(sub["cc"]),
+            "overnight": cell(sub["overnight"]),
+            "intraday": cell(sub["intraday"]),
+        }
     out["overnight_all"] = cell(d["overnight"])
     out["intraday_all"] = cell(d["intraday"])
     out["tom_window"] = cell(d.loc[d["tom_window"], "cc"])
@@ -102,16 +133,19 @@ def daily_tables(df: pd.DataFrame) -> dict:
         vals = monthly.xs(m, level=1)
         out.setdefault("month", {})[m] = {
             "mean_pct": round(float(vals.mean()) * 100, 2),
-            "t": round(tstat(vals), 2), "n": int(len(vals)),
-            "pos_frac": round(float((vals > 0).mean()), 2)}
+            "t": round(tstat(vals), 2),
+            "n": len(vals),
+            "pos_frac": round(float((vals > 0).mean()), 2),
+        }
     # split-half consistency for weekday sessions
     half = d["date"] < d["date"].iloc[len(d) // 2]
     out["weekday_halves"] = {
-        name: {"h1_bps": round(float(d.loc[half & (d["weekday"] == name), "cc"]
-                                     .mean()) * 1e4, 1),
-               "h2_bps": round(float(d.loc[~half & (d["weekday"] == name), "cc"]
-                                     .mean()) * 1e4, 1)}
-        for name in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")}
+        name: {
+            "h1_bps": round(float(d.loc[half & (d["weekday"] == name), "cc"].mean()) * 1e4, 1),
+            "h2_bps": round(float(d.loc[~half & (d["weekday"] == name), "cc"].mean()) * 1e4, 1),
+        }
+        for name in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+    }
     return out
 
 
@@ -142,37 +176,44 @@ def main() -> int:
         daily[sym] = daily_tables(d)
         time.sleep(0.3)
         try:
-            h = fetch(session, sym, interval="60m",
-                      period1=now - 729 * 86400, period2=now)
+            h = fetch(session, sym, interval="60m", period1=now - 729 * 86400, period2=now)
             hourly[sym] = hourly_table(h)
         except Exception as exc:  # hourly is best-effort
             hourly[sym] = {"error": str(exc)}
-        print(f"{sym}: daily {daily[sym]['n']} rows from {daily[sym]['start']}, "
-              f"hourly slots {max(0, len(hourly[sym]) - 1)}")
+        print(
+            f"{sym}: daily {daily[sym]['n']} rows from {daily[sym]['start']}, "
+            f"hourly slots {max(0, len(hourly[sym]) - 1)}"
+        )
         time.sleep(0.3)
 
-    atomic_write_bytes(Path("artifacts") / "seasonality_scan.json",
-                       json.dumps({"daily": daily, "hourly": hourly},
-                                  indent=1).encode())
+    atomic_write_bytes(
+        Path("artifacts") / "seasonality_scan.json",
+        json.dumps({"daily": daily, "hourly": hourly}, indent=1).encode(),
+    )
     print("saved -> artifacts/seasonality_scan.json")
 
     # headline print: SPY + QQQ
     for sym in ("SPY", "QQQ"):
         t = daily[sym]
-        print(f"\n=== {sym} (since {t['start']}) — session return by weekday "
-              f"(bps, t) ===")
+        print(f"\n=== {sym} (since {t['start']}) — session return by weekday (bps, t) ===")
         for k, v in t["weekday"].items():
-            print(f"  {k:<10} session {v['session']['mean_bps']:>6.1f} "
-                  f"(t={v['session']['t']:>5.2f})  overnight "
-                  f"{v['overnight']['mean_bps']:>6.1f} (t={v['overnight']['t']:>5.2f})"
-                  f"  intraday {v['intraday']['mean_bps']:>6.1f} "
-                  f"(t={v['intraday']['t']:>5.2f})")
-        print(f"  ALL overnight {t['overnight_all']['mean_bps']:.1f} bps "
-              f"(t={t['overnight_all']['t']:.2f}) vs intraday "
-              f"{t['intraday_all']['mean_bps']:.1f} bps (t={t['intraday_all']['t']:.2f})")
-        print(f"  ToM window {t['tom_window']['mean_bps']:.1f} bps "
-              f"(t={t['tom_window']['t']:.2f}) vs rest {t['non_tom']['mean_bps']:.1f} "
-              f"(t={t['non_tom']['t']:.2f})")
+            print(
+                f"  {k:<10} session {v['session']['mean_bps']:>6.1f} "
+                f"(t={v['session']['t']:>5.2f})  overnight "
+                f"{v['overnight']['mean_bps']:>6.1f} (t={v['overnight']['t']:>5.2f})"
+                f"  intraday {v['intraday']['mean_bps']:>6.1f} "
+                f"(t={v['intraday']['t']:>5.2f})"
+            )
+        print(
+            f"  ALL overnight {t['overnight_all']['mean_bps']:.1f} bps "
+            f"(t={t['overnight_all']['t']:.2f}) vs intraday "
+            f"{t['intraday_all']['mean_bps']:.1f} bps (t={t['intraday_all']['t']:.2f})"
+        )
+        print(
+            f"  ToM window {t['tom_window']['mean_bps']:.1f} bps "
+            f"(t={t['tom_window']['t']:.2f}) vs rest {t['non_tom']['mean_bps']:.1f} "
+            f"(t={t['non_tom']['t']:.2f})"
+        )
     return 0
 
 
