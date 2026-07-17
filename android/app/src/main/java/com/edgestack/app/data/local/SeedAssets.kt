@@ -4,6 +4,7 @@ import android.content.Context
 import com.edgestack.app.core.AppJson
 import com.edgestack.app.domain.model.CalendarBundle
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
+import com.edgestack.app.domain.model.MacroEvents
 
 /** Bundled seed data under assets/seed, exported by scripts/export_mobile_bundle.py. */
 class SeedAssets(private val context: Context) {
@@ -13,6 +14,11 @@ class SeedAssets(private val context: Context) {
 
     fun calendar(): CalendarBundle =
         AppJson.decodeFromString(CalendarBundle.serializer(), read("calendar.json"))
+
+    fun macroEvents(): MacroEvents =
+        runCatching {
+            AppJson.decodeFromString(MacroEvents.serializer(), read("macro_events.json"))
+        }.getOrDefault(MacroEvents())
 
     fun recommendation(): CanonicalRecommendationBundleV2 =
         AppJson.decodeFromString(

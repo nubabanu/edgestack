@@ -173,6 +173,20 @@ class DailyCheckWorker(
                     "window runs through the first 3 sessions of next month.",
             )
         }
+
+        if (nextSession != null) {
+            container.calendarRepo.macroEvents.highImpactOn(nextSession)
+                .forEachIndexed { index, event ->
+                    AlertNotifier.notify(
+                        applicationContext,
+                        AlertNotifier.CHANNEL_TIMING,
+                        200 + index,
+                        "${event.type} next session",
+                        "$nextSession: ${event.label} at ${event.timeEt} ET — " +
+                            "expect volatility around the release.",
+                    )
+                }
+        }
     }
 
     companion object {

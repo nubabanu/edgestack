@@ -4,6 +4,7 @@ import com.edgestack.app.data.local.JsonFileStore
 import com.edgestack.app.data.local.SeedAssets
 import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.remote.EdgeStackApi
+import com.edgestack.app.domain.MacroEventBook
 import com.edgestack.app.domain.TradingCalendar
 import com.edgestack.app.domain.model.BacktestRunV2
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
@@ -322,5 +323,9 @@ class SyncRepository(
 class CalendarRepository(private val seed: SeedAssets) {
     val calendar: TradingCalendar by lazy {
         TradingCalendar(seed.calendar().sessions.map { LocalDate.parse(it) })
+    }
+
+    val macroEvents: MacroEventBook by lazy {
+        MacroEventBook(seed.macroEvents().events)
     }
 }

@@ -27,22 +27,29 @@ import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.repo.RecommendationRepository
 import com.edgestack.app.data.repo.SyncRepository
 import com.edgestack.app.domain.model.PortfolioRecommendationV2
+import com.edgestack.app.data.remote.YahooChartClient
+import com.edgestack.app.domain.OverlayCalculator
 import com.edgestack.app.ui.components.Refreshable
+import com.edgestack.app.ui.theme.Accent
+import com.edgestack.app.ui.theme.AccentRed
 import kotlinx.coroutines.launch
 
 class OverlayViewModel(
     private val recommendationRepo: RecommendationRepository,
     private val syncRepo: SyncRepository,
     private val settingsStore: SettingsStore,
+    private val quotesClient: YahooChartClient,
 ) : ViewModel() {
     var recommendation by mutableStateOf<PortfolioRecommendationV2?>(null); private set
     var settings by mutableStateOf(Settings()); private set
     var loading by mutableStateOf(false); private set
     var error by mutableStateOf(""); private set
+    var regime by mutableStateOf<OverlayCalculator.Regime?>(null); private set
 
     init {
         recommendation = runCatching { recommendationRepo.displayedRecommendation() }.getOrNull()
         viewModelScope.launch { settings = settingsStore.current() }
+        refreshRegime()
     }
 
     fun preview() {
@@ -58,6 +65,15 @@ class OverlayViewModel(
             )
             loading = false
         }
+        refreshRegime()
+    }
+
+    private fun refreshRegime() {
+        viewModelScope.launch {
+            regime = runCatching {
+                OverlayCalculator.latestRegime(quotesClient.dailyHistory("SPY", years = 2L))
+            }.getOrNull()
+        }
     }
 }
 
@@ -65,6 +81,40 @@ class OverlayViewModel(
 fun OverlayScreen(vm: OverlayViewModel) {
     Refreshable(refreshing = vm.loading, onRefresh = vm::preview) {
         OverlayContent(vm)
+    }
+}
+
+@Composable
+private fun RegimeCard(regime: OverlayCalculator.Regime?) {
+    Card {
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            Text("SPY regime (device)", style = MaterialTheme.typography.titleMedium)
+            if (regime == null) {
+                Text(
+                    "— quote history unavailable; pull to refresh with internet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                )
+            } else {
+                Text(
+                    if (regime.aboveSma200) "RISK-ON • above 200-day average" else
+                        "RISK-OFF • below 200-day average",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (regime.aboveSma200) Accent else AccentRed,
+                )
+                Text(
+                    "SPY ${"%+.1f".format(regime.sma200DistancePercent)}% vs SMA200 • " +
+                        "overlay exposure ${"%.2f".format(regime.currentExposure)}x",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "Device-computed from the reference overlay logic — context only, " +
+                        "not the canonical signal.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                )
+            }
+        }
     }
 }
 
@@ -83,6 +133,7 @@ private fun OverlayContent(vm: OverlayViewModel) {
         )
         Button(onClick = vm::preview, enabled = !vm.loading) { Text("Refresh custom preview") }
         if (vm.error.isNotBlank()) Text(vm.error, color = MaterialTheme.colorScheme.error)
+        RegimeCard(vm.regime)
         if (recommendation == null) {
             Text("No canonical recommendation cached.")
             return@Column

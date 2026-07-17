@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import date, timedelta
+from pathlib import Path
 
 import pandas as pd
 
@@ -15,7 +16,12 @@ from edgestack.data.quality import assess_panel
 from edgestack.exceptions import DataError
 from edgestack.logging import configure
 from edgestack.pipelines import run_features_build
-from edgestack.recommendation.nightly import build_and_publish_canonical_baseline
+from edgestack.recommendation.instrument_schemas import NewsEvidenceV2
+from edgestack.recommendation.news import gather_news_evidence
+from edgestack.recommendation.nightly import (
+    build_and_publish_canonical_baseline,
+    load_legacy_watchlist,
+)
 from edgestack.recommendation.policy import load_baseline_policy
 
 # Catalog symbols with no bar for this many days are treated as delisted and
@@ -101,19 +107,35 @@ def validate_required(cfg: EdgeStackConfig) -> None:
         raise DataError("required symbols failed quality gates; publication blocked")
 
 
+def _news_symbols(cfg: EdgeStackConfig) -> tuple[str, ...]:
+    """Policy plus watchlist symbols — the set the published bundle can serve."""
+    symbols = {weight.symbol for weight in load_baseline_policy().weights}
+    symbols |= {entry.symbol for entry in load_legacy_watchlist(Path(cfg.paths.artifacts_dir))}
+    return tuple(sorted(symbols))
+
+
 def run_nightly(
     cfg: EdgeStackConfig,
     *,
     run_date: date,
     update_prices: bool = True,
     build_features: bool = True,
+    fetch_news: bool = True,
 ) -> str:
     if update_prices:
         update_data(cfg, run_date)
     validate_required(cfg)
     if build_features:
         run_features_build(cfg)
-    publication = build_and_publish_canonical_baseline(cfg, run_date=run_date)
+    news: tuple[NewsEvidenceV2, ...] = ()
+    if fetch_news:
+        news = gather_news_evidence(
+            _news_symbols(cfg),
+            Path(cfg.paths.data_dir) / "cache" / "news",
+            timeout_seconds=cfg.data.request_timeout_seconds,
+        )
+        print(f"nightly news context: {len(news)} items")
+    publication = build_and_publish_canonical_baseline(cfg, run_date=run_date, news_evidence=news)
     return publication.run_id
 
 
@@ -123,6 +145,7 @@ def main() -> int:
     parser.add_argument("--date", default=date.today().isoformat())
     parser.add_argument("--skip-data-update", action="store_true")
     parser.add_argument("--skip-features", action="store_true")
+    parser.add_argument("--skip-news", action="store_true")
     args = parser.parse_args()
     configure()
     cfg = load_config(args.config)
@@ -131,6 +154,7 @@ def main() -> int:
         run_date=date.fromisoformat(args.date),
         update_prices=not args.skip_data_update,
         build_features=not args.skip_features,
+        fetch_news=not args.skip_news,
     )
     print(f"published canonical run {run_id}")
     return 0

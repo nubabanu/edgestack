@@ -593,6 +593,22 @@ data class PatternLeaderBoardV2(
     val warning: String,
 )
 
+/** One scheduled macro release from the bundled seed (scripts/export_macro_events.py). */
+@Serializable
+data class MacroEvent(
+    val date: String,                       // ISO yyyy-MM-dd
+    val type: String,                       // FOMC | CPI | EIA
+    val label: String,
+    @SerialName("time_et") val timeEt: String,
+)
+
+@Serializable
+data class MacroEvents(
+    @SerialName("schema_version") val schemaVersion: Int = 1,
+    @SerialName("generated_at") val generatedAt: String = "",
+    val events: List<MacroEvent> = emptyList(),
+)
+
 /** One row of GET /edges — the validated edge catalog with lifecycle status. */
 @Serializable
 data class EdgeSummaryV2(

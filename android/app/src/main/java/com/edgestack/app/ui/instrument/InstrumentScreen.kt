@@ -31,17 +31,30 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.edgestack.app.data.repo.InstrumentAnalysisRepository
 import com.edgestack.app.data.repo.SyncRepository
+import com.edgestack.app.domain.MacroEventBook
 import com.edgestack.app.domain.model.EdgeEffectV2
+import com.edgestack.app.domain.model.MacroEvent
 import com.edgestack.app.domain.model.InstrumentAnalysisV2
 import com.edgestack.app.domain.model.PatternLeaderBoardV2
 import com.edgestack.app.domain.model.TimingWindowV2
 import com.edgestack.app.work.WorkScheduler
+import java.time.LocalDate
 import kotlinx.coroutines.launch
 
 class InstrumentViewModel(
     private val repository: InstrumentAnalysisRepository,
     private val syncRepository: SyncRepository,
+    private val macroEvents: MacroEventBook,
 ) : ViewModel() {
+
+    /** Macro releases landing on the intended-entry date, if it parses. */
+    val intendedEntryEvents: List<MacroEvent>
+        get() {
+            val match = Regex("\\d{4}-\\d{2}-\\d{2}").find(intendedEntry) ?: return emptyList()
+            val date = runCatching { LocalDate.parse(match.value) }.getOrNull()
+                ?: return emptyList()
+            return macroEvents.on(date)
+        }
     var symbol by mutableStateOf("")
     var intendedEntry by mutableStateOf("")
     var analysis by mutableStateOf<InstrumentAnalysisV2?>(repository.loadLast()); private set
@@ -161,7 +174,14 @@ fun InstrumentScreen(vm: InstrumentViewModel) {
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(autoCorrect = false),
+                isError = vm.intendedEntryEvents.any { it.type != "EIA" },
             )
+            vm.intendedEntryEvents.forEach { event ->
+                Text(
+                    "⚡ ${event.label} at ${event.timeEt} ET lands on that date.",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
             Text("Quick instruments", style = MaterialTheme.typography.labelMedium)
             Row(
                 Modifier.horizontalScroll(rememberScrollState()),
