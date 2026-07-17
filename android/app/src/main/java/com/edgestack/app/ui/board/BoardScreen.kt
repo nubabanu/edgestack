@@ -26,6 +26,7 @@ import androidx.lifecycle.viewModelScope
 import com.edgestack.app.data.repo.RecommendationRepository
 import com.edgestack.app.data.repo.SyncRepository
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
+import com.edgestack.app.ui.components.Refreshable
 import kotlinx.coroutines.launch
 
 class BoardViewModel(
@@ -71,6 +72,16 @@ class BoardViewModel(
 @Composable
 fun BoardScreen(vm: BoardViewModel) {
     val bundle = vm.bundle
+    Refreshable(refreshing = vm.refreshing, onRefresh = vm::sync) {
+        BoardContent(vm, bundle)
+    }
+}
+
+@Composable
+private fun BoardContent(
+    vm: BoardViewModel,
+    bundle: CanonicalRecommendationBundleV2?,
+) {
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         if (bundle == null) {
             Text("No canonical recommendation available")

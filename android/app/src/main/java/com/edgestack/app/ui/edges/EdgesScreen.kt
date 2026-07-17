@@ -30,6 +30,7 @@ import com.edgestack.app.data.repo.EdgesRepository
 import com.edgestack.app.data.repo.SyncRepository
 import com.edgestack.app.domain.model.BacktestRunV2
 import com.edgestack.app.domain.model.EdgeSummaryV2
+import com.edgestack.app.ui.components.Refreshable
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -97,6 +98,13 @@ class EdgesViewModel(
 
 @Composable
 fun EdgesScreen(vm: EdgesViewModel) {
+    Refreshable(refreshing = vm.loading, onRefresh = vm::refresh) {
+        EdgesList(vm)
+    }
+}
+
+@Composable
+private fun EdgesList(vm: EdgesViewModel) {
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),

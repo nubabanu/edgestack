@@ -29,6 +29,7 @@ data class Settings(
     val lastCanonicalFingerprint: String = "",
     val lastFresh: Boolean? = null,
     val lastRiskStateJson: String = "",
+    val timingAlerts: Boolean = true,
 ) {
     fun profile(accountEquity: Double = 100_000.0) = RiskProfileV2(
         accountEquity = accountEquity,
@@ -58,6 +59,7 @@ class SettingsStore(private val context: Context) {
         val lastFingerprint = stringPreferencesKey("canonical_last_fingerprint")
         val lastFresh = booleanPreferencesKey("canonical_last_fresh")
         val lastRiskState = stringPreferencesKey("canonical_risk_state_json")
+        val timingAlerts = booleanPreferencesKey("timing_alerts_enabled")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { p ->
@@ -75,6 +77,7 @@ class SettingsStore(private val context: Context) {
             lastCanonicalFingerprint = p[Keys.lastFingerprint] ?: "",
             lastFresh = p[Keys.lastFresh],
             lastRiskStateJson = p[Keys.lastRiskState] ?: "",
+            timingAlerts = p[Keys.timingAlerts] ?: true,
         )
     }
 
@@ -94,6 +97,9 @@ class SettingsStore(private val context: Context) {
     }
 
     suspend fun setBaseUrl(value: String) = context.dataStore.edit { it[Keys.baseUrl] = value }
+
+    suspend fun setTimingAlerts(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.timingAlerts] = enabled }
 
     suspend fun setRiskProfile(profile: RiskProfileV2) = context.dataStore.edit {
         it[Keys.targetVolatility] = profile.targetVolatility.coerceIn(0.0001, 0.30)

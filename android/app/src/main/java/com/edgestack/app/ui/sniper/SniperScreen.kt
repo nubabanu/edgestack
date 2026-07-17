@@ -29,6 +29,7 @@ import com.edgestack.app.data.repo.SniperRepository
 import com.edgestack.app.data.repo.SyncRepository
 import com.edgestack.app.domain.model.SniperCandidateV2
 import com.edgestack.app.domain.model.SniperPlanV2
+import com.edgestack.app.ui.components.Refreshable
 import kotlinx.coroutines.launch
 
 class SniperViewModel(
@@ -78,6 +79,13 @@ class SniperViewModel(
 
 @Composable
 fun SniperScreen(vm: SniperViewModel) {
+    Refreshable(refreshing = vm.loading, onRefresh = vm::refresh) {
+        SniperList(vm)
+    }
+}
+
+@Composable
+private fun SniperList(vm: SniperViewModel) {
     val plan = vm.plan
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 12.dp),

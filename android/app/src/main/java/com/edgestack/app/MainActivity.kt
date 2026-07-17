@@ -68,7 +68,11 @@ class MainActivity : ComponentActivity() {
                 InstrumentViewModel::class.java ->
                     InstrumentViewModel(container.instrumentRepo, container.syncRepo) as T
                 CalendarViewModel::class.java ->
-                    CalendarViewModel(container.calendarRepo, container.instrumentRepo) as T
+                    CalendarViewModel(
+                        container.calendarRepo,
+                        container.instrumentRepo,
+                        container.syncRepo,
+                    ) as T
                 SniperViewModel::class.java ->
                     SniperViewModel(container.sniperRepo, container.syncRepo) as T
                 EdgesViewModel::class.java ->

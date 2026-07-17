@@ -13,6 +13,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -103,6 +105,10 @@ class SettingsViewModel(
         }
     }
 
+    fun setTimingAlerts(enabled: Boolean) = viewModelScope.launch {
+        settingsStore.setTimingAlerts(enabled)
+    }
+
     fun testConnection() = viewModelScope.launch {
         status = syncRepo.testConnection().fold({ "OK: $it" }, { "failed: ${it.message}" })
     }
@@ -144,9 +150,27 @@ fun SettingsScreen(vm: SettingsViewModel) {
         }
         if (vm.status.isNotBlank()) Text(vm.status, color = Color.Gray)
         Text("Notifications", style = MaterialTheme.typography.titleMedium)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Timing alerts", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Sniper triggers, scheduled entries, turn-of-month windows",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                )
+            }
+            Switch(
+                checked = vm.settings.timingAlerts,
+                onCheckedChange = vm::setTimingAlerts,
+            )
+        }
         Text(
-            "Calendar, sniper, and on-device leverage alerts are disabled. Notifications are " +
-                "generated only when canonical status, targets, freshness, or risk state changes.",
+            "Canonical alerts always fire when status, targets, freshness, or risk state " +
+                "changes. All alert states come from the server; the device computes nothing.",
             style = MaterialTheme.typography.bodySmall,
         )
         Text("Research and paper trading only", style = MaterialTheme.typography.titleMedium)
