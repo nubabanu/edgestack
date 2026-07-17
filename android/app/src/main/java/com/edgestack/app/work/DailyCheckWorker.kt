@@ -8,6 +8,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.edgestack.app.EdgeStackApp
 import java.time.Duration
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -23,6 +24,7 @@ class DailyCheckWorker(
         val container = (applicationContext as EdgeStackApp).container
         val before = container.settings.current()
         val beforeRisk = container.settings.decodedRiskState(before)
+        val beforePlan = container.sniperRepo.load()
         container.syncRepo.syncAll().onSuccess {
             val after = container.settings.current()
             val afterRisk = container.settings.decodedRiskState(after)
@@ -72,14 +74,75 @@ class DailyCheckWorker(
                         "cash latch ${afterRisk.cashLatched}; reset eligible ${afterRisk.resetEligible}.",
                 )
             }
+            if (after.timingAlerts) {
+                notifyTimingWindows(container, beforePlan)
+            }
         }
 
         WorkScheduler.scheduleNext(applicationContext, container.calendarRepo.calendar)
         return Result.success()
     }
 
+    /** Sniper transitions and upcoming windows; states come from the server only. */
+    private fun notifyTimingWindows(
+        container: com.edgestack.app.di.AppContainer,
+        beforePlan: com.edgestack.app.domain.model.SniperPlanV2?,
+    ) {
+        val plan = container.sniperRepo.load() ?: return
+        val calendar = container.calendarRepo.calendar
+        val zone = ZoneId.of("America/New_York")
+        val today = ZonedDateTime.now(zone).toLocalDate()
+        val nextSession = calendar.nextSession(today)
+
+        val beforeStates = beforePlan?.stage1Candidates
+            ?.associate { it.strategyId to it.status }.orEmpty()
+        plan.stage1Candidates.forEachIndexed { index, candidate ->
+            val previous = beforeStates[candidate.strategyId]
+            if (candidate.status.equals("TRIGGERED", true) &&
+                !previous.equals("TRIGGERED", true)
+            ) {
+                AlertNotifier.notify(
+                    applicationContext,
+                    AlertNotifier.CHANNEL_TIMING,
+                    130 + index,
+                    "Sniper candidate triggered: ${candidate.strategyId}",
+                    "${candidate.symbol} • ${candidate.entryWindow ?: "see plan"} • " +
+                        "paper-only shadow plan; open Sniper for sizing.",
+                )
+            }
+            val entryDate = candidate.entryWindow?.let { window ->
+                DATE_PATTERN.find(window)?.value?.let { LocalDate.parse(it) }
+            }
+            if (entryDate != null && (entryDate == today || entryDate == nextSession)) {
+                AlertNotifier.notify(
+                    applicationContext,
+                    AlertNotifier.CHANNEL_TIMING,
+                    140 + index,
+                    "Sniper entry window ${if (entryDate == today) "today" else "next session"}",
+                    "${candidate.strategyId} (${candidate.symbol}): planned entry $entryDate. " +
+                        "Exit: ${candidate.exitRule}",
+                )
+            }
+        }
+
+        if (nextSession != null &&
+            calendar.isLastSessionOfMonth(nextSession) &&
+            !calendar.isTurnOfMonthWindow(today)
+        ) {
+            AlertNotifier.notify(
+                applicationContext,
+                AlertNotifier.CHANNEL_TIMING,
+                150,
+                "Turn-of-month window starts next session",
+                "$nextSession is the month's last session; the historical turn-of-month " +
+                    "window runs through the first 3 sessions of next month.",
+            )
+        }
+    }
+
     companion object {
         const val UNIQUE_NAME = "daily-canonical-check"
+        private val DATE_PATTERN = Regex("\\d{4}-\\d{2}-\\d{2}")
     }
 }
 

@@ -22,25 +22,36 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.edgestack.app.data.repo.SyncRepository
 import com.edgestack.app.domain.model.PaperResponse
+import com.edgestack.app.ui.components.Refreshable
 import com.edgestack.app.ui.components.Sparkline
 import kotlinx.coroutines.launch
 
 class TradesViewModel(private val syncRepo: SyncRepository) : ViewModel() {
     var paper by mutableStateOf<PaperResponse?>(null); private set
     var status by mutableStateOf(""); private set
+    var loading by mutableStateOf(false); private set
 
     init { refresh() }
 
     fun refresh() {
+        loading = true
         viewModelScope.launch {
             syncRepo.paper().onSuccess { paper = it }
                 .onFailure { status = "Offline: ${it.message}" }
+            loading = false
         }
     }
 }
 
 @Composable
 fun TradesScreen(vm: TradesViewModel) {
+    Refreshable(refreshing = vm.loading, onRefresh = vm::refresh) {
+        TradesContent(vm)
+    }
+}
+
+@Composable
+private fun TradesContent(vm: TradesViewModel) {
     Column(
         Modifier.fillMaxSize().padding(12.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp),

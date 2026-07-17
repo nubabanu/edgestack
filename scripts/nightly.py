@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from datetime import date, timedelta
 
+import pandas as pd
+
 from edgestack.config import EdgeStackConfig, load_config
 from edgestack.data.calendar import TradingCalendar
 from edgestack.data.catalog import DataCatalog
@@ -16,14 +18,49 @@ from edgestack.pipelines import run_features_build
 from edgestack.recommendation.nightly import build_and_publish_canonical_baseline
 from edgestack.recommendation.policy import load_baseline_policy
 
+# Catalog symbols with no bar for this many days are treated as delisted and
+# skipped by the nightly fetch. Their history remains in the catalog —
+# deleting it would introduce survivorship bias into point-in-time research.
+INACTIVE_AFTER_DAYS = 60
+
+
+def _split_active(
+    catalog: DataCatalog, symbols: tuple[str, ...], run_date: date, required: set[str]
+) -> tuple[list[str], list[str]]:
+    active: list[str] = []
+    inactive: list[str] = []
+    for symbol in symbols:
+        if symbol in required:
+            active.append(symbol)
+            continue
+        path = catalog.prices_dir / f"{symbol}.parquet"
+        try:
+            last = pd.read_parquet(path, columns=["date"])["date"].max()
+        except (OSError, ValueError, KeyError):
+            active.append(symbol)
+            continue
+        if pd.isna(last) or (run_date - pd.Timestamp(last).date()).days > INACTIVE_AFTER_DAYS:
+            inactive.append(symbol)
+        else:
+            active.append(symbol)
+    return active, inactive
+
 
 def update_data(cfg: EdgeStackConfig, run_date: date) -> None:
     catalog = DataCatalog(cfg)
     policy_symbols = {weight.symbol for weight in load_baseline_policy().weights}
     required = set(cfg.universe.symbols) | policy_symbols
-    symbols = tuple(sorted(set(catalog.list_symbols()) | required))
-    if not symbols:
+    all_symbols = tuple(sorted(set(catalog.list_symbols()) | required))
+    if not all_symbols:
         raise RuntimeError("nightly data update has no configured or catalog symbols")
+    active, inactive = _split_active(catalog, all_symbols, run_date, required)
+    if inactive:
+        print(
+            f"nightly skipping {len(inactive)} inactive symbols "
+            f"(no bar in {INACTIVE_AFTER_DAYS} days): {', '.join(inactive[:10])}"
+            + ("…" if len(inactive) > 10 else "")
+        )
+    symbols = tuple(active)
     provider = get_price_provider(cfg.universe.source, cfg)
     start = run_date - timedelta(days=45)
     for offset in range(0, len(symbols), 25):

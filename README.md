@@ -111,8 +111,11 @@ Build and install:
 
 ```bash
 cd android
-./gradlew assembleDebug   # output: app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleDebug     # output: app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease   # R8-minified and release-signed (see below)
 ```
+
+Release signing reads `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, and `RELEASE_KEY_PASSWORD` from the gitignored `android/local.properties`; generate a keystore once with `keytool -genkeypair -keystore keystore/edgestack-release.jks -alias edgestack -keyalg RSA -validity 10950`. Without these properties the release build is unsigned. Debug and release signatures differ — switching between them on a device requires uninstalling first.
 
 Connect a phone (same Wi-Fi as the PC):
 

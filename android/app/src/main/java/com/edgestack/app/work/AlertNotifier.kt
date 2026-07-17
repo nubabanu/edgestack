@@ -17,6 +17,7 @@ object AlertNotifier {
 
     const val CHANNEL_CANONICAL = "canonical_recommendations"
     const val CHANNEL_RISK = "risk_alerts"
+    const val CHANNEL_TIMING = "timing_windows"
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -29,6 +30,11 @@ object AlertNotifier {
             NotificationChannel(CHANNEL_RISK, "Risk alerts",
                 NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Canonical drawdown and latch-state changes"
+            })
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_TIMING, "Timing windows",
+                NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Sniper candidate triggers, scheduled entries, turn-of-month windows"
             })
     }
 

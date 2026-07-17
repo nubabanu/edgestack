@@ -27,6 +27,7 @@ import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.repo.RecommendationRepository
 import com.edgestack.app.data.repo.SyncRepository
 import com.edgestack.app.domain.model.PortfolioRecommendationV2
+import com.edgestack.app.ui.components.Refreshable
 import kotlinx.coroutines.launch
 
 class OverlayViewModel(
@@ -62,6 +63,13 @@ class OverlayViewModel(
 
 @Composable
 fun OverlayScreen(vm: OverlayViewModel) {
+    Refreshable(refreshing = vm.loading, onRefresh = vm::preview) {
+        OverlayContent(vm)
+    }
+}
+
+@Composable
+private fun OverlayContent(vm: OverlayViewModel) {
     val recommendation = vm.recommendation
     Column(
         Modifier.fillMaxSize().padding(12.dp).verticalScroll(rememberScrollState()),

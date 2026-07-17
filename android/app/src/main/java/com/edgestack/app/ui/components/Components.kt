@@ -2,11 +2,15 @@ package com.edgestack.app.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +28,23 @@ import com.edgestack.app.ui.theme.AccentRed
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
+
+/** Standard swipe-down-to-refresh wrapper used by every server-backed tab. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun Refreshable(
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = onRefresh,
+        modifier = modifier.fillMaxSize(),
+        content = content,
+    )
+}
 
 @Composable
 fun DisclaimerFooter() {

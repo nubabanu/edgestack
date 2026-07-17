@@ -3,6 +3,9 @@ package com.edgestack.app.ui.calendar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,8 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,11 +33,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.edgestack.app.data.repo.CalendarRepository
 import com.edgestack.app.data.repo.InstrumentAnalysisRepository
+import com.edgestack.app.data.repo.SyncRepository
+import kotlinx.coroutines.launch
 import com.edgestack.app.domain.DayEdge
 import com.edgestack.app.domain.SeasonalOverlay
 import com.edgestack.app.domain.TradingCalendar
@@ -44,18 +53,45 @@ import java.util.Locale
 class CalendarViewModel(
     calendarRepo: CalendarRepository,
     private val instrumentRepo: InstrumentAnalysisRepository,
+    private val syncRepository: SyncRepository,
 ) : ViewModel() {
     val calendar: TradingCalendar = calendarRepo.calendar
     var month by mutableStateOf(YearMonth.now())
     var selected by mutableStateOf<LocalDate?>(null)
     var overlay by mutableStateOf(SeasonalOverlay(emptyList())); private set
     var overlaySymbol by mutableStateOf<String?>(null); private set
+    var symbolDraft by mutableStateOf("")
+    var loading by mutableStateOf(false); private set
+    var message by mutableStateOf(""); private set
 
     /** Re-read the last instrument analysis so the overlay follows the Analyze tab. */
     fun reload() {
         val analysis = instrumentRepo.loadLast()
         overlay = SeasonalOverlay(analysis?.tailwindCalendars.orEmpty())
         overlaySymbol = analysis?.resolution?.resolvedSymbol
+    }
+
+    /** Fetch server tailwind evidence for [symbol] and shade the grid with it. */
+    fun shade(symbol: String = symbolDraft) {
+        val cleaned = symbol.trim().uppercase()
+        if (cleaned.isBlank()) return
+        loading = true
+        message = ""
+        viewModelScope.launch {
+            syncRepository.analyzeInstrument(cleaned).fold(
+                onSuccess = {
+                    reload()
+                    symbolDraft = ""
+                    message = "Shading ${it.resolution.resolvedSymbol} evidence."
+                },
+                onFailure = { message = "Shading unavailable: ${it.message}" },
+            )
+            loading = false
+        }
+    }
+
+    companion object {
+        val QUICK_SYMBOLS = listOf("SPY", "QQQ", "GLD", "USO")
     }
 }
 
@@ -75,12 +111,50 @@ fun CalendarScreen(vm: CalendarViewModel) {
                     "NYSE sessions with historical tailwind shading for " +
                         "${vm.overlaySymbol ?: "the last analyzed instrument"} — research only."
                 } else {
-                    "NYSE sessions and turn-of-month windows. Analyze an instrument to " +
+                    "NYSE sessions and turn-of-month windows. Pick an instrument to " +
                         "shade days by its historical tailwind evidence."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray,
             )
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CalendarViewModel.QUICK_SYMBOLS.forEach { quick ->
+                    AssistChip(
+                        onClick = { vm.shade(quick) },
+                        enabled = !vm.loading,
+                        label = {
+                            Text(if (vm.overlaySymbol == quick) "✓ $quick" else quick)
+                        },
+                    )
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = vm.symbolDraft,
+                    onValueChange = { vm.symbolDraft = it },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Other ticker or commodity") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters,
+                        autoCorrect = false,
+                    ),
+                )
+                TextButton(onClick = { vm.shade() }, enabled = !vm.loading) {
+                    Text(if (vm.loading) "…" else "Shade")
+                }
+            }
+            if (vm.message.isNotBlank()) {
+                Text(vm.message, style = MaterialTheme.typography.labelSmall)
+            }
         }
         item {
             Row(
