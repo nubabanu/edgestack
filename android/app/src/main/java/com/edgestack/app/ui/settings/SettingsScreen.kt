@@ -11,7 +11,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -110,6 +112,10 @@ fun SettingsScreen(vm: SettingsViewModel) {
             label = { Text("Base URL, e.g. http://192.168.1.20:8000") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                autoCorrect = false,
+            ),
         )
         Text("Risk sizing (alpha selection is unchanged)", style = MaterialTheme.typography.titleMedium)
         NumberField("Target volatility (%)", vm.targetVolDraft, vm::editTargetVol)
@@ -148,5 +154,6 @@ private fun NumberField(label: String, value: String, onChange: (String) -> Unit
         label = { Text(label) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
     )
 }

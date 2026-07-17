@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -24,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -133,6 +135,10 @@ fun InstrumentScreen(vm: InstrumentViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Ticker or commodity (for example AAPL, GLD, GOLD, OIL)") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    autoCorrect = false,
+                ),
             )
             OutlinedTextField(
                 value = vm.intendedEntry,
@@ -143,6 +149,7 @@ fun InstrumentScreen(vm: InstrumentViewModel) {
                     Text("Date only: 2026-07-20; or hour: 2026-07-20T09:30:00-04:00")
                 },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(autoCorrect = false),
             )
             Text("Quick instruments", style = MaterialTheme.typography.labelMedium)
             Row(

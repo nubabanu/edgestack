@@ -12,7 +12,9 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -95,6 +97,7 @@ fun SniperScreen(vm: SniperViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Account equity") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             )
             OutlinedTextField(
                 value = vm.maxTolerableLoss,
@@ -103,6 +106,7 @@ fun SniperScreen(vm: SniperViewModel) {
                 label = { Text("Maximum tolerable modeled loss") },
                 supportingText = { Text("Sizing uses the adverse 5th-percentile or a −4% fallback.") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 SniperViewModel.VEHICLES.forEach { symbol ->
@@ -165,7 +169,11 @@ fun SniperScreen(vm: SniperViewModel) {
                         Text("Threshold: ${overlay.threshold}", style = MaterialTheme.typography.labelSmall)
                         overlay.warning?.let { Text("⚠ $it", style = MaterialTheme.typography.bodySmall) }
                         Text(
-                            "Cannot initiate: ${if (overlay.canInitiate) "POLICY ERROR" else "yes"}",
+                            if (overlay.canInitiate) {
+                                "⚠ POLICY ERROR: overlay reports it can initiate a trade"
+                            } else {
+                                "Confirm/veto only — cannot initiate a trade"
+                            },
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
