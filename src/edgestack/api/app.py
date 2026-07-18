@@ -36,6 +36,8 @@ from edgestack.recommendation.instrument_schemas import (
     PatternLeaderBoardV2,
     PatternLeaderV2,
 )
+from edgestack.recommendation.oil import build_oil_decision_from_catalog
+from edgestack.recommendation.oil_schemas import OilDecisionRequestV2, OilDecisionSnapshotV2
 from edgestack.recommendation.schemas import (
     CanonicalRecommendationBundleV2,
     PortfolioRecommendationV2,
@@ -152,6 +154,14 @@ def create_app(cfg: EdgeStackConfig):
         try:
             current = _analyze_instrument(request.request)
             return compare_recheck(request.previous_analysis, current)
+        except DataError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/oil/decision", response_model=OilDecisionSnapshotV2)
+    def oil_decision(request: OilDecisionRequestV2) -> OilDecisionSnapshotV2:
+        """Build a stateless, paper-only eToro OIL decision snapshot."""
+        try:
+            return build_oil_decision_from_catalog(cfg, request)
         except DataError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

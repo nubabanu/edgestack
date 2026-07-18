@@ -549,6 +549,137 @@ data class InstrumentAnalysisRequestV2(
 )
 
 @Serializable
+data class OilBrokerQuoteV2(
+    @SerialName("observed_at") val observedAt: String,
+    val bid: Double,
+    val ask: Double,
+    @SerialName("offered_leverage") val offeredLeverage: Double = 10.0,
+)
+
+@Serializable
+data class OilBrokerProfileV2(
+    val broker: String = "ETORO",
+    @SerialName("broker_symbol") val brokerSymbol: String = "OIL",
+    @SerialName("product_type") val productType: String,
+    @SerialName("max_modeled_leverage") val maxModeledLeverage: Int,
+    @SerialName("market_timezone") val marketTimezone: String,
+    @SerialName("weekly_session") val weeklySession: String,
+    @SerialName("daily_break") val dailyBreak: String,
+    @SerialName("overnight_fee_cutoff") val overnightFeeCutoff: String,
+    @SerialName("weekend_fee_timing") val weekendFeeTiming: String,
+    @SerialName("rollover_warning") val rolloverWarning: String,
+    @SerialName("specification_url") val specificationUrl: String,
+    @SerialName("fee_url") val feeUrl: String,
+)
+
+@Serializable
+data class OilDecisionRequestV2(
+    @SerialName("broker_symbol") val brokerSymbol: String = "OIL",
+    @SerialName("intended_entry_at") val intendedEntryAt: String,
+    val quote: OilBrokerQuoteV2,
+    @SerialName("modeled_leverage") val modeledLeverage: Double = 10.0,
+    @SerialName("event_flags") val eventFlags: List<String> = emptyList(),
+    @SerialName("include_news") val includeNews: Boolean = true,
+)
+
+@Serializable
+data class OilSourceObservationV2(
+    val symbol: String,
+    val role: String,
+    val available: Boolean,
+    @SerialName("daily_through") val dailyThrough: String? = null,
+    @SerialName("hourly_through") val hourlyThrough: String? = null,
+    @SerialName("fifteen_minute_through") val fifteenMinuteThrough: String? = null,
+    @SerialName("input_hash") val inputHash: String? = null,
+    val warning: String? = null,
+)
+
+@Serializable
+data class OilDataFreshnessV2(
+    @SerialName("canonical_matches_catalog") val canonicalMatchesCatalog: Boolean,
+    @SerialName("bundle_as_of") val bundleAsOf: String,
+    @SerialName("quote_age_seconds") val quoteAgeSeconds: Double,
+    @SerialName("quote_fresh") val quoteFresh: Boolean,
+    @SerialName("all_required_sources_present") val allRequiredSourcesPresent: Boolean,
+    @SerialName("required_sources_fresh") val requiredSourcesFresh: Boolean,
+    val sources: List<OilSourceObservationV2> = emptyList(),
+    val warnings: List<String> = emptyList(),
+)
+
+@Serializable
+data class OilFrictionScenarioV2(
+    val name: String,
+    @SerialName("round_trip_cost_bps") val roundTripCostBps: Double,
+    @SerialName("matched_slot") val matchedSlot: String? = null,
+    @SerialName("expected_net_return") val expectedNetReturn: Double? = null,
+    @SerialName("lower_95") val lower95: Double? = null,
+    @SerialName("multiple_testing_adjusted_pvalue")
+    val multipleTestingAdjustedPvalue: Double? = null,
+    val observations: Int = 0,
+    val survives: Boolean = false,
+    val warning: String,
+)
+
+@Serializable
+data class OilEventVetoV2(
+    val code: String,
+    val label: String,
+    val active: Boolean,
+    @SerialName("hard_veto") val hardVeto: Boolean,
+    val source: String,
+)
+
+@Serializable
+data class OilSourceAlignmentV2(
+    val state: String,
+    val observations: List<String> = emptyList(),
+    @SerialName("directional_contribution") val directionalContribution: Int = 0,
+    val warning: String,
+)
+
+@Serializable
+data class OilStressPointV2(
+    val leverage: Int,
+    @SerialName("adverse_move_fraction") val adverseMoveFraction: Double,
+    @SerialName("equity_loss_fraction") val equityLossFraction: Double,
+    val catastrophic: Boolean,
+    @SerialName("liquidation_possible") val liquidationPossible: Boolean,
+    val warning: String,
+)
+
+@Serializable
+data class OilDecisionSnapshotV2(
+    @SerialName("schema_version") val schemaVersion: Int = 2,
+    @SerialName("snapshot_id") val snapshotId: String,
+    @SerialName("generated_at") val generatedAt: String,
+    val broker: String,
+    @SerialName("broker_symbol") val brokerSymbol: String,
+    @SerialName("product_description") val productDescription: String,
+    @SerialName("broker_profile") val brokerProfile: OilBrokerProfileV2,
+    @SerialName("canonical_bundle_hash") val canonicalBundleHash: String,
+    @SerialName("canonical_portfolio_weight") val canonicalPortfolioWeight: Double = 0.0,
+    val actionable: Boolean = false,
+    val status: String,
+    @SerialName("intended_entry_at") val intendedEntryAt: String,
+    val quote: OilBrokerQuoteV2,
+    @SerialName("quote_input_hash") val quoteInputHash: String,
+    @SerialName("modeled_leverage_cap") val modeledLeverageCap: Double,
+    @SerialName("decision_reasons") val decisionReasons: List<String> = emptyList(),
+    @SerialName("hard_block_reasons") val hardBlockReasons: List<String> = emptyList(),
+    val analysis: InstrumentAnalysisV2,
+    @SerialName("data_freshness") val dataFreshness: OilDataFreshnessV2,
+    @SerialName("friction_sensitivity")
+    val frictionSensitivity: List<OilFrictionScenarioV2> = emptyList(),
+    @SerialName("event_vetoes") val eventVetoes: List<OilEventVetoV2> = emptyList(),
+    @SerialName("source_alignment") val sourceAlignment: OilSourceAlignmentV2,
+    @SerialName("stress_table") val stressTable: List<OilStressPointV2> = emptyList(),
+    @SerialName("next_recheck_at") val nextRecheckAt: String? = null,
+    @SerialName("manual_inputs_required") val manualInputsRequired: List<String> = emptyList(),
+    val warnings: List<String> = emptyList(),
+    val disclaimer: String,
+)
+
+@Serializable
 data class InstrumentRecheckRequestV2(
     @SerialName("previous_analysis") val previousAnalysis: InstrumentAnalysisV2,
     val request: InstrumentAnalysisRequestV2,
@@ -591,6 +722,22 @@ data class PatternLeaderBoardV2(
     @SerialName("searched_cells") val searchedCells: Int,
     val leaders: List<PatternLeaderV2>,
     val warning: String,
+)
+
+/** One scheduled macro release from the bundled seed (scripts/export_macro_events.py). */
+@Serializable
+data class MacroEvent(
+    val date: String,                       // ISO yyyy-MM-dd
+    val type: String,                       // FOMC | CPI | EIA
+    val label: String,
+    @SerialName("time_et") val timeEt: String,
+)
+
+@Serializable
+data class MacroEvents(
+    @SerialName("schema_version") val schemaVersion: Int = 1,
+    @SerialName("generated_at") val generatedAt: String = "",
+    val events: List<MacroEvent> = emptyList(),
 )
 
 /** One row of GET /edges — the validated edge catalog with lifecycle status. */

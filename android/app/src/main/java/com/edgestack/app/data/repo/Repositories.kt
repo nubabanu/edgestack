@@ -4,6 +4,7 @@ import com.edgestack.app.data.local.JsonFileStore
 import com.edgestack.app.data.local.SeedAssets
 import com.edgestack.app.data.local.SettingsStore
 import com.edgestack.app.data.remote.EdgeStackApi
+import com.edgestack.app.domain.MacroEventBook
 import com.edgestack.app.domain.TradingCalendar
 import com.edgestack.app.domain.model.BacktestRunV2
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
@@ -13,6 +14,8 @@ import com.edgestack.app.domain.model.InstrumentAnalysisRequestV2
 import com.edgestack.app.domain.model.InstrumentAnalysisV2
 import com.edgestack.app.domain.model.InstrumentRecheckRequestV2
 import com.edgestack.app.domain.model.InstrumentRecheckV2
+import com.edgestack.app.domain.model.OilDecisionRequestV2
+import com.edgestack.app.domain.model.OilDecisionSnapshotV2
 import com.edgestack.app.domain.model.PatternLeaderBoardV2
 import com.edgestack.app.domain.model.PatternLeaderRequestV2
 import com.edgestack.app.domain.model.PaperResponse
@@ -120,6 +123,15 @@ class InstrumentAnalysisRepository(private val store: JsonFileStore) {
     }
 }
 
+/** Last server-built paper-only oil snapshot; never recalculated on device. */
+class OilDecisionRepository(private val store: JsonFileStore) {
+    fun load(): OilDecisionSnapshotV2? =
+        store.read("oil_decision.json", OilDecisionSnapshotV2.serializer())
+
+    fun save(snapshot: OilDecisionSnapshotV2) =
+        store.write("oil_decision.json", OilDecisionSnapshotV2.serializer(), snapshot)
+}
+
 /** Last server-fetched edge catalog and monitoring snapshot for offline display. */
 class EdgesRepository(private val store: JsonFileStore) {
     fun loadCatalog(): List<EdgeSummaryV2> =
@@ -148,6 +160,7 @@ class SyncRepository(
     private val settingsStore: SettingsStore,
     private val recommendationRepo: RecommendationRepository,
     private val instrumentRepo: InstrumentAnalysisRepository,
+    private val oilRepo: OilDecisionRepository,
     private val sniperRepo: SniperRepository,
     private val edgesRepo: EdgesRepository,
     private val http: OkHttpClient,
@@ -236,6 +249,16 @@ class SyncRepository(
         )
     }
 
+    suspend fun oilDecision(request: OilDecisionRequestV2): Result<OilDecisionSnapshotV2> =
+        apiCatching {
+            require(request.brokerSymbol == "OIL") { "only the eToro OIL profile is supported" }
+            require(request.quote.ask > request.quote.bid) { "ask must be greater than bid" }
+            require(request.modeledLeverage in 1.0..10.0) { "modeled leverage must be 1-10x" }
+            val result = (api() ?: error("no server URL configured")).oilDecision(request)
+            oilRepo.save(result)
+            result
+        }
+
     suspend fun edges(): Result<List<EdgeSummaryV2>> = apiCatching {
         val api = api() ?: error("no server URL configured")
         api.edges().also(edgesRepo::saveCatalog)
@@ -322,5 +345,9 @@ class SyncRepository(
 class CalendarRepository(private val seed: SeedAssets) {
     val calendar: TradingCalendar by lazy {
         TradingCalendar(seed.calendar().sessions.map { LocalDate.parse(it) })
+    }
+
+    val macroEvents: MacroEventBook by lazy {
+        MacroEventBook(seed.macroEvents().events)
     }
 }

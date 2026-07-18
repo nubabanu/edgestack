@@ -78,9 +78,44 @@ class DailyCheckWorker(
                 notifyTimingWindows(container, beforePlan)
             }
         }
+        if (container.settings.current().timingAlerts) {
+            notifyStopTargetBreaches(container)
+        }
 
         WorkScheduler.scheduleNext(applicationContext, container.calendarRepo.calendar)
         return Result.success()
+    }
+
+    /** Alert when a tracked position's stop or target level is crossed. */
+    private suspend fun notifyStopTargetBreaches(container: com.edgestack.app.di.AppContainer) {
+        val positions = container.positionsRepo.load()
+        if (positions.isEmpty()) return
+        val quotes = runCatching {
+            container.quotes.latestQuotes(positions.map { it.symbol }.distinct())
+        }.getOrElse { return }
+        positions.forEachIndexed { index, position ->
+            val last = quotes[position.symbol] ?: return@forEachIndexed
+            position.stop?.takeIf { last <= it }?.let { stop ->
+                AlertNotifier.notify(
+                    applicationContext,
+                    AlertNotifier.CHANNEL_TIMING,
+                    160 + index,
+                    "${position.symbol} at stop level",
+                    "Last ${"%.2f".format(last)} <= stop ${"%.2f".format(stop)} " +
+                        "(entry ${"%.2f".format(position.entryPrice)}). Delayed device quote.",
+                )
+            }
+            position.target?.takeIf { last >= it }?.let { target ->
+                AlertNotifier.notify(
+                    applicationContext,
+                    AlertNotifier.CHANNEL_TIMING,
+                    180 + index,
+                    "${position.symbol} at target level",
+                    "Last ${"%.2f".format(last)} >= target ${"%.2f".format(target)} " +
+                        "(entry ${"%.2f".format(position.entryPrice)}). Delayed device quote.",
+                )
+            }
+        }
     }
 
     /** Sniper transitions and upcoming windows; states come from the server only. */
@@ -137,6 +172,20 @@ class DailyCheckWorker(
                 "$nextSession is the month's last session; the historical turn-of-month " +
                     "window runs through the first 3 sessions of next month.",
             )
+        }
+
+        if (nextSession != null) {
+            container.calendarRepo.macroEvents.highImpactOn(nextSession)
+                .forEachIndexed { index, event ->
+                    AlertNotifier.notify(
+                        applicationContext,
+                        AlertNotifier.CHANNEL_TIMING,
+                        200 + index,
+                        "${event.type} next session",
+                        "$nextSession: ${event.label} at ${event.timeEt} ET — " +
+                            "expect volatility around the release.",
+                    )
+                }
         }
     }
 

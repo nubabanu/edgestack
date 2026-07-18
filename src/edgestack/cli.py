@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging as _stdlib_logging
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import typer
@@ -37,6 +37,7 @@ paper_app = typer.Typer(help="Paper-trading session management.", no_args_is_hel
 risk_app = typer.Typer(help="Canonical risk-state management.", no_args_is_help=True)
 api_app = typer.Typer(help="Serve the read-only API.", no_args_is_help=True)
 dashboard_app = typer.Typer(help="Serve the research dashboard.", no_args_is_help=True)
+oil_app = typer.Typer(help="Paper-only eToro OIL decision support.", no_args_is_help=True)
 
 for name, sub in [
     ("data", data_app),
@@ -51,6 +52,7 @@ for name, sub in [
     ("risk", risk_app),
     ("api", api_app),
     ("dashboard", dashboard_app),
+    ("oil", oil_app),
 ]:
     app.add_typer(sub, name=name)
 
@@ -275,6 +277,72 @@ def risk_reset_latch(config: Path | None = _CONFIG_OPT) -> None:
 
     publication = reset_persisted_risk_state(cfg)
     typer.echo(f"risk latch reset in canonical run {publication.run_id}")
+
+
+@oil_app.command("refresh")
+def oil_refresh(
+    through: str = typer.Option(str(date.today()), help="Refresh through YYYY-MM-DD."),
+    config: Path | None = _CONFIG_OPT,
+) -> None:
+    """Refresh free daily, hourly, and 15-minute oil research inputs."""
+    cfg = _setup(config)
+    from edgestack.recommendation.oil import refresh_oil_data
+
+    _run(refresh_oil_data, cfg, through=date.fromisoformat(through))
+
+
+@oil_app.command("check")
+def oil_check(
+    intended_entry_at: str = typer.Option(
+        ..., help="Timezone-aware intended entry, for example 2026-07-20T15:30:00+02:00."
+    ),
+    observed_at: str = typer.Option(..., help="Timezone-aware eToro quote timestamp."),
+    bid: float = typer.Option(..., min=0.000001, help="Displayed eToro OIL bid."),
+    ask: float = typer.Option(..., min=0.000001, help="Displayed eToro OIL ask."),
+    offered_leverage: float = typer.Option(10.0, min=1.0, max=10.0),
+    modeled_leverage: float = typer.Option(10.0, min=1.0, max=10.0),
+    event_flags: str = typer.Option(
+        "",
+        help=(
+            "Comma-separated manual vetoes: WEEKEND_SUPPLY_ESCALATION, "
+            "SHIPPING_DISRUPTION, WTI_ROLLOVER_EXPIRY, BROKER_MAINTENANCE."
+        ),
+    ),
+    config: Path | None = _CONFIG_OPT,
+) -> None:
+    """Create and persist one content-addressed paper-only OIL snapshot."""
+    cfg = _setup(config)
+    from edgestack.recommendation.oil import (
+        build_oil_decision_from_catalog,
+        persist_oil_snapshot,
+    )
+    from edgestack.recommendation.oil_schemas import (
+        OilBrokerQuoteV2,
+        OilDecisionRequestV2,
+        OilEventFlag,
+    )
+
+    try:
+        flags = tuple(
+            OilEventFlag(item.strip().upper()) for item in event_flags.split(",") if item.strip()
+        )
+        request = OilDecisionRequestV2(
+            intended_entry_at=datetime.fromisoformat(intended_entry_at),
+            quote=OilBrokerQuoteV2(
+                observed_at=datetime.fromisoformat(observed_at),
+                bid=bid,
+                ask=ask,
+                offered_leverage=offered_leverage,
+            ),
+            modeled_leverage=modeled_leverage,
+            event_flags=flags,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    snapshot = build_oil_decision_from_catalog(cfg, request)
+    path = persist_oil_snapshot(Path(cfg.paths.artifacts_dir), snapshot)
+    typer.echo(snapshot.model_dump_json(indent=2))
+    typer.echo(f"immutable snapshot: {path}")
 
 
 @api_app.command("serve")

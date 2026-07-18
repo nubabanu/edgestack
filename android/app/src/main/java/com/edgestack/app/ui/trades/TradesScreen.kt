@@ -56,6 +56,8 @@ class TradesViewModel(
     var symbolDraft by mutableStateOf("")
     var quantityDraft by mutableStateOf("")
     var entryPriceDraft by mutableStateOf("")
+    var stopDraft by mutableStateOf("")
+    var targetDraft by mutableStateOf("")
     var positionMessage by mutableStateOf(""); private set
 
     init { refresh() }
@@ -92,12 +94,16 @@ class TradesViewModel(
                 entryPrice = entry,
                 quantity = quantity,
                 entryDate = LocalDate.now().toString(),
+                stop = stopDraft.toDoubleOrNull()?.takeIf { it > 0 },
+                target = targetDraft.toDoubleOrNull()?.takeIf { it > 0 },
             ),
         )
         positions = positionsRepo.load()
         symbolDraft = ""
         quantityDraft = ""
         entryPriceDraft = ""
+        stopDraft = ""
+        targetDraft = ""
         positionMessage = ""
         viewModelScope.launch { refreshQuotes() }
     }
@@ -222,6 +228,27 @@ private fun MyPositionsSection(vm: TradesViewModel) {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         )
     }
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        OutlinedTextField(
+            value = vm.stopDraft,
+            onValueChange = { vm.stopDraft = it },
+            modifier = Modifier.weight(1f),
+            label = { Text("Stop (optional)") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        )
+        OutlinedTextField(
+            value = vm.targetDraft,
+            onValueChange = { vm.targetDraft = it },
+            modifier = Modifier.weight(1f),
+            label = { Text("Target (optional)") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        )
+    }
     Button(onClick = vm::addPosition) { Text("Add position") }
     if (vm.positionMessage.isNotBlank()) {
         Text(vm.positionMessage, style = MaterialTheme.typography.labelSmall)
@@ -254,16 +281,31 @@ private fun MyPositionsSection(vm: TradesViewModel) {
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.Gray,
                     )
-                    if (pnl == null) {
+                    val last = vm.quotes[position.symbol]
+                    if (pnl == null || last == null) {
                         Text("last — • P&L —", style = MaterialTheme.typography.bodySmall)
                     } else {
                         Text(
-                            "last ${"%.2f".format(vm.quotes[position.symbol])} • " +
+                            "last ${"%.2f".format(last)} • " +
                                 "${"%+.2f".format(pnl.profit)} " +
                                 "(${"%+.2f".format(pnl.profitPercent)}%)",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (pnl.profit >= 0) Accent else AccentRed,
                         )
+                        position.stop?.takeIf { last <= it }?.let {
+                            Text(
+                                "⚠ STOP LEVEL REACHED (${"%.2f".format(it)})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AccentRed,
+                            )
+                        }
+                        position.target?.takeIf { last >= it }?.let {
+                            Text(
+                                "🎯 TARGET REACHED (${"%.2f".format(it)})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Accent,
+                            )
+                        }
                     }
                 }
                 IconButton(onClick = { vm.removePosition(position) }) {

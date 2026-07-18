@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
                         container.recommendationRepo,
                         container.syncRepo,
                         container.settings,
+                        container.quotes,
                     ) as T
                 TradesViewModel::class.java ->
                     TradesViewModel(
@@ -74,7 +75,12 @@ class MainActivity : ComponentActivity() {
                         container.quotes,
                     ) as T
                 InstrumentViewModel::class.java ->
-                    InstrumentViewModel(container.instrumentRepo, container.syncRepo) as T
+                    InstrumentViewModel(
+                        container.instrumentRepo,
+                        container.oilRepo,
+                        container.syncRepo,
+                        container.calendarRepo.macroEvents,
+                    ) as T
                 CalendarViewModel::class.java ->
                     CalendarViewModel(
                         container.calendarRepo,

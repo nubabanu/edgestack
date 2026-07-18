@@ -1,0 +1,654 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-17T13:47:49+00:00",
+  "events": [
+    {
+      "date": "2026-01-13",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-01-28",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2026-02-13",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-03-11",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-03-18",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2026-04-10",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-04-29",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2026-05-12",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-06-10",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-06-17",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2026-07-14",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-07-22",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-07-29",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-07-29",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2026-08-05",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-08-12",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-08-12",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-08-19",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-08-26",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-09-02",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-09-09",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-09-11",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-09-16",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-09-16",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2026-09-23",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-09-30",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-10-07",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-10-14",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-10-14",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-10-21",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-10-28",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-10-28",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2026-11-04",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-11-10",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-11-11",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-11-18",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-11-25",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-12-02",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-12-09",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-12-09",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2026-12-10",
+      "type": "CPI",
+      "label": "CPI release",
+      "time_et": "08:30"
+    },
+    {
+      "date": "2026-12-16",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-12-23",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2026-12-30",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-01-06",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-01-13",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-01-20",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-01-27",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-01-27",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2027-02-03",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-02-10",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-02-17",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-02-24",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-03-03",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-03-10",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-03-17",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-03-17",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2027-03-24",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-03-31",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-04-07",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-04-14",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-04-21",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-04-28",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-04-28",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2027-05-05",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-05-12",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-05-19",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-05-26",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-06-02",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-06-09",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-06-09",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2027-06-16",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-06-23",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-06-30",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-07-07",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-07-14",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-07-21",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-07-28",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-07-28",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2027-08-04",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-08-11",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-08-18",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-08-25",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-09-01",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-09-08",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-09-15",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-09-15",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2027-09-22",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-09-29",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-10-06",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-10-13",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-10-20",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-10-27",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-10-27",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2027-11-03",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-11-10",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-11-17",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-11-24",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-12-01",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-12-08",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-12-08",
+      "type": "FOMC",
+      "label": "FOMC rate decision",
+      "time_et": "14:00"
+    },
+    {
+      "date": "2027-12-15",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-12-22",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2027-12-29",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2028-01-05",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2028-01-12",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2028-01-19",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    },
+    {
+      "date": "2028-01-26",
+      "type": "EIA",
+      "label": "EIA petroleum report (holiday weeks may shift)",
+      "time_et": "10:30"
+    }
+  ]
+}

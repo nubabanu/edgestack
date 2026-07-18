@@ -41,8 +41,10 @@ import androidx.lifecycle.viewModelScope
 import com.edgestack.app.data.repo.CalendarRepository
 import com.edgestack.app.data.repo.InstrumentAnalysisRepository
 import com.edgestack.app.data.repo.SyncRepository
+import com.edgestack.app.ui.theme.AccentAmber
 import kotlinx.coroutines.launch
 import com.edgestack.app.domain.DayEdge
+import com.edgestack.app.domain.MacroEventBook
 import com.edgestack.app.domain.SeasonalOverlay
 import com.edgestack.app.domain.TradingCalendar
 import java.time.LocalDate
@@ -56,6 +58,7 @@ class CalendarViewModel(
     private val syncRepository: SyncRepository,
 ) : ViewModel() {
     val calendar: TradingCalendar = calendarRepo.calendar
+    val macroEvents: MacroEventBook = calendarRepo.macroEvents
     var month by mutableStateOf(YearMonth.now())
     var selected by mutableStateOf<LocalDate?>(null)
     var overlay by mutableStateOf(SeasonalOverlay(emptyList())); private set
@@ -184,14 +187,18 @@ fun CalendarScreen(vm: CalendarViewModel) {
                 today = today,
                 calendar = vm.calendar,
                 overlay = vm.overlay,
+                events = vm.macroEvents,
                 selected = vm.selected,
                 onSelect = { vm.selected = it },
             )
         }
         item { Legend(vm.overlay.hasData) }
+        if (vm.overlay.hasData) {
+            item { WeekAheadCard(today, vm.calendar, vm.overlay, vm.macroEvents, vm.overlaySymbol) }
+        }
         item { MonthFacts(month, today, vm.calendar, vm.overlay) }
         vm.selected?.let { date ->
-            item { DayDetails(date, vm.calendar, vm.overlay.edgeFor(date)) }
+            item { DayDetails(date, vm.calendar, vm.overlay.edgeFor(date), vm.macroEvents) }
         }
     }
 }
@@ -202,6 +209,7 @@ private fun MonthGrid(
     today: LocalDate,
     calendar: TradingCalendar,
     overlay: SeasonalOverlay,
+    events: MacroEventBook,
     selected: LocalDate?,
     onSelect: (LocalDate) -> Unit,
 ) {
@@ -230,6 +238,7 @@ private fun MonthGrid(
                             today = today,
                             calendar = calendar,
                             overlay = overlay,
+                            events = events,
                             isSelected = date != null && date == selected,
                             onSelect = onSelect,
                             modifier = Modifier.weight(1f),
@@ -248,6 +257,7 @@ private fun DayCell(
     today: LocalDate,
     calendar: TradingCalendar,
     overlay: SeasonalOverlay,
+    events: MacroEventBook,
     isSelected: Boolean,
     onSelect: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
@@ -289,6 +299,16 @@ private fun DayCell(
                     .background(MaterialTheme.colorScheme.tertiary),
             )
         }
+        if (events.on(date).isNotEmpty()) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 3.dp, end = 3.dp)
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(AccentAmber),
+            )
+        }
     }
 }
 
@@ -316,6 +336,13 @@ private fun Legend(hasOverlay: Boolean) {
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(AccentAmber))
+                Text(
+                    "  Macro event day (FOMC 14:00, CPI 08:30, EIA 10:30 ET)",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
             Text("Gray dates are non-sessions.", style = MaterialTheme.typography.labelSmall)
             if (hasOverlay) {
                 Text(
@@ -324,6 +351,59 @@ private fun Legend(hasOverlay: Boolean) {
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
+        }
+    }
+}
+
+/** The next five sessions ranked by historical tailwind — "when this week?" */
+@Composable
+private fun WeekAheadCard(
+    today: LocalDate,
+    calendar: TradingCalendar,
+    overlay: SeasonalOverlay,
+    events: MacroEventBook,
+    symbol: String?,
+) {
+    val sessions = buildList {
+        var d: LocalDate? = if (calendar.isSession(today)) today else calendar.nextSession(today)
+        while (d != null && size < 5) {
+            add(d)
+            d = calendar.nextSession(d)
+        }
+    }
+    val scored = sessions.mapNotNull { d -> overlay.edgeFor(d)?.let { d to it } }
+    if (scored.isEmpty()) return
+    val best = scored.maxByOrNull { it.second.percentile }?.first
+    val worst = scored.minByOrNull { it.second.percentile }?.first
+    Card {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                "Next ${scored.size} sessions${symbol?.let { " — $it" } ?: ""}",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            scored.forEach { (d, edge) ->
+                val marker = when (d) {
+                    best -> "  ← strongest"
+                    worst -> "  ← weakest"
+                    else -> ""
+                }
+                val eventTag = events.marker(d)?.let { "  ⚡$it" } ?: ""
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(10.dp).clip(CircleShape).background(heatColor(edge.percentile)),
+                    )
+                    Text(
+                        "  ${d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)} $d — " +
+                            "percentile ${"%.0f".format(edge.percentile * 100)}$marker$eventTag",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            Text(
+                "Historical tilt for entries you already planned — not a forecast.",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray,
+            )
         }
     }
 }
@@ -365,10 +445,22 @@ private fun MonthFacts(
 }
 
 @Composable
-private fun DayDetails(date: LocalDate, calendar: TradingCalendar, edge: DayEdge?) {
+private fun DayDetails(
+    date: LocalDate,
+    calendar: TradingCalendar,
+    edge: DayEdge?,
+    events: MacroEventBook,
+) {
     Card {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("$date", style = MaterialTheme.typography.titleSmall)
+            events.on(date).forEach { event ->
+                Text(
+                    "⚡ ${event.label} • ${event.timeEt} ET",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AccentAmber,
+                )
+            }
             if (!calendar.isSession(date)) {
                 Text("Not a trading session.", style = MaterialTheme.typography.bodySmall)
                 return@Column

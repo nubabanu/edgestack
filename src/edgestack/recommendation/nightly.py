@@ -26,6 +26,7 @@ from edgestack.paper.canonical import (
 )
 from edgestack.recommendation.financing import FundingRateObservation, fetch_dgs3mo
 from edgestack.recommendation.hashing import code_revision, stable_hash
+from edgestack.recommendation.instrument_schemas import NewsEvidenceV2
 from edgestack.recommendation.manifests import PublicationRecordV2
 from edgestack.recommendation.policy import load_baseline_policy
 from edgestack.recommendation.portfolio import AssetMetadata, build_base_recommendation
@@ -52,6 +53,7 @@ def build_and_publish_canonical_baseline(
     now: datetime | None = None,
     funding_observation: FundingRateObservation | None = None,
     bootstrap_replications: int = 2_000,
+    news_evidence: tuple[NewsEvidenceV2, ...] = (),
 ) -> PublicationRecordV2:
     """Build baseline plus zero-weight ideas and atomically publish one bundle."""
     generated_at = now or datetime.now(UTC)
@@ -243,6 +245,7 @@ def build_and_publish_canonical_baseline(
         "healthy": True,
         "promoted_sleeves": 0,
         "watchlist_ideas": len(watchlist),
+        "news_items": len(news_evidence),
         "claim": "baseline policy only; no promoted alpha claim",
     }
     publication = AtomicRecommendationPublisher(catalog.artifacts_dir).publish(
@@ -250,6 +253,7 @@ def build_and_publish_canonical_baseline(
         risk_inputs=risk_inputs,
         paper_state=paper.model_dump(mode="json"),
         monitoring=monitoring,
+        news_evidence=news_evidence,
     )
     RecommendationRegistry(catalog).save_publication(publication)
     catalog.audit(

@@ -3,6 +3,7 @@ package com.edgestack.app
 import com.edgestack.app.core.AppJson
 import com.edgestack.app.domain.model.CanonicalRecommendationBundleV2
 import com.edgestack.app.domain.model.InstrumentAnalysisV2
+import com.edgestack.app.domain.model.OilDecisionSnapshotV2
 import com.edgestack.app.domain.model.SniperPlanV2
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -126,6 +127,127 @@ class CanonicalContractTest {
         assertEquals(53.2, analysis.chosenTimeRatings.single().score!!.winScore, 1e-12)
         assertEquals("15:45 New York", analysis.exitPlans.single().preferredExit)
         assertEquals(60, analysis.recheckPlan.cadenceMinutes)
+    }
+
+    @Test
+    fun oilDecisionContractPreservesPaperOnlyAndCatastrophicStress() {
+        val hash = "a".repeat(64)
+        val quoteHash = "b".repeat(64)
+        val stress = listOf(1, 5, 10).flatMap { leverage ->
+            listOf(0.01, 0.05, 0.10).map { move ->
+                val loss = leverage * move
+                """{"leverage":$leverage,"adverse_move_fraction":$move,"equity_loss_fraction":$loss,"catastrophic":${loss >= 0.5},"liquidation_possible":${loss >= 1.0},"warning":"Stress only."}"""
+            }
+        }.joinToString(",")
+        val payload = """
+            {
+              "schema_version": 2,
+              "snapshot_id": "$hash",
+              "generated_at": "2026-07-20T13:30:00Z",
+              "broker": "ETORO",
+              "broker_symbol": "OIL",
+              "product_description": "eToro OIL non-expiring WTI crude-oil CFD",
+              "broker_profile": {
+                "broker": "ETORO",
+                "broker_symbol": "OIL",
+                "product_type": "NON_EXPIRING_CFD",
+                "max_modeled_leverage": 10,
+                "market_timezone": "GMT",
+                "weekly_session": "Sunday 22:00 through Friday 20:30",
+                "daily_break": "21:00-22:00",
+                "overnight_fee_cutoff": "21:00 GMT",
+                "weekend_fee_timing": "Oil weekend fee is charged on Friday",
+                "rollover_warning": "Confirm broker roll notices.",
+                "specification_url": "https://www.etoro.com/trading/market-hours-and-events/",
+                "fee_url": "https://www.etoro.com/trading/fees/cfd-overnight-fees/"
+              },
+              "canonical_bundle_hash": "$hash",
+              "canonical_portfolio_weight": 0.0,
+              "actionable": false,
+              "status": "OBSERVE",
+              "intended_entry_at": "2026-07-20T09:30:00-04:00",
+              "quote": {
+                "observed_at": "2026-07-20T13:29:30Z",
+                "bid": 67.90,
+                "ask": 68.10,
+                "offered_leverage": 10.0
+              },
+              "quote_input_hash": "$quoteHash",
+              "modeled_leverage_cap": 10.0,
+              "decision_reasons": ["Inference gate failed."],
+              "hard_block_reasons": [],
+              "analysis": {
+                "schema_version": 2,
+                "analysis_id": "oil-fixture",
+                "resolution": {
+                  "requested_symbol": "OIL",
+                  "resolved_symbol": "USO",
+                  "instrument_kind": "COMMODITY_PROXY",
+                  "proxy_for": "WTI crude oil",
+                  "notes": ["Tracking and roll differences apply."]
+                },
+                "as_of": "2026-07-16T20:00:00Z",
+                "data_version": "data-v2",
+                "artifact_version": "artifact-v2",
+                "policy_version": "baseline-diversified-v1",
+                "status": "INSUFFICIENT_EVIDENCE",
+                "overall_rating": "NOT_RATED",
+                "canonical_portfolio_weight": 0.0,
+                "alignment": {
+                  "aligned_trade": false,
+                  "promoted_tailwinds": 0,
+                  "promoted_headwinds": 0,
+                  "observational_tailwinds": 0,
+                  "observational_headwinds": 1,
+                  "explanation": "No promoted oil timing artifact."
+                },
+                "horizon_analyses": [],
+                "disclaimer": "Research and paper-trading output only."
+              },
+              "data_freshness": {
+                "canonical_matches_catalog": true,
+                "bundle_as_of": "2026-07-16T20:00:00Z",
+                "quote_age_seconds": 30.0,
+                "quote_fresh": true,
+                "all_required_sources_present": true,
+                "required_sources_fresh": true,
+                "sources": [],
+                "warnings": ["15-minute history is promotion-ineligible."]
+              },
+              "friction_sensitivity": [
+                {"name":"LOW","round_trip_cost_bps":29.4,"matched_slot":"09:30","expected_net_return":-0.0031,"lower_95":-0.006,"multiple_testing_adjusted_pvalue":1.0,"observations":39,"survives":false,"warning":"Observational only."},
+                {"name":"BASE","round_trip_cost_bps":29.4,"matched_slot":"09:30","expected_net_return":-0.0031,"lower_95":-0.006,"multiple_testing_adjusted_pvalue":1.0,"observations":39,"survives":false,"warning":"Observational only."},
+                {"name":"STRESS","round_trip_cost_bps":50.0,"matched_slot":"09:30","expected_net_return":-0.0052,"lower_95":-0.008,"multiple_testing_adjusted_pvalue":1.0,"observations":39,"survives":false,"warning":"Observational only."}
+              ],
+              "event_vetoes": [],
+              "source_alignment": {
+                "state": "MIXED",
+                "observations": ["VWAP context is descriptive only."],
+                "directional_contribution": 0,
+                "warning": "Cross-market context cannot initiate a trade."
+              },
+              "stress_table": [$stress],
+              "next_recheck_at": "2026-07-20T13:45:00Z",
+              "warnings": ["No order fields exist."],
+              "disclaimer": "Research and paper-trading output only."
+            }
+        """.trimIndent()
+
+        val snapshot = AppJson.decodeFromString(OilDecisionSnapshotV2.serializer(), payload)
+        val catastrophic = snapshot.stressTable.single {
+            it.leverage == 10 && it.adverseMoveFraction == 0.10
+        }
+
+        assertEquals("OBSERVE", snapshot.status)
+        assertTrue(!snapshot.actionable)
+        assertEquals(0.0, snapshot.canonicalPortfolioWeight, 1e-12)
+        assertEquals(0.0, snapshot.analysis.canonicalPortfolioWeight, 1e-12)
+        assertEquals("NON_EXPIRING_CFD", snapshot.brokerProfile.productType)
+        assertEquals(10, snapshot.brokerProfile.maxModeledLeverage)
+        assertEquals(3, snapshot.frictionSensitivity.size)
+        assertEquals(9, snapshot.stressTable.size)
+        assertEquals(1.0, catastrophic.equityLossFraction, 1e-12)
+        assertTrue(catastrophic.liquidationPossible)
     }
 
     @Test
