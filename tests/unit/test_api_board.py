@@ -333,6 +333,92 @@ def test_instrument_analysis_is_version_bound_and_non_promotional(cfg: EdgeStack
     assert any(item["resolution"] == "DAY" for item in day_only.json()["chosen_time_ratings"])
 
 
+def test_oil_decision_api_is_stateless_broker_aware_and_never_actionable(
+    cfg: EdgeStackConfig,
+) -> None:
+    catalog = DataCatalog(cfg)
+    dates = pd.bdate_range(end=SESSION, periods=900)
+    rng = np.random.default_rng(72026)
+    for symbol in ("CL=F", "USO"):
+        close = 100 * np.cumprod(1 + rng.normal(0.0001, 0.008, len(dates)))
+        close *= 100 / close[-1]
+        open_ = close * (1 + rng.normal(0, 0.001, len(dates)))
+        catalog.write_bars(
+            pd.DataFrame(
+                {
+                    "symbol": symbol,
+                    "date": dates,
+                    "open": open_,
+                    "high": np.maximum(open_, close) * 1.004,
+                    "low": np.minimum(open_, close) * 0.996,
+                    "close": close,
+                    "volume": 5_000_000.0,
+                    "adj_close": close,
+                }
+            ),
+            provider="fixture",
+        )
+    rows = []
+    for session in pd.bdate_range(end=SESSION, periods=25):
+        price = 100.0
+        for timestamp in pd.date_range(
+            pd.Timestamp(session.date(), tz="UTC") + pd.Timedelta(hours=13, minutes=30),
+            periods=26,
+            freq="15min",
+        ):
+            next_price = price * (1 + rng.normal(0, 0.001))
+            rows.append(
+                {
+                    "symbol": "USO",
+                    "timestamp": timestamp,
+                    "interval_minutes": 15,
+                    "open": price,
+                    "high": max(price, next_price) * 1.001,
+                    "low": min(price, next_price) * 0.999,
+                    "close": next_price,
+                    "volume": 50_000.0,
+                }
+            )
+            price = next_price
+    catalog.write_intraday_bars(pd.DataFrame(rows), provider="fixture")
+    bundle = _publish_fixture(cfg, data_version=catalog.data_manifest_hash())
+    api = TestClient(create_app(cfg))
+    pointer = cfg.paths.artifacts_dir / "recommendations" / "current.json"
+    before = pointer.read_bytes()
+    observed_at = datetime.now(UTC)
+
+    response = api.post(
+        "/oil/decision",
+        json={
+            "broker_symbol": "OIL",
+            "intended_entry_at": "2026-07-20T09:30:00-04:00",
+            "quote": {
+                "observed_at": observed_at.isoformat(),
+                "bid": 99.98,
+                "ask": 100.02,
+                "offered_leverage": 10,
+            },
+            "modeled_leverage": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["broker_symbol"] == "OIL"
+    assert payload["canonical_bundle_hash"] == bundle.bundle_hash
+    assert payload["status"] in {"OBSERVE", "BLOCKED"}
+    assert payload["actionable"] is False
+    assert payload["canonical_portfolio_weight"] == 0
+    assert payload["analysis"]["overall_rating"] == "NOT_RATED"
+    assert len(payload["friction_sensitivity"]) == 3
+    assert len(payload["stress_table"]) == 9
+    assert payload["stress_table"][-1]["equity_loss_fraction"] == 1.0
+    assert "quantity" not in response.text
+    assert "notional" not in response.text
+    assert "/oil/decision" in api.get("/openapi.json").json()["paths"]
+    assert pointer.read_bytes() == before
+
+
 def test_sniper_api_is_version_bound_sized_and_structurally_non_actionable(
     cfg: EdgeStackConfig,
 ) -> None:

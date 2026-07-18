@@ -69,6 +69,7 @@ edgestack data download --symbols "SPY,TLT,SHY,GLD" --start 2015-01-02 --config 
 - `POST /instruments/analyze` accepts a stock/ETF ticker or commodity name/proxy and an optional intended-entry timestamp. It returns day/week/month/year best and worst historical windows, tailwinds, headwinds, counter-effects, news context, current-year observations, and explicit abstentions. Only compatible frozen promoted timing artifacts can make a window actionable or create a directional rating.
 - `POST /instruments/recheck` compares a prior analysis with the latest canonical inputs and reports whether the selected timing still holds or a higher-ranked alternative emerged.
 - `POST /instruments/pattern-leaders` scans 1–50 explicitly supplied symbols and returns a research-only ranking. It never promotes the symbol/slot search.
+- `POST /oil/decision` evaluates a timestamped manual eToro `OIL` bid/ask observation against the canonical bundle, free oil-market context, three friction assumptions, event vetoes, and normalized leverage stress. Its schema is paper-only: `actionable=false`, canonical weight is zero, and order, notional, and quantity fields do not exist.
 - `GET /sniper/latest` returns the version-bound staged sniper shadow plan. `POST /sniper/preview` changes only account equity, modeled loss budget, and the approved diversified vehicle; it cannot mutate canonical weights or promotion state. C1/C2 and Santa are Stage 1 shadow candidates, C3/C4 are non-initiating overlays, and Stage 2 remains blocked until its data and promotion prerequisites exist.
 - `GET /edges` lists the validated edge catalog with lifecycle status, net mean return, q-value, deflated Sharpe, and sample size; `GET /edges/{edge_id}` returns one full record.
 - `GET /monitoring/edges` returns the canonical monitoring payload; `GET /backtests` and `GET /backtests/{run_id}` list and fetch stored backtest runs.
@@ -92,6 +93,57 @@ Commodity words resolve to disclosed tradable proxies (`GOLD → GLD`, `OIL/WTI 
 
 When an intended entry includes a date and time, EdgeStack separately rates its 15-minute slot, hour, weekday across every holding horizon, position within the month, and month of the year. It displays rank, cost-adjusted historical win score, a better compatible slot if available, and conditional day/week/month/year exits. Win score is a shrunk historical frequency with an ESS confidence penalty—not a promised probability of profit. Rechecks tighten from daily to six-hourly, hourly, and finally 15-minute cadence as entry approaches.
 
+### eToro OIL paper gate
+
+Refresh the oil research inputs within Yahoo's free-data limits, then republish the
+canonical bundle so its data hash matches the catalog:
+
+```bash
+edgestack oil refresh --through 2026-07-18 --config configs/live.yaml
+python scripts/nightly.py --config configs/live.yaml --skip-data-update --skip-features
+```
+
+The refresh uses `CL=F` as primary WTI history, `USO` as the tradable historical
+proxy, and BNO/XLE/UUP/`^OVX` as non-directional context. Yahoo 15-minute history
+is explicitly capped at 59 calendar days and is never eligible to promote an edge.
+
+After eToro displays a quote, run the same calculation used by the API and Android
+card. All timestamps must include an offset:
+
+```bash
+edgestack oil check \
+  --intended-entry-at 2026-07-20T09:30:00-04:00 \
+  --observed-at 2026-07-20T15:29:30+02:00 \
+  --bid 67.90 --ask 68.10 \
+  --offered-leverage 10 --modeled-leverage 10 \
+  --config configs/live.yaml
+```
+
+Add `--event-flags WEEKEND_SUPPLY_ESCALATION,SHIPPING_DISRUPTION` (or
+`WTI_ROLLOVER_EXPIRY`/`BROKER_MAINTENANCE`) when applicable. Crossed, stale, or
+incomplete quotes fail closed. Wednesday's standard EIA petroleum-release window,
+abnormal gaps, source/version staleness, and the manual flags are hard vetoes.
+VWAP, opening range, momentum, trend, news, and cross-market alignment stay
+descriptive unless they separately pass the repository's promotion process.
+
+The three cost rows use the greater of the observed spread and 10/25/50 bp. The
+stress grid shows 1%, 5%, and 10% adverse moves at 1×, 5×, and 10×. The 100% row
+is a catastrophic scenario only; the service cannot turn it into position sizing
+or an order. CLI snapshots are written immutably under
+`artifacts/oil_decisions/snapshots/<content-hash>.json`.
+
+Monday paper runbook:
+
+1. After the broker opens, capture the displayed gap and spread; do not enter.
+2. Refresh the oil inputs and republish the canonical bundle. Any source/hash mismatch blocks.
+3. At 15:30 CEST (09:30 New York), record the opening observation. The regression fixture classifies this slot as weak after 25 bp costs.
+4. Recheck with a newly timestamped quote every 15 minutes.
+5. At 19:45 CEST (13:45 New York), a passing gate may record a prospective shadow observation and its one-hour paper exit at 20:45 CEST. It remains non-actionable and never creates a live order.
+
+The next scheduled EIA Weekly Petroleum Status Report is Wednesday, 22 July
+2026 at 16:30 CEST; the service blocks the 15-minute window on either side of
+the standard 10:30 New York release time.
+
 ## Android companion app
 
 The app in `android/` (package `com.edgestack.app`) is a read-only client for the PC-hosted API. It never places orders and never computes signals on the device; offline it displays the last server result or the bundled canonical seed.
@@ -101,7 +153,7 @@ Tabs:
 - **Portfolio** — canonical base weights, promoted sleeves, zero-weight watchlist, freshness.
 - **Calendar** — NYSE month grid with turn-of-month windows, session math, and per-day historical tailwind shading projected from the last instrument analysis (weekday, week-of-month, and month slots; research only).
 - **Risk** — server-calculated leverage, binding constraint, stress and financing, canonical targets.
-- **Analyze** — instrument timing: best/worst windows per horizon, chosen-time ratings, exit maps, tailwinds/headwinds, news context, automatic rechecks.
+- **Analyze** — instrument timing plus a manual eToro OIL paper gate with a prominent `BLOCKED`, `OBSERVE`, or `PAPER_ONLY` card; best/worst windows, exit maps, context, and automatic rechecks remain server-derived.
 - **Sniper** — staged shadow plan with equity/loss-budget preview; paper only.
 - **Edges** — validated edge catalog with search and status filters, monitoring health, backtest runs.
 - **Trades** — canonical paper account state, plus a personal position tracker with delayed device quotes and unrealized P&L (device-side display only; never feeds signals).

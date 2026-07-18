@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
                 InstrumentViewModel::class.java ->
                     InstrumentViewModel(
                         container.instrumentRepo,
+                        container.oilRepo,
                         container.syncRepo,
                         container.calendarRepo.macroEvents,
                     ) as T

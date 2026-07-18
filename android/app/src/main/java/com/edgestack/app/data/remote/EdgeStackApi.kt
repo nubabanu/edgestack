@@ -8,6 +8,8 @@ import com.edgestack.app.domain.model.InstrumentAnalysisRequestV2
 import com.edgestack.app.domain.model.InstrumentAnalysisV2
 import com.edgestack.app.domain.model.InstrumentRecheckRequestV2
 import com.edgestack.app.domain.model.InstrumentRecheckV2
+import com.edgestack.app.domain.model.OilDecisionRequestV2
+import com.edgestack.app.domain.model.OilDecisionSnapshotV2
 import com.edgestack.app.domain.model.PatternLeaderBoardV2
 import com.edgestack.app.domain.model.PatternLeaderRequestV2
 import com.edgestack.app.domain.model.PaperResponse
@@ -57,6 +59,10 @@ interface EdgeStackApi {
     suspend fun patternLeaders(
         @Body request: PatternLeaderRequestV2,
     ): PatternLeaderBoardV2
+    @POST("oil/decision")
+    suspend fun oilDecision(
+        @Body request: OilDecisionRequestV2,
+    ): OilDecisionSnapshotV2
     @GET("edges") suspend fun edges(): List<EdgeSummaryV2>
     @GET("edges/{id}") suspend fun edgeDetail(@Path("id") id: String): JsonObject
     @GET("monitoring/edges") suspend fun monitoringEdges(): JsonObject
