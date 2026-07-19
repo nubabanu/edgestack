@@ -112,6 +112,22 @@ prices via the nightly run or
 `edgestack data download --symbols "SPY,TLT,SHY,GLD" --start 2015-01-02 --config configs/live.yaml`.
 Yahoo free-data limits apply (60m bars ≤ 729 days, 15m ≤ 59 days).
 
+Free point-in-time sources wired into the nightly (added 2026-07):
+
+- **EDGAR earnings events** — `scripts/edgar_earnings.py` ingests 8-K item-2.02
+  acceptance datetimes plus XBRL quarterly EPS (keyless, ~10 req/s fair use, declared
+  User-Agent) into `data/curated/events/{SYM}.parquet`. `scripts/pead_study.py` computes
+  seasonal-random-walk SUE and post-announcement drift from them; the 2026-07 mega-cap
+  run found **no PEAD edge** (t ≈ 0.5) — the honest test needs small/mid caps, whose
+  delisted price history has no free source.
+- **Universe forward snapshots** — `scripts/universe_snapshot.py` freezes today's exact
+  S&P membership (via `data/universe_pit.py`) daily into
+  `data/curated/universe_snapshots/`; forward panels are survivorship-free by
+  construction, the bias only lives in the past.
+- **Intraday forward archive** — `scripts/intraday_collector.py` pulls trailing 60m/15m
+  bars nightly for the watch set into `data/curated/intraday/`; free backfill no longer
+  exists at scale, so the archive grows forward from 2026-07.
+
 ## Style
 
 Ruff (line length 100, py312, rules E/F/W/I/UP/B/C4/SIM/RUF) and mypy are CI gates —
