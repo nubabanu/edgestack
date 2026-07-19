@@ -406,6 +406,9 @@ def cmd_leverage_check(args: argparse.Namespace) -> dict:
     ibs = ((c - low) / (h - low).replace(0, np.nan)).fillna(0.5)
     down3 = (ret < 0) & (ret.shift() < 0) & (ret.shift(2) < 0)
     dip = (r2 < 10) | down3 | (ibs < 0.2)
+    s200 = c.rolling(200).mean()
+    vol20 = ret.rolling(20).std() * np.sqrt(252)
+    calm = (c > s200) & (vol20 < 0.30)  # validated trend + low-vol regime gate
     liq_move = 0.5 / lev  # adverse move that halves the margin -> close-out
     H = args.horizon
 
@@ -432,19 +435,30 @@ def cmd_leverage_check(args: argparse.Namespace) -> dict:
             "p10_return_on_margin": round(float(s.quantile(0.1)), 3),
         }
 
-    # max leverage whose liquidation move exceeds the worst H-session MAE
-    # in 95% of historical windows
-    maes = []
-    for i in range(0, len(df) - H - 1, 5):
-        e = float(adj.iloc[i + 1])
-        maes.append(1 - float(alow.iloc[i + 1 : i + 1 + H].min()) / e)
-    mae95 = float(np.quantile(maes, 0.95)) if maes else float("nan")
+    def mae95_of(entry_idx: list[int], step: int = 1) -> float:
+        maes = []
+        for i in entry_idx[::step]:
+            if i + 1 + H >= len(df):
+                continue
+            e = float(adj.iloc[i + 1])
+            maes.append(1 - float(alow.iloc[i + 1 : i + 1 + H].min()) / e)
+        return float(np.quantile(maes, 0.95)) if maes else float("nan")
+
+    all_idx = list(range(len(df)))
+    calm_idx = list(np.flatnonzero(calm.to_numpy()))
+    mae95 = mae95_of(all_idx, step=5)
+    mae95_calm = mae95_of(calm_idx)
     return {
         "symbol": args.symbol.upper(),
         "leverage": lev,
         "close_out_move": round(liq_move, 3),
         "horizon_sessions": H,
-        "all_entries": survival(list(range(len(df)))),
+        "all_entries": survival(all_idx),
+        "calm_regime_entries": survival(calm_idx),
+        "calm_gate": "close > SMA200 and 20d vol < 30% (validated trend+low-vol regime)",
+        "max_leverage_95pct_survival_calm": (
+            round(0.5 / mae95_calm, 2) if np.isfinite(mae95_calm) and mae95_calm > 0 else None
+        ),
         "dip_trigger_entries": survival(list(np.flatnonzero(dip.to_numpy()))),
         "max_leverage_95pct_survival": round(0.5 / mae95, 2) if np.isfinite(mae95) else None,
         "notes": (
