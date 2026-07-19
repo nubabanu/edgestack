@@ -5,6 +5,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 EdgeStack is a research and paper-trading platform for statistical edges in daily US
 equities. It never places live orders and its output is not investment advice.
 
+## Agent toolkit — use this before reading internals
+
+`scripts/agent_toolkit.py` wraps the whole platform as a JSON CLI: every subcommand
+prints one machine-parseable JSON object (errors as `{"error": ...}`, exit 1). Start
+any working session with it instead of re-deriving things from source:
+
+```bash
+.venv/Scripts/python scripts/agent_toolkit.py manual            # command reference
+.venv/Scripts/python scripts/agent_toolkit.py status            # data/publication/watcher freshness
+.venv/Scripts/python scripts/agent_toolkit.py snapshot ACN      # current indicator state
+.venv/Scripts/python scripts/agent_toolkit.py analyze CTSH --entry-date 2026-11-02
+.venv/Scripts/python scripts/agent_toolkit.py edge-check CTSH   # zoo rule library + survivor bar
+.venv/Scripts/python scripts/agent_toolkit.py earnings ACN      # EDGAR-stamped events
+.venv/Scripts/python scripts/agent_toolkit.py universe --as-of 2020-03-31
+.venv/Scripts/python scripts/agent_toolkit.py research-summary  # every campaign's verdict
+.venv/Scripts/python scripts/agent_toolkit.py watch             # tranche trigger status
+```
+
+`edge-check` applies the corrupted-series screen and the exact survivor bar for you;
+`analyze` goes through the canonical bundle with an audited guard unlock. Relay the
+embedded caveats whenever you surface results.
+
 ## Commands
 
 Windows; the venv interpreter is `.venv/Scripts/python.exe` (Python 3.12 required).
