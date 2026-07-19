@@ -335,6 +335,128 @@ def cmd_research_summary(_args: argparse.Namespace) -> dict:
     return out
 
 
+def _screened_symbols() -> list[str]:
+    """Curated symbols passing the corruption / penny / liquidity screens."""
+    out = []
+    for f in PRICES.glob("*.parquet"):
+        df = pd.read_parquet(f, columns=["close", "volume", "adj_close"])
+        if len(df) < 300:
+            continue
+        if float(df["adj_close"].pct_change().abs().max()) > 2.0:
+            continue
+        tail = df.tail(60)
+        if float(tail["adj_close"].min()) < 1.0:
+            continue
+        if float((tail["close"] * tail["volume"]).median()) < 5e6:
+            continue
+        out.append(f.stem)
+    return out
+
+
+def cmd_vol_screen(args: argparse.Namespace) -> dict:
+    rows = []
+    for sym in _screened_symbols():
+        df = _load(sym)
+        ret = df["adj_close"].pct_change()
+        vol = float(ret.rolling(20).std().iloc[-1]) * float(np.sqrt(252))
+        if not np.isfinite(vol):
+            continue
+        c = df["close"]
+        dd = float(c.iloc[-1] / c.rolling(252).max().iloc[-1] - 1)
+        rows.append(
+            {
+                "symbol": sym,
+                "vol20_annualized": round(vol, 3),
+                "drawdown_from_52w_high": round(dd, 3),
+                "close": round(float(c.iloc[-1]), 2),
+                "worst_day_1y": round(float(ret.tail(252).min()), 3),
+            }
+        )
+    rows.sort(key=lambda r: -r["vol20_annualized"])
+    return {
+        "as_of": rows[0].get("as_of", date.today().isoformat()) if rows else None,
+        "screens": "no corrupted series, price>=$1, median $ volume>=$5M (last 60 sessions)",
+        "top": rows[: args.top],
+        "warning": (
+            "High volatility is a cost, not an edge: the cross-sectional studies in this "
+            "repo found high-vol names have the WORST risk-adjusted forward returns. "
+            "Run leverage-check before sizing anything."
+        ),
+    }
+
+
+def cmd_leverage_check(args: argparse.Namespace) -> dict:
+    """Historical survival of an L-times leveraged CFD-style position.
+
+    Model: static position at L x notional, forced close-out when equity
+    falls to 50% of initial margin (i.e. an adverse excursion of 50%/L
+    from entry, intraday low counts). Entries: every session, and dip-
+    trigger sessions (RSI2<10 or 3 down days or IBS<0.2). Horizon
+    args.horizon sessions. No costs, no overnight financing — reality is
+    strictly worse than these numbers.
+    """
+    lev = args.leverage
+    df = _load(args.symbol)
+    c, low, h = df["close"], df["low"], df["high"]
+    adj = df["adj_close"]
+    ret = adj.pct_change()
+    factor = adj / c
+    alow = low * factor
+    r2 = _rsi(c, 2)
+    ibs = ((c - low) / (h - low).replace(0, np.nan)).fillna(0.5)
+    down3 = (ret < 0) & (ret.shift() < 0) & (ret.shift(2) < 0)
+    dip = (r2 < 10) | down3 | (ibs < 0.2)
+    liq_move = 0.5 / lev  # adverse move that halves the margin -> close-out
+    H = args.horizon
+
+    def survival(entry_idx: list[int]) -> dict:
+        n_liq = 0
+        finals = []
+        for i in entry_idx:
+            if i + 1 + H >= len(df):
+                continue
+            e = float(adj.iloc[i + 1])  # enter next session (zoo timing)
+            window_low = float(alow.iloc[i + 1 : i + 1 + H].min())
+            if window_low / e - 1 <= -liq_move:
+                n_liq += 1
+                finals.append(-0.5)  # closed out at half the margin
+            else:
+                finals.append(lev * (float(adj.iloc[i + 1 + H]) / e - 1))
+        if not finals:
+            return {"entries": 0}
+        s = pd.Series(finals)
+        return {
+            "entries": len(finals),
+            "liquidated_pct": round(n_liq / len(finals), 3),
+            "median_return_on_margin": round(float(s.median()), 3),
+            "p10_return_on_margin": round(float(s.quantile(0.1)), 3),
+        }
+
+    # max leverage whose liquidation move exceeds the worst H-session MAE
+    # in 95% of historical windows
+    maes = []
+    for i in range(0, len(df) - H - 1, 5):
+        e = float(adj.iloc[i + 1])
+        maes.append(1 - float(alow.iloc[i + 1 : i + 1 + H].min()) / e)
+    mae95 = float(np.quantile(maes, 0.95)) if maes else float("nan")
+    return {
+        "symbol": args.symbol.upper(),
+        "leverage": lev,
+        "close_out_move": round(liq_move, 3),
+        "horizon_sessions": H,
+        "all_entries": survival(list(range(len(df)))),
+        "dip_trigger_entries": survival(list(np.flatnonzero(dip.to_numpy()))),
+        "max_leverage_95pct_survival": round(0.5 / mae95, 2) if np.isfinite(mae95) else None,
+        "notes": (
+            "Close-out at 50% of initial margin, intraday lows count, zero costs/"
+            "financing modeled — live results are worse. 'max_leverage_95pct_survival' "
+            "is the leverage that would have avoided close-out in 95% of historical "
+            f"{H}-session windows; it is descriptive, not a guarantee."
+        ),
+        "disclaimer": DISCLAIMER,
+    }
+
+
 def cmd_watch(_args: argparse.Namespace) -> dict:
     import subprocess
 
@@ -374,6 +496,12 @@ def main() -> int:
     p.add_argument("--full", action="store_true")
     sub.add_parser("research-summary")
     sub.add_parser("watch")
+    p = sub.add_parser("vol-screen")
+    p.add_argument("--top", type=int, default=15)
+    p = sub.add_parser("leverage-check")
+    p.add_argument("symbol")
+    p.add_argument("--leverage", type=float, default=5.0)
+    p.add_argument("--horizon", type=int, default=60)
     args = parser.parse_args()
 
     handlers = {
@@ -387,6 +515,8 @@ def main() -> int:
         "universe": cmd_universe,
         "research-summary": cmd_research_summary,
         "watch": cmd_watch,
+        "vol-screen": cmd_vol_screen,
+        "leverage-check": cmd_leverage_check,
     }
     try:
         result = handlers[args.command](args)
