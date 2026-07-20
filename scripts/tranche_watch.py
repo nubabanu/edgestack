@@ -56,7 +56,15 @@ BASKET = ("ACN", "CTSH", "EPAM", "DXC", "IBM", "IT")
 STALE_AFTER_DAYS = 5
 EARNINGS_BLACKOUT_DAYS = 3
 EARNINGS_REFRESH_DAYS = 7
-COOLDOWN_SESSIONS = {"T1": 5, "T2": 21, "T3": 21, "REL": 21, "REVIEW": 10}
+COOLDOWN_SESSIONS = {"T1": 5, "T2": 21, "T3": 21, "REL": 21, "REVIEW": 10, "GO": 5}
+GO_ALERT_THRESHOLD = 60
+# `agent_toolkit.py go-backtest` verdict 2026-07-19: FAIL on all three names
+# (60+ bucket does not beat unconditional forward returns; CTSH 60+ negative).
+# The composite is display-only context; the individual validated triggers
+# (T1/T2/T3/REL/WINDOW) remain the actionable alerts. Do not enable without a
+# fresh go-backtest PASS.
+GO_ALERTS_ENABLED = False
+POST_EARNINGS_WINDOW_SESSIONS = 5
 POSITIONS_TEMPLATE = {
     "_howto": (
         "Record each actual buy here so the watcher can run exit/review checks. "
@@ -220,6 +228,9 @@ def evaluate(symbol: str, df: pd.DataFrame, basket: pd.Series, earnings: str | N
         "sma200": round(float(s200.iloc[-1]), 2),
         "vol20": round(float(vol20.iloc[-1]), 3),
         "rel_z": round(float(rz.iloc[-1]), 2),
+        "rsi2": round(float(r2.iloc[-1]), 1),
+        "ibs": round(float(ibs.iloc[-1]), 2),
+        "calm": bool((c.iloc[-1] > s200.iloc[-1]) and (vol20.iloc[-1] < 0.30)),
         "earnings": earnings,
         "T1": {"fired": t1 and not t1_suppressed, "detail": t1_detail},
         "T2": {"fired": t2, "detail": t2_detail},
@@ -265,6 +276,7 @@ def review_positions(statuses: dict[str, dict]) -> list[tuple[str, str]]:
 
 
 def notify(alerts: list[str]) -> None:
+    """Push alerts to every configured channel: Windows toast + Telegram."""
     body = "; ".join(a.removeprefix("ALERT ") for a in alerts)[:250]
     try:
         subprocess.run(
@@ -286,6 +298,39 @@ def notify(alerts: list[str]) -> None:
         )
     except Exception as exc:
         print(f"WARN toast failed: {exc}")
+    try:
+        import notify_telegram
+
+        notify_telegram.send("EdgeStack tranche alert\n" + "\n".join(alerts)[:3800])
+    except Exception as exc:
+        print(f"WARN telegram failed: {exc}")
+
+
+def go_score(
+    *,
+    t1: bool,
+    near_dip: bool,
+    calm: bool,
+    low_vol: bool,
+    rel_recross: bool,
+    rel_ok: bool,
+    breadth: int,
+    seasonal: bool,
+    post_earnings: bool,
+) -> int:
+    """0-100 composite entry score. Weights are HAND-SET from the measured
+    effects in this repo's research (docs/strategy-zoo.md and the 2026-07
+    buy-timing studies) — deliberately not fitted, to avoid overfitting.
+    Validated by `agent_toolkit.py go-backtest` before the alert threshold
+    was enabled."""
+    score = 0
+    score += 30 if t1 else (12 if near_dip else 0)  # dip freshness
+    score += 20 if calm else (8 if low_vol else 0)  # regime
+    score += 15 if rel_recross else (7 if rel_ok else 0)  # relative strength
+    score += 10 if breadth >= 4 else (5 if breadth >= 2 else 0)  # peers
+    score += 10 if seasonal else 0  # calendar window
+    score += 15 if post_earnings else 0  # event uncertainty resolved
+    return score
 
 
 def write_dashboard(statuses: list[dict], breadth: dict, alerts: list[str], stamp: str) -> None:
@@ -317,9 +362,12 @@ def write_dashboard(statuses: list[dict], breadth: dict, alerts: list[str], stam
             f"<tr><td>Calendar</td><td>{badge(bool(st['CAL']))}</td>"
             f"<td>{html.escape(st['CAL'] or 'no window active')}</td></tr>"
         )
+        go = st.get("GO", 0)
+        go_cls = "on" if go >= GO_ALERT_THRESHOLD else "off"
         rows += f"""
       <h2>{st["symbol"]} <small>close {st["close"]} · as of {st["as_of"]}
-        · earnings {st["earnings"] or "unknown"}</small></h2>
+        · earnings {st["earnings"] or "unknown"}</small>
+        <span class="b {go_cls}">GO {go}/100</span></h2>
       <table>
         <tr><th>Trigger</th><th>State</th><th>Detail</th></tr>
         {trig_rows}{cal_row}
@@ -389,14 +437,36 @@ def main() -> int:
         alerts.append(f"ALERT SECTOR: breadth crossed to {breadth_count}/{len(BASKET)} above SMA50")
     state["sector_breadth"] = breadth_count
 
+    peer_note = (
+        f" [peer-confirmed: {breadth_count}/{len(BASKET)} above SMA50]"
+        if breadth_count >= 2
+        else ""
+    )
     for symbol in SYMBOLS:
         df = load(symbol)
         earnings = next_earnings(symbol, today)
         status = evaluate(symbol, df, basket, earnings)
-        statuses.append(status)
         age = (today - date.fromisoformat(status["as_of"])).days
         if age > STALE_AFTER_DAYS:
             lines.append(f"WARN {symbol}: last bar {status['as_of']} is {age}d old — data stale")
+
+        # post-earnings window: first sessions ON/AFTER a known print date
+        as_of = date.fromisoformat(status["as_of"])
+        window_open = False
+        if earnings:
+            edate = date.fromisoformat(earnings)
+            days_since = (as_of - edate).days
+            if 0 <= days_since <= POST_EARNINGS_WINDOW_SESSIONS + 2:
+                window_open = True
+                wkey = f"{symbol}:WINDOW:{earnings}"
+                lines.append(f"{symbol} WINDOW post-earnings window open (printed {earnings})")
+                if wkey not in state:
+                    alerts.append(
+                        f"ALERT {symbol} WINDOW: post-earnings window open (printed "
+                        f"{earnings}) — dip triggers re-armed; tranche 1 is now legal"
+                    )
+                    state[wkey] = 1
+        status["window_open"] = window_open
 
         session_no = len(df)
         for trig in ("T1", "T2", "T3", "REL"):
@@ -406,7 +476,7 @@ def main() -> int:
             if info["fired"]:
                 key = f"{symbol}:{trig}"
                 if session_no - state.get(key, -(10**9)) >= COOLDOWN_SESSIONS[trig]:
-                    alerts.append(f"ALERT {symbol} {trig}: {info['detail']}")
+                    alerts.append(f"ALERT {symbol} {trig}: {info['detail']}{peer_note}")
                     state[key] = session_no
         if status["CAL"]:
             key = f"{symbol}:CAL:{today.year}-{today.month}"
@@ -414,6 +484,28 @@ def main() -> int:
             if key not in state:
                 alerts.append(f"ALERT {symbol} CAL: {status['CAL']}")
                 state[key] = 1
+
+        score = go_score(
+            t1=status["T1"]["fired"],
+            near_dip=(status["rsi2"] < 20) or (status["ibs"] < 0.3),
+            calm=status["calm"],
+            low_vol=status["vol20"] < 0.30,
+            rel_recross=status["REL"]["fired"],
+            rel_ok=status["rel_z"] > -1,
+            breadth=breadth_count,
+            seasonal=bool(status["CAL"]),
+            post_earnings=window_open,
+        )
+        status["GO"] = score
+        lines.append(f"{symbol} GO   {score}/100 (alert at >={GO_ALERT_THRESHOLD})")
+        if GO_ALERTS_ENABLED and score >= GO_ALERT_THRESHOLD:
+            key = f"{symbol}:GO"
+            if session_no - state.get(key, -(10**9)) >= COOLDOWN_SESSIONS["GO"]:
+                alerts.append(
+                    f"ALERT {symbol} GO: entry score {score}/100 — plan says act this week"
+                )
+                state[key] = session_no
+        statuses.append(status)
 
     session_no = max(len(load(s)) for s in SYMBOLS)
     for key, msg in review_positions({s["symbol"]: s for s in statuses}):
