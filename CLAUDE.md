@@ -113,7 +113,7 @@ Windows Task Scheduler job **"EdgeStack Nightly"** runs `scripts/nightly.bat` da
 `logs/tranche_watch.log`. Known issue: nightly's Yahoo fetch intermittently dies with a
 fatal `PyEval_SaveThread` GIL error; the watcher tolerates this and flags stale data.
 
-### Tranche watch program (ACN / CTSH / EPAM)
+### Tranche watch program (ACN / CTSH / EPAM / SPY)
 
 `scripts/tranche_watch.py` monitors staged buy-entry triggers from the 2026-07 buy-timing
 research: T1 dip, T2 repair (alert carries a 61%-whipsaw caution), T3 200-DMA trend, REL
@@ -138,6 +138,23 @@ a fresh go-backtest PASS; the individual triggers remain the actionable alerts.
 local via `scripts/precheck.bat`, logs to `logs/precheck.log`) fetches today's partial
 bar 15 min before the US close and sends a provisional-T1 heads-up so entries can be
 planned the same evening; the nightly watcher on the real close stays canonical.
+
+SPY is watched too (T1 = calm regime AND any dip — the best-compounding entry in the
+research; T3 alerts on the reclaim cross only, REL/earnings skipped for the index).
+
+**Order tickets + paper autopilot**: `artifacts/tranche_plan.json` (auto-created
+template, gitignored) maps (symbol, trigger) -> euro size; alerts append
+"-> ORDER: buy ~EUR X at next open" tickets (ASCII only — the cp1252 console dies on
+Unicode arrows), and `paper_autopilot()` executes every ticketed alert ON PAPER at the
+actual next-open adjusted price into `artifacts/paper_tranche.json`, with nightly P&L
+lines and a dashboard section. Live orders remain human — repo covenant; German retail
+brokers have no official trading APIs, and the paper book exists to measure what full
+automation would have done.
+
+Related one-offs on this machine: Windows Startup launcher
+(`%APPDATA%\...\Startup\EdgeStackAPI.bat`) keeps `scripts/api_serve.bat` (watchdog,
+0.0.0.0:8000) alive for the Android app; firewall rule "EdgeStack API" exists;
+`releases/EdgeStack-v1.6.apk` is the current companion build.
 
 `scripts/tranche_policy_backtest.py` is the companion cohort study; its headline:
 staged entry is insurance, not alpha, and lump-sum recovery odds depend heavily on
