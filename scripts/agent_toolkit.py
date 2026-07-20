@@ -471,6 +471,114 @@ def cmd_leverage_check(args: argparse.Namespace) -> dict:
     }
 
 
+def cmd_go_backtest(args: argparse.Namespace) -> dict:
+    """Validate the tranche-watch GO score: forward returns by score bucket."""
+    from tranche_watch import BASKET, GO_ALERT_THRESHOLD, go_score
+
+    sym = args.symbol.upper()
+    df = _load(sym)
+    c, low, h = df["close"], df["low"], df["high"]
+    adj = df["adj_close"]
+    ret = adj.pct_change()
+    idx = df.index
+
+    # basket level + breadth (aligned to this symbol's dates)
+    adjs, above = {}, {}
+    for b in BASKET:
+        bdf = _load(b)
+        adjs[b] = bdf["adj_close"]
+        above[b] = (bdf["close"] > bdf["close"].rolling(50).mean()).astype(float)
+    basket = pd.DataFrame(adjs).dropna()
+    basket_level = (basket / basket.iloc[0]).mean(axis=1)
+    breadth = pd.DataFrame(above).reindex(idx).sum(axis=1)
+
+    s200 = c.rolling(200).mean()
+    vol20 = ret.rolling(20).std() * np.sqrt(252)
+    r2 = _rsi(c, 2)
+    ibs = ((c - low) / (h - low).replace(0, np.nan)).fillna(0.5)
+    down3 = (ret < 0) & (ret.shift() < 0) & (ret.shift(2) < 0)
+    t1 = (r2 < 10) | down3 | (ibs < 0.2)
+    calm = (c > s200) & (vol20 < 0.30)
+    ratio = (adj / basket_level.reindex(idx)).dropna()
+    rz = ((ratio - ratio.rolling(60).mean()) / ratio.rolling(60).std()).reindex(idx)
+    rel_recross = (rz > -1) & (rz.shift() <= -1)
+
+    tdom = pd.Series(range(len(idx)), index=idx).groupby(idx.to_period("M")).cumcount() + 1
+    seasonal = ((idx.month == 11) & (tdom <= 3).to_numpy()) | ((idx.month == 6) & (idx.day >= 23))
+    if sym == "CTSH":
+        seasonal |= (idx.month == 12) & ((tdom >= 10) & (tdom <= 15)).to_numpy()
+
+    post_earnings = pd.Series(False, index=idx)
+    ev_file = EVENTS / f"{sym}.parquet"
+    events_used = False
+    if ev_file.exists():
+        acc = pd.to_datetime(pd.read_parquet(ev_file)["accepted_at"]).dt.tz_convert(
+            "America/New_York"
+        )
+        for ts in acc.dt.normalize().dt.tz_localize(None).unique():
+            pos = idx.searchsorted(ts)
+            post_earnings.iloc[pos : pos + 6] = True
+        events_used = True
+
+    scores = pd.Series(
+        [
+            go_score(
+                t1=bool(t1.iloc[i]),
+                near_dip=bool((r2.iloc[i] < 20) or (ibs.iloc[i] < 0.3)),
+                calm=bool(calm.iloc[i]),
+                low_vol=bool(vol20.iloc[i] < 0.30) if np.isfinite(vol20.iloc[i]) else False,
+                rel_recross=bool(rel_recross.iloc[i]) if np.isfinite(rz.iloc[i]) else False,
+                rel_ok=bool(rz.iloc[i] > -1) if np.isfinite(rz.iloc[i]) else False,
+                breadth=int(breadth.iloc[i]),
+                seasonal=bool(seasonal[i]),
+                post_earnings=bool(post_earnings.iloc[i]),
+            )
+            for i in range(len(idx))
+        ],
+        index=idx,
+    )
+
+    out: dict[str, Any] = {
+        "symbol": sym,
+        "events_component": events_used,
+        "threshold": GO_ALERT_THRESHOLD,
+        "score_distribution": {
+            str(q): int(v) for q, v in scores.quantile([0.25, 0.5, 0.75, 0.95]).items()
+        },
+    }
+    splits = {
+        "dev": ("2011-01-01", "2017-12-31"),
+        "val": ("2018-01-01", "2023-12-31"),
+        "holdout": ("2024-01-01", "2026-12-31"),
+    }
+    for horizon in (5, 20, 60):
+        fwd = adj.shift(-1 - horizon) / adj.shift(-1) - 1
+        buckets = pd.cut(scores, [-1, 19, 39, 59, 100], labels=["0-19", "20-39", "40-59", "60+"])
+        tbl = fwd.groupby(buckets, observed=True).agg(["mean", "count"])
+        out[f"h{horizon}_by_bucket"] = {
+            str(k): {"mean_fwd": round(float(v["mean"]), 4), "n": int(v["count"])}
+            for k, v in tbl.iterrows()
+        }
+        uncond = float(fwd.mean())
+        consistent = 0
+        for lo, hi_ in splits.values():
+            m = (scores.index >= lo) & (scores.index <= hi_)
+            hi_scores = fwd[m & (scores >= GO_ALERT_THRESHOLD)]
+            if len(hi_scores) >= 5 and float(hi_scores.mean()) > float(fwd[m].mean()):
+                consistent += 1
+        out[f"h{horizon}_threshold_beats_unconditional_splits"] = consistent
+        out[f"h{horizon}_unconditional"] = round(uncond, 4)
+    out["gate"] = (
+        "PASS: enable GO alerts"
+        if out["h20_threshold_beats_unconditional_splits"] >= 2
+        and out["h20_by_bucket"].get("60+", {}).get("mean_fwd", -1)
+        > out["h20_by_bucket"].get("0-19", {}).get("mean_fwd", 0)
+        else "FAIL: keep score display-only (set GO_ALERTS_ENABLED=False)"
+    )
+    out["disclaimer"] = DISCLAIMER
+    return out
+
+
 def cmd_watch(_args: argparse.Namespace) -> dict:
     import subprocess
 
@@ -516,6 +624,8 @@ def main() -> int:
     p.add_argument("symbol")
     p.add_argument("--leverage", type=float, default=5.0)
     p.add_argument("--horizon", type=int, default=60)
+    p = sub.add_parser("go-backtest")
+    p.add_argument("symbol")
     args = parser.parse_args()
 
     handlers = {
@@ -531,6 +641,7 @@ def main() -> int:
         "watch": cmd_watch,
         "vol-screen": cmd_vol_screen,
         "leverage-check": cmd_leverage_check,
+        "go-backtest": cmd_go_backtest,
     }
     try:
         result = handlers[args.command](args)

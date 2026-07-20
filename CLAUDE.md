@@ -117,15 +117,31 @@ fatal `PyEval_SaveThread` GIL error; the watcher tolerates this and flags stale 
 
 `scripts/tranche_watch.py` monitors staged buy-entry triggers from the 2026-07 buy-timing
 research: T1 dip, T2 repair (alert carries a 61%-whipsaw caution), T3 200-DMA trend, REL
-peer-basket relative-strength recross, SECTOR breadth, CAL seasonal windows, plus
-earnings-blackout suppression (Yahoo quoteSummary needs the cookie+crumb flow — already
-implemented there) and REVIEW/exit checks for positions recorded in
-`artifacts/tranche_positions.json`. Outputs: Windows toast (`scripts/notify_toast.ps1`,
-requires powershell.exe 5.1, not pwsh), `artifacts/tranche_status.html` dashboard,
-`artifacts/tranche_watch.json`, dedupe state in `artifacts/tranche_watch_state.json`
-(delete to re-arm alerts). `scripts/tranche_policy_backtest.py` is the companion cohort
-study; its headline: staged entry is insurance, not alpha, and lump-sum recovery odds
-depend heavily on whether the market itself was crashed at episode start.
+peer-basket relative-strength recross, SECTOR breadth, CAL seasonal windows, WINDOW
+(post-earnings window open — the positive counterpart of the pre-earnings blackout),
+plus earnings-blackout suppression (Yahoo quoteSummary needs the cookie+crumb flow —
+already implemented there) and REVIEW/exit checks for positions recorded in
+`artifacts/tranche_positions.json`. Alerts go to BOTH channels: Windows toast
+(`scripts/notify_toast.ps1`, requires powershell.exe 5.1, not pwsh) and Telegram
+(`scripts/notify_telegram.py`; config in gitignored `artifacts/telegram_config.json`,
+setup steps in its docstring; graceful no-op when unconfigured). Other outputs:
+`artifacts/tranche_status.html` dashboard, `artifacts/tranche_watch.json`, dedupe state
+in `artifacts/tranche_watch_state.json` (delete to re-arm alerts).
+
+A 0-100 **GO score** (hand-set weights, `go_score()`) is computed per symbol and shown
+in the dashboard/log — **display-only**: `agent_toolkit.py go-backtest SYM` FAILED its
+validation gate on all three names (2026-07-19: the 60+ bucket does not beat
+unconditional forward returns), so `GO_ALERTS_ENABLED = False`. Do not enable without
+a fresh go-backtest PASS; the individual triggers remain the actionable alerts.
+
+`scripts/intraday_precheck.py` (Task Scheduler "EdgeStack Precheck", weekdays 21:45
+local via `scripts/precheck.bat`, logs to `logs/precheck.log`) fetches today's partial
+bar 15 min before the US close and sends a provisional-T1 heads-up so entries can be
+planned the same evening; the nightly watcher on the real close stays canonical.
+
+`scripts/tranche_policy_backtest.py` is the companion cohort study; its headline:
+staged entry is insurance, not alpha, and lump-sum recovery odds depend heavily on
+whether the market itself was crashed at episode start.
 
 ## Data
 
