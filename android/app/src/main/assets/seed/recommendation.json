@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-16T18:48:31.191600Z",
-  "session": "2026-07-16",
-  "as_of": "2026-07-16T20:00:00Z",
-  "execution_at": "2026-07-17T13:30:00Z",
-  "data_version": "a56dacd0609b94e443d3d613c985c91e893cf1dd0f5757d32a9c07c3299ce87d",
-  "artifact_version": "901d978448ec1e7224efbdc1b2e7a2360351b81aec5e2736e43389c0a75df8e7",
+  "generated_at": "2026-07-19T11:50:26.344304Z",
+  "session": "2026-07-17",
+  "as_of": "2026-07-17T20:00:00Z",
+  "execution_at": "2026-07-20T13:30:00Z",
+  "data_version": "1517a3806cfff6a4c21bad5743bafe69aedfa2cb9661773cd163bd4efe034783",
+  "artifact_version": "688ce3719a59f336dedcb0fb6eff8f1d6d1541e8538e567dc4c0746925e81b09",
   "policy_version": "baseline-diversified-v1",
   "baseline_policy": {
     "schema_version": 2,
@@ -47,7 +47,7 @@
   },
   "default_risk_profile": {
     "schema_version": 2,
-    "account_equity": 100000.0,
+    "account_equity": 100044.27967112993,
     "target_volatility": 0.12,
     "maximum_drawdown": 0.15,
     "maximum_gross_leverage": 1.0,
@@ -58,10 +58,10 @@
   "base_recommendation": {
     "schema_version": 2,
     "status": "WATCHLIST_ONLY",
-    "as_of": "2026-07-16T20:00:00Z",
-    "execution_at": "2026-07-17T13:30:00Z",
-    "artifact_version": "901d978448ec1e7224efbdc1b2e7a2360351b81aec5e2736e43389c0a75df8e7",
-    "data_version": "a56dacd0609b94e443d3d613c985c91e893cf1dd0f5757d32a9c07c3299ce87d",
+    "as_of": "2026-07-17T20:00:00Z",
+    "execution_at": "2026-07-20T13:30:00Z",
+    "artifact_version": "688ce3719a59f336dedcb0fb6eff8f1d6d1541e8538e567dc4c0746925e81b09",
+    "data_version": "1517a3806cfff6a4c21bad5743bafe69aedfa2cb9661773cd163bd4efe034783",
     "policy_version": "baseline-diversified-v1",
     "baseline_weights": [
       {
@@ -119,8 +119,8 @@
     ],
     "expected_returns": {},
     "expected_net_return": 0.0,
-    "expected_volatility": 0.09739129565845579,
-    "covariance_version": "25d62b1fad6fd0d2",
+    "expected_volatility": 0.09744851013272332,
+    "covariance_version": "a1bbf96ef4d4a034",
     "turnover_estimate": 0.0,
     "evidence_grades": {},
     "watchlist": [
@@ -236,8 +236,8 @@
       }
     ],
     "freshness": {
-      "as_of": "2026-07-16T20:00:00Z",
-      "expected_session": "2026-07-16",
+      "as_of": "2026-07-17T20:00:00Z",
+      "expected_session": "2026-07-17",
       "is_fresh": true,
       "age_business_days": 0,
       "complete": true,
@@ -249,53 +249,53 @@
   "default_recommendation": {
     "schema_version": 2,
     "status": "WATCHLIST_ONLY",
-    "as_of": "2026-07-16T20:00:00Z",
-    "execution_at": "2026-07-17T13:30:00Z",
-    "artifact_version": "901d978448ec1e7224efbdc1b2e7a2360351b81aec5e2736e43389c0a75df8e7",
-    "data_version": "a56dacd0609b94e443d3d613c985c91e893cf1dd0f5757d32a9c07c3299ce87d",
+    "as_of": "2026-07-17T20:00:00Z",
+    "execution_at": "2026-07-20T13:30:00Z",
+    "artifact_version": "688ce3719a59f336dedcb0fb6eff8f1d6d1541e8538e567dc4c0746925e81b09",
+    "data_version": "1517a3806cfff6a4c21bad5743bafe69aedfa2cb9661773cd163bd4efe034783",
     "policy_version": "baseline-diversified-v1",
-    "risk_profile_hash": "5a7ee2f4e3ec97528aade21076c9497c6c288ef0e8f61a70becf42c62c32b4ba",
-    "input_risk_state_version": 0,
+    "risk_profile_hash": "3405213b5dc55be7fb1ac2da59a6e05e89c7b05cb620a50a856cec91cd8b7405",
+    "input_risk_state_version": 7,
     "output_risk_state": {
       "schema_version": 2,
-      "state_version": 1,
-      "previous_effective_leverage": 0.25,
-      "peak_equity": 100000.0,
-      "current_equity": 100000.0,
+      "state_version": 8,
+      "previous_effective_leverage": 0.5,
+      "peak_equity": 100044.27967112993,
+      "current_equity": 100044.27967112993,
       "current_drawdown": 0.0,
       "drawdown_state": "NORMAL",
       "cash_latched": false,
       "reset_eligible": false,
       "sessions_since_latch": 0,
-      "last_session": "2026-07-16",
+      "last_session": "2026-07-17",
       "previous_target_weights": [
         {
           "symbol": "SPY",
-          "weight": 0.0625,
+          "weight": 0.125,
           "asset_kind": "ETF",
           "sector": "broad_equity"
         },
         {
           "symbol": "TLT",
-          "weight": 0.0625,
+          "weight": 0.125,
           "asset_kind": "ETF",
           "sector": "long_treasury"
         },
         {
           "symbol": "SHY",
-          "weight": 0.0625,
+          "weight": 0.125,
           "asset_kind": "ETF",
           "sector": "short_treasury"
         },
         {
           "symbol": "GLD",
-          "weight": 0.0625,
+          "weight": 0.125,
           "asset_kind": "ETF",
           "sector": "gold"
         },
         {
           "symbol": "CASH",
-          "weight": 0.75,
+          "weight": 0.5,
           "asset_kind": "CASH",
           "sector": "cash"
         }
@@ -356,36 +356,36 @@
     "personalized_target_weights": [
       {
         "symbol": "SPY",
-        "weight": 0.0625,
+        "weight": 0.125,
         "asset_kind": "ETF",
         "sector": "broad_equity"
       },
       {
         "symbol": "TLT",
-        "weight": 0.0625,
+        "weight": 0.125,
         "asset_kind": "ETF",
         "sector": "long_treasury"
       },
       {
         "symbol": "SHY",
-        "weight": 0.0625,
+        "weight": 0.125,
         "asset_kind": "ETF",
         "sector": "short_treasury"
       },
       {
         "symbol": "GLD",
-        "weight": 0.0625,
+        "weight": 0.125,
         "asset_kind": "ETF",
         "sector": "gold"
       },
       {
         "symbol": "CASH",
-        "weight": 0.75,
+        "weight": 0.5,
         "asset_kind": "CASH",
         "sector": "cash"
       }
     ],
-    "effective_leverage": 0.25,
+    "effective_leverage": 0.5,
     "constraints": [
       {
         "name": "user_cap",
@@ -395,19 +395,19 @@
       },
       {
         "name": "target_volatility",
-        "leverage_limit": 0.8792305973151988,
+        "leverage_limit": 0.8786588918783079,
         "binding": false,
         "detail": ""
       },
       {
         "name": "one_day_loss_budget",
-        "leverage_limit": 2.52941536399208,
+        "leverage_limit": 2.529448892121843,
         "binding": false,
         "detail": ""
       },
       {
         "name": "remaining_drawdown_budget",
-        "leverage_limit": 2.4102805498783075,
+        "leverage_limit": 2.4041616915366197,
         "binding": false,
         "detail": ""
       },
@@ -461,7 +461,7 @@
       },
       {
         "name": "session_increase",
-        "leverage_limit": 0.25,
+        "leverage_limit": 0.5,
         "binding": true,
         "detail": ""
       }
@@ -470,15 +470,15 @@
       "session_increase"
     ],
     "expected_net_return": 0.0,
-    "expected_volatility": 0.03412074157974871,
+    "expected_volatility": 0.06828588494875193,
     "funding_cost": 0.0,
-    "turnover": 1.0,
-    "one_day_stress_loss": 0.0037063900747419335,
-    "multi_session_stress_loss": 0.01555835481553935,
+    "turnover": 0.0,
+    "one_day_stress_loss": 0.0074126818922486525,
+    "multi_session_stress_loss": 0.03119590511071814,
     "evidence_grade": "WATCHLIST",
     "freshness": {
-      "as_of": "2026-07-16T20:00:00Z",
-      "expected_session": "2026-07-16",
+      "as_of": "2026-07-17T20:00:00Z",
+      "expected_session": "2026-07-17",
       "is_fresh": true,
       "age_business_days": 0,
       "complete": true,
@@ -487,7 +487,7 @@
     },
     "warnings": [],
     "compatibility_metadata": {
-      "funding_rate_as_of": "2026-07-14",
+      "funding_rate_as_of": "2026-07-16",
       "funding_series": "DGS3MO",
       "sizing_only": "true",
       "stale_preservation": "false"
