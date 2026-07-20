@@ -32,13 +32,18 @@ def send(text: str) -> bool:
         return False
     try:
         cfg = json.loads(CONFIG_PATH.read_text())
-        resp = requests.post(
-            f"https://api.telegram.org/bot{cfg['bot_token']}/sendMessage",
-            json={"chat_id": cfg["chat_id"], "text": text[:4000]},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        return bool(resp.json().get("ok"))
+        # accept a single chat_id or a list under "chat_ids" (e.g. you + partner)
+        chat_ids = cfg.get("chat_ids") or [cfg["chat_id"]]
+        ok = True
+        for chat_id in chat_ids:
+            resp = requests.post(
+                f"https://api.telegram.org/bot{cfg['bot_token']}/sendMessage",
+                json={"chat_id": chat_id, "text": text[:4000]},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            ok = ok and bool(resp.json().get("ok"))
+        return ok
     except Exception as exc:
         print(f"WARN telegram send failed: {exc}")
         return False
