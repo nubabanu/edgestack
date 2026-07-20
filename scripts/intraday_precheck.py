@@ -98,10 +98,80 @@ def in_earnings_blackout(symbol: str, today: date) -> bool:
     return 0 <= days_to <= EARNINGS_BLACKOUT_DAYS
 
 
+def preopen_gap_check(dry_run: bool) -> int:
+    """5 min before the open: near-dip yesterday + pre-market gap-down >=1%
+    -> heads-up to buy at TODAY's open. Validated on CTSH (gap entries
+    +1.12%/5d, t=2.86 vs +0.49% for the standard next-open entry, 2026-07
+    study); ACN/SPY directional only, EPAM showed no benefit and is excluded.
+    """
+    import numpy as np
+    from tranche_watch import _yahoo_session
+    from tranche_watch import load as load_curated
+
+    session, crumb = _yahoo_session()
+    today_et = datetime.now(ZoneInfo("America/New_York")).date()
+    state = json.loads(STATE_PATH.read_text()) if STATE_PATH.exists() else {}
+    heads_up: list[str] = []
+    grade = {"CTSH": "validated", "ACN": "directional", "SPY": "directional"}
+    for symbol in grade:
+        if in_earnings_blackout(symbol, today_et):
+            continue
+        df = load_curated(symbol)
+        c, low, high = df["close"], df["low"], df["high"]
+        ret = df["adj_close"].pct_change()
+        ibs_prev = float(((c - low) / (high - low).replace(0, np.nan)).fillna(0.5).iloc[-1])
+        down2 = bool((ret.iloc[-2:] < 0).all())
+        r2_prev = rsi2(c)
+        near_dip = ibs_prev < 0.3 or down2 or r2_prev < 20
+        if symbol == "SPY":
+            calm = (
+                bool(c.iloc[-1] > c.rolling(200).mean().iloc[-1])
+                and float(ret.rolling(20).std().iloc[-1]) * (252**0.5) < 0.30
+            )
+            near_dip = near_dip and calm
+        if not near_dip:
+            print(f"{symbol}: no near-dip state yesterday — skip")
+            continue
+        resp = session.get(
+            "https://query1.finance.yahoo.com/v7/finance/quote",
+            params={"symbols": symbol, "crumb": crumb},
+            timeout=20,
+        )
+        q = resp.json()["quoteResponse"]["result"][0]
+        pre = q.get("preMarketPrice")
+        prev_close = q.get("regularMarketPrice")
+        if not pre or not prev_close:
+            print(f"{symbol}: no pre-market print — skip")
+            continue
+        gap = pre / prev_close - 1
+        print(f"{symbol}: near-dip yesterday, pre-market gap {gap:+.2%}")
+        key = f"GAP:{symbol}:{today_et.isoformat()}"
+        if gap <= -0.01 and key not in state:
+            state[key] = 1
+            heads_up.append(
+                f"GAP-ENTRY {symbol} ({grade[symbol]}): near-dip yesterday + pre-market "
+                f"{gap:+.1%} -> historically better to buy at TODAY'S OPEN than to wait "
+                "for the close signal. Order at 15:30 if you agree."
+            )
+    if heads_up and not dry_run:
+        notify(heads_up)
+        STATE_PATH.write_text(json.dumps(state, indent=2))
+    elif heads_up:
+        print("[dry-run] would send:\n" + "\n".join(heads_up))
+    else:
+        print("no gap-entry setups")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="evaluate but never send")
+    parser.add_argument(
+        "--pre-open", action="store_true", help="pre-market gap check (run ~15:25 CET)"
+    )
     args = parser.parse_args()
+    if args.pre_open:
+        return preopen_gap_check(args.dry_run)
 
     now_et = datetime.now(ZoneInfo("America/New_York"))
     today_et = now_et.date()
