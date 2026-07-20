@@ -74,6 +74,21 @@ POSITIONS_TEMPLATE = {
     ),
     "positions": [],
 }
+PLAN_PATH = ROOT / "artifacts" / "tranche_plan.json"
+PAPER_PATH = ROOT / "artifacts" / "paper_tranche.json"
+# Per-symbol euro sizes per trigger; alerts turn these into ready order tickets
+# and the paper autopilot executes them at the actual next open. Edit freely.
+PLAN_TEMPLATE = {
+    "_howto": (
+        "Euro amounts the alerts should turn into order tickets, keyed by "
+        "symbol then trigger (T1/T2/T3/REL/CAL/WINDOW). Missing keys = no "
+        "ticket, alert only. The paper autopilot fills every ticketed alert "
+        "at the next session's open automatically."
+    ),
+    "CTSH": {"T1": 300, "T3": 200, "CAL": 100},
+    "EPAM": {"T1": 200, "T3": 100, "CAL": 100},
+    "SPY": {"T1": 500},
+}
 
 
 def _ema(s: pd.Series, n: int) -> pd.Series:
@@ -290,6 +305,71 @@ def review_positions(statuses: dict[str, dict]) -> list[tuple[str, str]]:
     return out
 
 
+def load_plan() -> dict:
+    if not PLAN_PATH.exists():
+        PLAN_PATH.write_text(json.dumps(PLAN_TEMPLATE, indent=2))
+    return json.loads(PLAN_PATH.read_text())
+
+
+def order_ticket(plan: dict, symbol: str, trig: str) -> str:
+    eur = plan.get(symbol, {}).get(trig)
+    # ASCII arrow: the nightly console/log is cp1252 and chokes on U+2192
+    return f" -> ORDER: buy ~EUR {eur} {symbol} at next open" if eur else ""
+
+
+def paper_autopilot(plan: dict, fired: list[tuple[str, str, str]]) -> list[str]:
+    """Automatic PAPER execution of ticketed alerts (research only, no live
+    orders — the repo covenant). Intents recorded when a ticketed trigger
+    fires; filled at the actual next session's adjusted open on a later run;
+    running P&L reported every night."""
+    book = json.loads(PAPER_PATH.read_text()) if PAPER_PATH.exists() else {"trades": []}
+    lines: list[str] = []
+    for tr in book["trades"]:
+        if tr.get("fill_price") is None:
+            df = load(tr["symbol"])
+            after = df[df.index > pd.Timestamp(tr["signal_date"])]
+            if len(after):
+                row = after.iloc[0]
+                aopen = float(row["open"] * row["adj_close"] / row["close"])
+                tr["fill_price"] = round(aopen, 4)
+                tr["fill_date"] = str(after.index[0].date())
+                tr["shares"] = round(tr["eur"] / aopen, 4)
+                lines.append(
+                    f"PAPER filled {tr['symbol']} {tr['trigger']} €{tr['eur']} "
+                    f"@ {aopen:.2f} ({tr['fill_date']})"
+                )
+    for symbol, trig, sig_date in fired:
+        eur = plan.get(symbol, {}).get(trig)
+        if not eur:
+            continue
+        if any(
+            t["symbol"] == symbol and t["trigger"] == trig and t["signal_date"] == sig_date
+            for t in book["trades"]
+        ):
+            continue
+        book["trades"].append(
+            {
+                "symbol": symbol,
+                "trigger": trig,
+                "eur": eur,
+                "signal_date": sig_date,
+                "fill_price": None,
+            }
+        )
+        lines.append(f"PAPER intent {symbol} {trig} €{eur} (fills at next open)")
+    cost = value = 0.0
+    for tr in book["trades"]:
+        if tr.get("fill_price"):
+            last = float(load(tr["symbol"])["adj_close"].iloc[-1])
+            cost += tr["eur"]
+            value += tr["shares"] * last
+    if cost:
+        lines.append(f"PAPER book: cost €{cost:.0f} value €{value:.0f} ({value / cost - 1:+.1%})")
+    book["_note"] = "Automatic paper execution of ticketed alerts; research only, no live orders."
+    PAPER_PATH.write_text(json.dumps(book, indent=2))
+    return lines
+
+
 def notify(alerts: list[str]) -> None:
     """Push alerts to every configured channel: Windows toast + Telegram."""
     body = "; ".join(a.removeprefix("ALERT ") for a in alerts)[:250]
@@ -403,6 +483,22 @@ def write_dashboard(statuses: list[dict], breadth: dict, alerts: list[str], stam
         else "<p>none recorded — add buys to artifacts/tranche_positions.json</p>"
     )
 
+    paper_html = "<p>no paper trades yet</p>"
+    if PAPER_PATH.exists():
+        trades = json.loads(PAPER_PATH.read_text()).get("trades", [])
+        if trades:
+            paper_html = (
+                "<table><tr><th>Symbol</th><th>Trigger</th><th>€</th><th>Signal</th>"
+                "<th>Fill</th></tr>"
+                + "".join(
+                    f"<tr><td>{t['symbol']}</td><td>{t['trigger']}</td><td>{t['eur']}</td>"
+                    f"<td>{t['signal_date']}</td>"
+                    f"<td>{t.get('fill_price') or 'pending next open'}</td></tr>"
+                    for t in trades
+                )
+                + "</table>"
+            )
+
     doc = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ACN/CTSH tranche watch</title><style>
@@ -422,6 +518,7 @@ table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #ccc;padding
  ({html.escape(breadth["names"])})</p>
 {rows}
 <h2>Recorded positions</h2>{pos_html}
+<h2>Paper autopilot (auto-executed tickets, research only)</h2>{paper_html}
 <h2>Alerts this run</h2>
 <pre>{html.escape(chr(10).join(alerts)) if alerts else "none"}</pre>
 <h2>Recent alert history</h2><pre>{recent or "none yet"}</pre>
@@ -435,9 +532,11 @@ def main() -> int:
     STATE_PATH.parent.mkdir(exist_ok=True)
     state = json.loads(STATE_PATH.read_text()) if STATE_PATH.exists() else {}
     today = date.today()
+    plan = load_plan()
     lines: list[str] = []
     alerts: list[str] = []
     statuses: list[dict] = []
+    fired: list[tuple[str, str, str]] = []
 
     basket, above50 = basket_series()
     breadth_count = int(above50.iloc[-1].sum())
@@ -479,8 +578,10 @@ def main() -> int:
                     alerts.append(
                         f"ALERT {symbol} WINDOW: post-earnings window open (printed "
                         f"{earnings}) — dip triggers re-armed; tranche 1 is now legal"
+                        + order_ticket(plan, symbol, "WINDOW")
                     )
                     state[wkey] = 1
+                    fired.append((symbol, "WINDOW", status["as_of"]))
         status["window_open"] = window_open
 
         session_no = len(df)
@@ -493,14 +594,21 @@ def main() -> int:
             if info["fired"]:
                 key = f"{symbol}:{trig}"
                 if session_no - state.get(key, -(10**9)) >= COOLDOWN_SESSIONS[trig]:
-                    alerts.append(f"ALERT {symbol} {trig}: {info['detail']}{peer_note}")
+                    alerts.append(
+                        f"ALERT {symbol} {trig}: {info['detail']}{peer_note}"
+                        + order_ticket(plan, symbol, trig)
+                    )
                     state[key] = session_no
+                    fired.append((symbol, trig, status["as_of"]))
         if status["CAL"]:
             key = f"{symbol}:CAL:{today.year}-{today.month}"
             lines.append(f"{symbol} CAL   {status['CAL']}")
             if key not in state:
-                alerts.append(f"ALERT {symbol} CAL: {status['CAL']}")
+                alerts.append(
+                    f"ALERT {symbol} CAL: {status['CAL']}" + order_ticket(plan, symbol, "CAL")
+                )
                 state[key] = 1
+                fired.append((symbol, "CAL", status["as_of"]))
 
         score = go_score(
             t1=status["T1"]["fired"],
@@ -523,6 +631,8 @@ def main() -> int:
                 )
                 state[key] = session_no
         statuses.append(status)
+
+    lines += paper_autopilot(plan, fired)
 
     session_no = max(len(load(s)) for s in SYMBOLS)
     for key, msg in review_positions({s["symbol"]: s for s in statuses}):
