@@ -25,11 +25,16 @@ from edgestack.paper.canonical import (
     queue_recommendation_target,
 )
 from edgestack.recommendation.financing import FundingRateObservation, fetch_dgs3mo
+from edgestack.recommendation.growth import annualized_log_growth, financed_risk_matched_spy
 from edgestack.recommendation.hashing import code_revision, stable_hash
 from edgestack.recommendation.instrument_schemas import NewsEvidenceV2
 from edgestack.recommendation.manifests import PublicationRecordV2
 from edgestack.recommendation.policy import load_baseline_policy
-from edgestack.recommendation.portfolio import AssetMetadata, build_base_recommendation
+from edgestack.recommendation.portfolio import (
+    AssetMetadata,
+    ExpectedReturnEstimate,
+    build_base_recommendation,
+)
 from edgestack.recommendation.publication import AtomicRecommendationPublisher
 from edgestack.recommendation.registry import RecommendationRegistry
 from edgestack.recommendation.risk import estimate_risk_inputs, size_recommendation
@@ -44,6 +49,7 @@ from edgestack.recommendation.schemas import (
     WatchlistEntryV2,
 )
 from edgestack.recommendation.service import CanonicalBundleRepository
+from edgestack.research.store import ResearchStore
 
 
 def build_and_publish_canonical_baseline(
@@ -60,7 +66,21 @@ def build_and_publish_canonical_baseline(
     catalog = DataCatalog(cfg)
     calendar = TradingCalendar(cfg.data.calendar)
     policy = load_baseline_policy()
-    symbols = tuple(weight.symbol for weight in policy.weights)
+    research_store = ResearchStore(catalog)
+    promotion_history = research_store.promoted_sleeves()
+    promoted_registry = research_store.capital_eligible_sleeves()
+    symbols = tuple(
+        dict.fromkeys(
+            (
+                *(weight.symbol for weight in policy.weights),
+                *(
+                    weight.symbol
+                    for sleeve in promoted_registry
+                    for weight in sleeve.symbol_weights
+                ),
+            )
+        )
+    )
     expected_session = (
         run_date if calendar.is_session(run_date) else calendar.prev_session(run_date).date()
     )
@@ -95,18 +115,72 @@ def build_and_publish_canonical_baseline(
     returns = adjusted_opens.pct_change(fill_method=None).dropna()
     if len(returns) < 252:
         raise DataError("baseline publication requires 252 aligned return sessions")
+    from edgestack.research.evaluate import (
+        daily_position_for_next_open,
+        event_weights_for_next_open,
+    )
+
+    adjusted_closes = (
+        prepared.pivot(index="date", columns="symbol", values="adj_close")
+        .reindex(columns=symbols)
+        .sort_index()
+    )
+    active_sleeves = []
+    for sleeve in promoted_registry:
+        parameters = sleeve.signal_parameters
+        if not parameters:
+            active_sleeves.append(sleeve)
+            continue
+        if parameters.get("evaluator") == "events":
+            raw_stocks = parameters.get("stock_symbols", [])
+            stock_symbols = (
+                tuple(str(item) for item in raw_stocks) if isinstance(raw_stocks, list) else ()
+            )
+            desired = event_weights_for_next_open(
+                catalog,
+                parameters,
+                adjusted_closes,
+                stock_symbols,
+            )
+            metadata_by_symbol = {weight.symbol: weight for weight in sleeve.symbol_weights}
+            projected = tuple(
+                metadata_by_symbol[symbol].model_copy(update={"weight": weight})
+                for symbol, weight in sorted(desired.items())
+                if symbol in metadata_by_symbol and weight > 0
+            )
+            if projected:
+                active_sleeves.append(sleeve.model_copy(update={"symbol_weights": projected}))
+            continue
+        if daily_position_for_next_open(parameters, adjusted_closes) > 0:
+            active_sleeves.append(sleeve)
+    promoted_sleeves = tuple(active_sleeves)
 
     metadata: dict[str, AssetMetadata] = {}
     for symbol in symbols:
         history = prepared.loc[prepared["symbol"] == symbol].sort_values("date").tail(60)
         median_adv = float((history["close"] * history["volume"]).median())
-        policy_weight = next(weight for weight in policy.weights if weight.symbol == symbol)
+        policy_weight = next(
+            (weight for weight in policy.weights if weight.symbol == symbol),
+            None,
+        )
+        promoted_weight = next(
+            (
+                weight
+                for sleeve in promoted_registry
+                for weight in sleeve.symbol_weights
+                if weight.symbol == symbol
+            ),
+            None,
+        )
+        source_weight = policy_weight or promoted_weight
+        if source_weight is None:
+            raise DataError(f"no metadata source for canonical symbol {symbol}")
         metadata[symbol] = AssetMetadata(
             symbol=symbol,
-            asset_kind=AssetKind.ETF,
-            sector=policy_weight.sector,
+            asset_kind=source_weight.asset_kind,
+            sector=source_weight.sector,
             median_adv=median_adv,
-            broad_policy_asset=True,
+            broad_policy_asset=policy_weight is not None,
         )
 
     as_of = datetime.combine(expected_session, time(20), tzinfo=UTC)
@@ -115,10 +189,11 @@ def build_and_publish_canonical_baseline(
     data_version = catalog.data_manifest_hash()
     artifact_version = stable_hash(
         {
-            "kind": "baseline_only",
+            "kind": "canonical_promoted_plus_baseline",
             "code_revision": code_revision(),
             "policy": policy.model_dump(mode="json"),
-            "promoted_sleeves": [],
+            "promoted_registry": [sleeve.model_dump(mode="json") for sleeve in promoted_registry],
+            "active_promoted_sleeves": [sleeve.sleeve_id for sleeve in promoted_sleeves],
         }
     )
     freshness = FreshnessV2(
@@ -130,13 +205,35 @@ def build_and_publish_canonical_baseline(
         compatible=True,
     )
     watchlist = load_legacy_watchlist(catalog.artifacts_dir)
+    expected_estimates: dict[str, ExpectedReturnEstimate] = {}
+    for symbol in symbols:
+        contributions = [
+            (
+                sleeve.expected_net_return * weight.weight,
+                sleeve.expected_return_lower_95 * weight.weight,
+                sleeve.effective_sample_size,
+            )
+            for sleeve in promoted_sleeves
+            for weight in sleeve.symbol_weights
+            if weight.symbol == symbol
+        ]
+        if not contributions:
+            continue
+        mean = sum(item[0] for item in contributions)
+        lower = sum(item[1] for item in contributions)
+        expected_estimates[symbol] = ExpectedReturnEstimate(
+            annualized_mean=mean,
+            annualized_standard_error=max(0.0, mean - lower) / 1.96,
+            effective_sample_size=min(item[2] for item in contributions),
+            shrinkage_prior_n=0.0,
+        )
     base = build_base_recommendation(
         policy=policy,
-        promoted_sleeves=(),
+        promoted_sleeves=promoted_sleeves,
         watchlist=watchlist,
         returns=returns,
         metadata=metadata,
-        expected_estimates={},
+        expected_estimates=expected_estimates,
         freshness=freshness,
         as_of=pd.Timestamp(as_of),
         execution_at=pd.Timestamp(execution_at),
@@ -202,8 +299,9 @@ def build_and_publish_canonical_baseline(
         paper = CanonicalPaperStateV2.initial(cfg.paper.initial_cash, initial_risk_state)
 
     profile = RiskProfileV2(account_equity=paper.current_equity)
+    base_weight_map = {weight.symbol: weight.weight for weight in base.unlevered_base_weights}
     portfolio_returns = returns.loc[:, list(symbols)].to_numpy() @ np.array(
-        [weight.weight for weight in policy.weights]
+        [base_weight_map.get(symbol, 0.0) for symbol in symbols]
     )
     observation = funding_observation or fetch_dgs3mo(
         catalog.artifacts_dir / "funding" / "dgs3mo.json", now=generated_at
@@ -240,13 +338,43 @@ def build_and_publish_canonical_baseline(
         default_recommendation=recommendation,
     )
     paper = queue_recommendation_target(paper, recommendation)
-    monitoring = {
+    monitoring: dict[str, Any] = {
         "schema_version": 2,
         "healthy": True,
-        "promoted_sleeves": 0,
+        "promoted_sleeves": len(promoted_registry),
+        "historically_promoted_sleeves": len(promotion_history),
+        "active_promoted_sleeves": len(promoted_sleeves),
         "watchlist_ideas": len(watchlist),
         "news_items": len(news_evidence),
-        "claim": "baseline policy only; no promoted alpha claim",
+        "claim": (
+            "immutable promoted sleeves plus passive baseline"
+            if promoted_registry
+            else "baseline policy only; no promoted alpha claim"
+        ),
+    }
+    portfolio_series = pd.Series(portfolio_returns, index=returns.index)
+    spy_series = returns["SPY"]
+    policy_weights = {weight.symbol: weight.weight for weight in policy.weights}
+    baseline_series = returns.loc[
+        :, [weight.symbol for weight in policy.weights]
+    ].to_numpy() @ np.array([policy_weights[weight.symbol] for weight in policy.weights])
+    portfolio_volatility = float(portfolio_series.std(ddof=1) * np.sqrt(252))
+    spy_volatility = float(spy_series.std(ddof=1) * np.sqrt(252))
+    risk_scale = portfolio_volatility / spy_volatility if spy_volatility > 0 else 0.0
+    financed_spy = financed_risk_matched_spy(
+        spy_series,
+        target_volatility=portfolio_volatility,
+        financing_rate=observation.annualized_rate + profile.funding_spread_bps / 10_000.0,
+        cash_yield=observation.annualized_rate,
+    )
+    monitoring["calendar_log_growth"] = annualized_log_growth(portfolio_series)
+    monitoring["comparator_log_growth"] = {
+        "buy_now_spy": annualized_log_growth(spy_series),
+        "risk_matched_spy": annualized_log_growth(spy_series * risk_scale),
+        "diversified_baseline": annualized_log_growth(
+            pd.Series(baseline_series, index=returns.index)
+        ),
+        "financed_spy_same_risk": annualized_log_growth(financed_spy),
     }
     publication = AtomicRecommendationPublisher(catalog.artifacts_dir).publish(
         bundle=bundle,

@@ -117,6 +117,7 @@ class PromotionDecisionV2(V2Model):
     stepm_superior: bool
     sharpe_lower_bound_vs_spy: float
     sharpe_lower_bound_vs_baseline: float
+    log_growth_lower_bounds: dict[str, float] = Field(default_factory=dict)
     stress_scenarios_passed: tuple[str, ...]
     failure_reasons: tuple[str, ...] = ()
 

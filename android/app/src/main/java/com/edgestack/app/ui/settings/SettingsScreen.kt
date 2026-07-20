@@ -133,7 +133,7 @@ fun SettingsScreen(vm: SettingsViewModel) {
             singleLine = true,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
-                autoCorrect = false,
+                autoCorrectEnabled = false,
             ),
         )
         Text("Risk sizing (alpha selection is unchanged)", style = MaterialTheme.typography.titleMedium)

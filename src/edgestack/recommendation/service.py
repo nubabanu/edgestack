@@ -126,6 +126,10 @@ class CanonicalBundleRepository:
         except ValueError as exc:
             raise DataError(f"invalid published news evidence: {exc}") from exc
 
+    def monitoring(self) -> dict[str, Any]:
+        """Return the version-checked server-owned monitoring diagnostics."""
+        return self._optional_versioned_payload("monitoring.json")
+
     def _optional_versioned_payload(self, filename: str) -> dict[str, Any]:
         pointer = self.pointer()
         run_dir = self.run_dir(pointer)
@@ -200,6 +204,7 @@ def risk_inputs_json(inputs: RiskInputsV2) -> dict[str, Any]:
         "liquidity_position_limits": dict(sorted(inputs.liquidity_position_limits.items())),
         "funding_rate": inputs.funding_rate,
         "funding_rate_as_of": inputs.funding_rate_as_of.isoformat(),
+        "quarter_kelly_leverage_limit": inputs.quarter_kelly_leverage_limit,
         "monitoring_healthy": inputs.monitoring_healthy,
         "stress_acceptable": inputs.stress_acceptable,
         "data_fresh": inputs.data_fresh,
@@ -219,6 +224,7 @@ def _risk_inputs_from_json(payload: dict[str, Any]) -> RiskInputsV2:
         liquidity_position_limits={str(key): float(value) for key, value in liquidity.items()},
         funding_rate=float(payload["funding_rate"]),
         funding_rate_as_of=date.fromisoformat(str(payload["funding_rate_as_of"])),
+        quarter_kelly_leverage_limit=float(payload.get("quarter_kelly_leverage_limit", 5.0)),
         monitoring_healthy=bool(payload.get("monitoring_healthy", True)),
         stress_acceptable=bool(payload.get("stress_acceptable", True)),
         data_fresh=bool(payload.get("data_fresh", True)),

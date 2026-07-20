@@ -11,10 +11,14 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass, field
 from datetime import date
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
 from edgestack.types import UniverseSnapshot
+
+if TYPE_CHECKING:
+    from edgestack.data.live_quotes import ProviderQuote
 
 
 @dataclass(frozen=True)
@@ -51,9 +55,30 @@ class IntradayDataProvider(abc.ABC):
 
     @abc.abstractmethod
     def fetch_intraday_bars(
-        self, symbols: tuple[str, ...], start: date, end: date, *, interval: str = "60m"
+        self,
+        symbols: tuple[str, ...],
+        start: date,
+        end: date,
+        *,
+        interval: str = "60m",
+        include_prepost: bool = False,
     ) -> pd.DataFrame:
-        """Return symbol/timestamp/OHLCV bars with timestamps convertible to UTC."""
+        """Return symbol/timestamp/OHLCV bars with timestamps convertible to UTC.
+
+        ``include_prepost`` requests extended-hours trades when the provider can
+        supply them. Callers must never infer a premarket series when it is false.
+        """
+
+
+class LiveQuoteProvider(abc.ABC):
+    """Latest indicative market snapshots; never an execution or signal feed."""
+
+    name: str
+    configured: bool
+
+    @abc.abstractmethod
+    def fetch_quotes(self, symbols: tuple[str, ...]) -> dict[str, ProviderQuote]:
+        """Return the successfully resolved subset keyed by uppercase symbol."""
 
 
 class UniverseProvider(abc.ABC):

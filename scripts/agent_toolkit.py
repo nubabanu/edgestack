@@ -27,9 +27,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -43,6 +45,40 @@ EVENTS = ROOT / "data" / "curated" / "events"
 ARTIFACTS = ROOT / "artifacts"
 
 DISCLAIMER = "Historical research on previously-accessed data; not investment advice."
+
+STALE_THRESHOLDS = {
+    "required_daily_bar_max_session_lag": 1,
+    "publication_max_session_lag": 1,
+    "watcher_max_calendar_age_days": 1,
+    "universe_snapshot_max_calendar_age_days": 1,
+    "intraday_max_session_lag": 1,
+    "earnings_refresh_max_calendar_age_days": 8,
+}
+WATCHER_TRIGGER_TYPES = (
+    "T1",
+    "T2",
+    "T3",
+    "REL",
+    "SECTOR",
+    "CAL",
+    "WINDOW",
+    "REVIEW",
+    "GO",
+)
+INTRADAY_COLLECTOR_SYMBOLS = (
+    "ACN",
+    "CTSH",
+    "EPAM",
+    "DXC",
+    "IBM",
+    "IT",
+    "SPY",
+    "QQQ",
+    "TLT",
+    "SHY",
+    "GLD",
+)
+EARNINGS_COLLECTOR_SYMBOLS = ("ACN", "CTSH", "EPAM", "DXC", "IBM", "IT")
 
 
 def _load(sym: str) -> pd.DataFrame:
@@ -92,36 +128,510 @@ def cmd_manual(_args: argparse.Namespace) -> dict:
     }
 
 
-def cmd_status(_args: argparse.Namespace) -> dict:
-    out: dict[str, Any] = {"today": date.today().isoformat()}
-    freshness = {}
-    for sym in ("SPY", "ACN", "CTSH", "EPAM"):
+def _read_json(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} does not contain a JSON object")
+    return payload
+
+
+def _parse_datetime(value: Any) -> datetime:
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _session_lag(observed: date, today: date) -> int:
+    """NYSE sessions after ``observed`` through ``today`` (weekends do not age data)."""
+    if observed >= today:
+        return 0
+    from edgestack.data.calendar import TradingCalendar
+
+    return TradingCalendar("XNYS").sessions_between(observed, today)
+
+
+def _required_etfs(root: Path) -> tuple[str, ...]:
+    policy_path = root / "configs" / "policies" / "baseline-diversified-v1.yaml"
+    policy = yaml.safe_load(policy_path.read_text(encoding="utf-8"))
+    return tuple(
+        str(item["symbol"]).upper()
+        for item in policy["weights"]
+        if str(item.get("asset_kind", "")).upper() == "ETF"
+    )
+
+
+def _latest_daily_bar(path: Path) -> date | None:
+    if not path.exists():
+        return None
+    dates = pd.read_parquet(path, columns=["date"])["date"]
+    return None if dates.empty else pd.Timestamp(dates.max()).date()
+
+
+def _issue(issues: list[dict[str, str]], *, code: str, severity: str, message: str) -> None:
+    issues.append({"code": code, "severity": severity, "message": message})
+
+
+def _market_data_health(
+    root: Path,
+    *,
+    today: date,
+    required_etfs: tuple[str, ...],
+    watch_symbols: tuple[str, ...],
+    issues: list[dict[str, str]],
+) -> tuple[dict[str, Any], dict[str, str | None]]:
+    prices = root / "data" / "curated" / "prices"
+    ordered_symbols = tuple(dict.fromkeys(required_etfs + watch_symbols))
+    symbols: dict[str, dict[str, Any]] = {}
+    last_bar: dict[str, str | None] = {}
+    stale_required: list[str] = []
+    for symbol in ordered_symbols:
         try:
-            freshness[sym] = str(_load(sym).index.max().date())
-        except FileNotFoundError:
-            freshness[sym] = None
-    out["last_bar"] = freshness
-    cur = ARTIFACTS / "recommendations" / "current.json"
-    if cur.exists():
-        pub = json.loads(cur.read_text())
-        out["publication"] = {k: pub.get(k) for k in ("run_id", "session", "published_at")}
-    watch = ARTIFACTS / "tranche_watch.json"
-    if watch.exists():
-        w = json.loads(watch.read_text())
-        out["tranche_watch"] = {
-            "run_date": w.get("run_date"),
-            "fired": {
-                s["symbol"]: [t for t in ("T1", "T2", "T3", "REL") if s[t]["fired"]]
-                for s in w.get("symbols", [])
-            },
+            observed = _latest_daily_bar(prices / f"{symbol}.parquet")
+        except (OSError, ValueError, KeyError) as exc:
+            observed = None
+            _issue(
+                issues,
+                code="daily_bar_unreadable",
+                severity="critical" if symbol in required_etfs else "warning",
+                message=f"{symbol} daily bars are unreadable: {exc}",
+            )
+        lag = _session_lag(observed, today) if observed else None
+        stale = observed is None or lag > STALE_THRESHOLDS["required_daily_bar_max_session_lag"]
+        symbols[symbol] = {
+            "last_bar": observed.isoformat() if observed else None,
+            "session_lag": lag,
+            "required": symbol in required_etfs,
+            "stale": stale,
         }
-    snaps = sorted((ROOT / "data" / "curated" / "universe_snapshots").glob("*.json"))
-    out["universe_snapshots"] = {
-        "count": len(snaps),
-        "latest": snaps[-1].stem if snaps else None,
+        last_bar[symbol] = observed.isoformat() if observed else None
+        if symbol in required_etfs and stale:
+            stale_required.append(symbol)
+    if stale_required:
+        _issue(
+            issues,
+            code="required_daily_bars_stale",
+            severity="critical",
+            message=f"required ETF daily bars are missing or stale: {', '.join(stale_required)}",
+        )
+    return (
+        {
+            "status": "healthy" if not stale_required else "unhealthy",
+            "required_etfs": list(required_etfs),
+            "stale_required_etfs": stale_required,
+            "symbols": symbols,
+        },
+        last_bar,
+    )
+
+
+def _publication_health(
+    root: Path, *, today: date, now: datetime, issues: list[dict[str, str]]
+) -> dict[str, Any]:
+    recommendations = root / "artifacts" / "recommendations"
+    pointer_path = recommendations / "current.json"
+    if not pointer_path.exists():
+        _issue(
+            issues,
+            code="publication_missing",
+            severity="critical",
+            message="canonical recommendation pointer is missing",
+        )
+        return {
+            "run_id": None,
+            "session": None,
+            "published_at": None,
+            "age_hours": None,
+            "session_lag": None,
+            "stale": True,
+        }
+    try:
+        pointer = _read_json(pointer_path)
+        run_id = str(pointer["run_id"])
+        record = _read_json(recommendations / "runs" / run_id / "publication.json")
+        session = date.fromisoformat(str(pointer["session"]))
+        published_at = _parse_datetime(record["published_at"])
+        session_lag = _session_lag(session, today)
+        age_hours = max((now - published_at).total_seconds() / 3600.0, 0.0)
+        stale = session_lag > STALE_THRESHOLDS["publication_max_session_lag"]
+        if stale:
+            _issue(
+                issues,
+                code="publication_stale",
+                severity="critical",
+                message=(
+                    f"canonical publication session {session} is {session_lag} NYSE sessions behind"
+                ),
+            )
+        return {
+            "run_id": run_id,
+            "session": session.isoformat(),
+            "published_at": published_at.isoformat().replace("+00:00", "Z"),
+            "age_hours": round(age_hours, 1),
+            "session_lag": session_lag,
+            "stale": stale,
+        }
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        _issue(
+            issues,
+            code="publication_invalid",
+            severity="critical",
+            message=f"canonical publication metadata is invalid: {exc}",
+        )
+        return {
+            "run_id": None,
+            "session": None,
+            "published_at": None,
+            "age_hours": None,
+            "session_lag": None,
+            "stale": True,
+        }
+
+
+def _active_watcher_triggers(symbol_status: dict[str, Any]) -> list[str]:
+    active = [
+        trigger
+        for trigger in ("T1", "T2", "T3", "REL")
+        if isinstance(symbol_status.get(trigger), dict)
+        and bool(symbol_status[trigger].get("fired"))
+    ]
+    if symbol_status.get("CAL"):
+        active.append("CAL")
+    if symbol_status.get("window_open"):
+        active.append("WINDOW")
+    return active
+
+
+def _watcher_health(
+    root: Path, *, today: date, issues: list[dict[str, str]]
+) -> tuple[dict[str, Any], tuple[str, ...]]:
+    path = root / "artifacts" / "tranche_watch.json"
+    if not path.exists():
+        _issue(
+            issues,
+            code="watcher_status_missing",
+            severity="warning",
+            message="tranche watcher status is missing",
+        )
+        return (
+            {
+                "status": "missing",
+                "run_status": None,
+                "run_date": None,
+                "age_days": None,
+                "stale": True,
+                "trigger_types": list(WATCHER_TRIGGER_TYPES),
+                "fired": {},
+                "global_active": [],
+                "events": [],
+                "go_scores": {},
+            },
+            (),
+        )
+    try:
+        payload = _read_json(path)
+        run_status = str(payload.get("run_status", "ok"))
+        run_date = date.fromisoformat(str(payload["run_date"]))
+        age_days = max((today - run_date).days, 0)
+        stale = age_days > STALE_THRESHOLDS["watcher_max_calendar_age_days"]
+        symbol_rows = [row for row in payload.get("symbols", []) if isinstance(row, dict)]
+        watch_symbols = tuple(
+            str(row["symbol"]).upper() for row in symbol_rows if row.get("symbol")
+        )
+        active = {
+            str(row["symbol"]).upper(): _active_watcher_triggers(row)
+            for row in symbol_rows
+            if row.get("symbol")
+        }
+        breadth = payload.get("breadth") if isinstance(payload.get("breadth"), dict) else {}
+        sector_active = int(breadth.get("count", 0)) >= 4
+        events = payload.get("events", [])
+        if not isinstance(events, list):
+            events = []
+        go_scores = {
+            str(row["symbol"]).upper(): row.get("GO")
+            for row in symbol_rows
+            if row.get("symbol") and row.get("GO") is not None
+        }
+        if stale:
+            _issue(
+                issues,
+                code="watcher_stale",
+                severity="warning",
+                message=f"tranche watcher last ran {age_days} calendar days ago",
+            )
+        if run_status != "ok":
+            _issue(
+                issues,
+                code="watcher_run_failed",
+                severity="warning",
+                message=f"tranche watcher reported run_status={run_status}",
+            )
+        return (
+            {
+                "status": "healthy" if not stale and run_status == "ok" else run_status,
+                "run_status": run_status,
+                "run_date": run_date.isoformat(),
+                "age_days": age_days,
+                "stale": stale,
+                "trigger_types": list(WATCHER_TRIGGER_TYPES),
+                # Backward-compatible key, now including CAL and WINDOW conditions.
+                "fired": active,
+                "global_active": ["SECTOR"] if sector_active else [],
+                "events": events,
+                "go_scores": go_scores,
+                "go_alerts_enabled": bool(payload.get("go_alerts_enabled", False)),
+                "breadth": breadth,
+            },
+            watch_symbols,
+        )
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        _issue(
+            issues,
+            code="watcher_status_invalid",
+            severity="warning",
+            message=f"tranche watcher status is invalid: {exc}",
+        )
+        return (
+            {
+                "status": "invalid",
+                "run_status": None,
+                "run_date": None,
+                "age_days": None,
+                "stale": True,
+                "trigger_types": list(WATCHER_TRIGGER_TYPES),
+                "fired": {},
+                "global_active": [],
+                "events": [],
+                "go_scores": {},
+            },
+            (),
+        )
+
+
+def _universe_collector_health(
+    root: Path, *, today: date, issues: list[dict[str, str]]
+) -> dict[str, Any]:
+    directory = root / "data" / "curated" / "universe_snapshots"
+    snapshots = sorted(directory.glob("*.json")) if directory.exists() else []
+    if not snapshots:
+        _issue(
+            issues,
+            code="universe_snapshot_missing",
+            severity="warning",
+            message="no forward universe snapshot is available",
+        )
+        return {
+            "status": "missing",
+            "count": 0,
+            "latest": None,
+            "age_days": None,
+            "stale": True,
+        }
+    latest = snapshots[-1]
+    try:
+        payload = _read_json(latest)
+        observed = date.fromisoformat(str(payload.get("date", latest.stem)))
+        age_days = max((today - observed).days, 0)
+        source = str(payload.get("membership_source", "unknown"))
+        stale = age_days > STALE_THRESHOLDS[
+            "universe_snapshot_max_calendar_age_days"
+        ] or source.startswith("unavailable")
+        if stale:
+            _issue(
+                issues,
+                code="universe_snapshot_stale",
+                severity="warning",
+                message=f"latest universe snapshot is {age_days} days old; source={source}",
+            )
+        return {
+            "status": "healthy" if not stale else "stale",
+            "count": len(snapshots),
+            "latest": observed.isoformat(),
+            "age_days": age_days,
+            "stale": stale,
+            "membership_source": source,
+            "sp500_members": len(payload.get("sp500_members", [])),
+            "catalog_active": len(payload.get("catalog_active", [])),
+        }
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        _issue(
+            issues,
+            code="universe_snapshot_invalid",
+            severity="warning",
+            message=f"latest universe snapshot is invalid: {exc}",
+        )
+        return {
+            "status": "invalid",
+            "count": len(snapshots),
+            "latest": latest.stem,
+            "age_days": None,
+            "stale": True,
+        }
+
+
+def _intraday_collector_health(
+    root: Path, *, today: date, issues: list[dict[str, str]]
+) -> dict[str, Any]:
+    base = root / "data" / "curated" / "intraday"
+    intervals: dict[str, Any] = {}
+    collector_stale = False
+    for interval in ("15m", "60m"):
+        last_bars: dict[str, str | None] = {}
+        stale_symbols: list[str] = []
+        for symbol in INTRADAY_COLLECTOR_SYMBOLS:
+            path = base / interval / f"{symbol}.parquet"
+            observed: date | None = None
+            try:
+                if path.exists():
+                    timestamps = pd.read_parquet(path, columns=["timestamp"])["timestamp"]
+                    if not timestamps.empty:
+                        latest = pd.to_datetime(timestamps, utc=True).max()
+                        observed = latest.tz_convert("America/New_York").date()
+            except (OSError, ValueError, KeyError):
+                observed = None
+            lag = _session_lag(observed, today) if observed else None
+            stale = observed is None or lag > STALE_THRESHOLDS["intraday_max_session_lag"]
+            last_bars[symbol] = observed.isoformat() if observed else None
+            if stale:
+                stale_symbols.append(symbol)
+        interval_stale = bool(stale_symbols)
+        collector_stale |= interval_stale
+        intervals[interval] = {
+            "status": "healthy" if not interval_stale else "stale",
+            "last_bar": last_bars,
+            "stale_symbols": stale_symbols,
+        }
+    if collector_stale:
+        summary = "; ".join(
+            f"{interval}: {', '.join(value['stale_symbols'])}"
+            for interval, value in intervals.items()
+            if value["stale_symbols"]
+        )
+        _issue(
+            issues,
+            code="intraday_collector_stale",
+            severity="warning",
+            message=f"intraday collector outputs are missing or stale ({summary})",
+        )
+    return {
+        "status": "healthy" if not collector_stale else "stale",
+        "expected_symbols": list(INTRADAY_COLLECTOR_SYMBOLS),
+        "intervals": intervals,
     }
-    out["events_symbols"] = len(list(EVENTS.glob("*.parquet"))) if EVENTS.exists() else 0
-    return out
+
+
+def _earnings_collector_health(
+    root: Path, *, now: datetime, issues: list[dict[str, str]]
+) -> dict[str, Any]:
+    directory = root / "data" / "curated" / "events"
+    symbols: dict[str, Any] = {}
+    stale_symbols: list[str] = []
+    for symbol in EARNINGS_COLLECTOR_SYMBOLS:
+        path = directory / f"{symbol}.parquet"
+        refreshed_at: datetime | None = None
+        if path.exists():
+            refreshed_at = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+        age_days = (now - refreshed_at).total_seconds() / 86400.0 if refreshed_at else None
+        stale = (
+            refreshed_at is None
+            or age_days > STALE_THRESHOLDS["earnings_refresh_max_calendar_age_days"]
+        )
+        symbols[symbol] = {
+            "refreshed_at": (
+                refreshed_at.isoformat().replace("+00:00", "Z") if refreshed_at else None
+            ),
+            "age_days": round(max(age_days, 0.0), 1) if age_days is not None else None,
+            "stale": stale,
+        }
+        if stale:
+            stale_symbols.append(symbol)
+    if stale_symbols:
+        _issue(
+            issues,
+            code="earnings_collector_stale",
+            severity="warning",
+            message=f"EDGAR collector outputs are missing or stale: {', '.join(stale_symbols)}",
+        )
+    all_event_files = list(directory.glob("*.parquet")) if directory.exists() else []
+    return {
+        "status": "healthy" if not stale_symbols else "stale",
+        "expected_symbols": list(EARNINGS_COLLECTOR_SYMBOLS),
+        "available_symbols": len(all_event_files),
+        "stale_symbols": stale_symbols,
+        "symbols": symbols,
+    }
+
+
+def build_status_report(
+    root: Path = ROOT,
+    *,
+    today: date | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Build a machine-readable operational health report without mutating state."""
+    checked_at = now or datetime.now(UTC)
+    if checked_at.tzinfo is None:
+        checked_at = checked_at.replace(tzinfo=UTC)
+    checked_at = checked_at.astimezone(UTC)
+    report_date = today or date.today()
+    issues: list[dict[str, str]] = []
+
+    try:
+        required_etfs = _required_etfs(root)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        required_etfs = ()
+        _issue(
+            issues,
+            code="baseline_policy_invalid",
+            severity="critical",
+            message=f"cannot determine required ETFs from baseline policy: {exc}",
+        )
+
+    watcher, watch_symbols = _watcher_health(root, today=report_date, issues=issues)
+    market_data, last_bar = _market_data_health(
+        root,
+        today=report_date,
+        required_etfs=required_etfs,
+        watch_symbols=watch_symbols,
+        issues=issues,
+    )
+    publication = _publication_health(root, today=report_date, now=checked_at, issues=issues)
+    universe = _universe_collector_health(root, today=report_date, issues=issues)
+    intraday = _intraday_collector_health(root, today=report_date, issues=issues)
+    earnings = _earnings_collector_health(root, now=checked_at, issues=issues)
+
+    severities = {item["severity"] for item in issues}
+    health = "unhealthy" if "critical" in severities else "degraded" if issues else "healthy"
+    return {
+        "health": health,
+        "healthy": health == "healthy",
+        "checked_at": checked_at.isoformat().replace("+00:00", "Z"),
+        "today": report_date.isoformat(),
+        "thresholds": STALE_THRESHOLDS,
+        "market_data": market_data,
+        # Preserved for callers of the old compact status contract.
+        "last_bar": last_bar,
+        "publication": publication,
+        "tranche_watch": watcher,
+        "collectors": {
+            "universe_snapshot": universe,
+            "intraday": intraday,
+            "earnings": earnings,
+        },
+        # Preserved aliases; detailed collector state lives under collectors.
+        "universe_snapshots": {
+            "count": universe["count"],
+            "latest": universe["latest"],
+        },
+        "events_symbols": earnings["available_symbols"],
+        "issues": issues,
+        "disclaimer": DISCLAIMER,
+    }
+
+
+def cmd_status(_args: argparse.Namespace) -> dict:
+    return build_status_report()
 
 
 def cmd_snapshot(args: argparse.Namespace) -> dict:
@@ -472,39 +982,14 @@ def cmd_leverage_check(args: argparse.Namespace) -> dict:
 
 
 def cmd_quote(args: argparse.Namespace) -> dict:
-    """Live quotes incl. pre/post-market via Yahoo's crumb-gated endpoint.
+    """Provider-neutral indicative quotes with explicit source and freshness."""
+    from edgestack.data.quote_service import build_live_quote_service
 
-    Freshness: free Yahoo quotes are real-time-ish to ~15min delayed
-    depending on venue; the canonical signal remains the official close.
-    """
-    from tranche_watch import _yahoo_session
-
-    session, crumb = _yahoo_session()
-    symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
-    resp = session.get(
-        "https://query1.finance.yahoo.com/v7/finance/quote",
-        params={"symbols": ",".join(symbols), "crumb": crumb},
-        timeout=20,
-    )
-    resp.raise_for_status()
-    out = {"quotes": [], "note": "signals fire on official closes, not live prints"}
-    for q in resp.json()["quoteResponse"]["result"]:
-        out["quotes"].append(
-            {
-                "symbol": q.get("symbol"),
-                "market_state": q.get("marketState"),
-                "regular": q.get("regularMarketPrice"),
-                "regular_change_pct": round(q.get("regularMarketChangePercent") or 0, 2),
-                "pre": q.get("preMarketPrice"),
-                "pre_change_pct": (
-                    round(q["preMarketChangePercent"], 2)
-                    if q.get("preMarketChangePercent") is not None
-                    else None
-                ),
-                "post": q.get("postMarketPrice"),
-            }
-        )
-    return out
+    batch = build_live_quote_service().fetch(args.symbols, provider=args.provider)
+    if not batch.quotes:
+        attempted = ", ".join(batch.providers_attempted) or args.provider
+        raise RuntimeError(f"no quotes available; attempted: {attempted}")
+    return batch.model_dump(mode="json")
 
 
 def cmd_go_backtest(args: argparse.Namespace) -> dict:
@@ -664,6 +1149,12 @@ def main() -> int:
     p.add_argument("symbol")
     p = sub.add_parser("quote")
     p.add_argument("symbols", help="comma-separated, e.g. EPAM,CTSH,SPY")
+    p.add_argument(
+        "--provider",
+        choices=("auto", "finnhub", "twelvedata", "alpaca", "yahoo"),
+        default="auto",
+        help="force one provider for diagnostics (default: failover automatically)",
+    )
     args = parser.parse_args()
 
     handlers = {

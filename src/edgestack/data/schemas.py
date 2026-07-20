@@ -171,8 +171,8 @@ def validate_intraday_bars(df: pd.DataFrame, *, context: str = "intraday_bars") 
         problems.append("non-positive prices")
     if (valid["volume"] < 0).any():
         problems.append("negative volume")
-    if (~valid["interval_minutes"].isin({15, 60})).any():
-        problems.append("interval_minutes must be 15 or 60")
+    if (~valid["interval_minutes"].isin({1, 5, 15, 60})).any():
+        problems.append("interval_minutes must be 1, 5, 15, or 60")
     if (valid["high"] < valid[["open", "close", "low"]].max(axis=1)).any():
         problems.append("high below another price")
     if (valid["low"] > valid[["open", "close", "high"]].min(axis=1)).any():

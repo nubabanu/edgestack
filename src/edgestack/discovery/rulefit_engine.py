@@ -169,7 +169,9 @@ def discover_rules(
     if not unique_rules:
         return [], total_generated
 
-    # 2) Rule indicator matrix + bounded-path Lasso for sparse selection.
+    # 2) Rule indicator matrix + bounded-path, near-Lasso elastic net for sparse
+    # selection.  A tiny L2 component makes the fit well-defined for the many
+    # correlated/duplicated tree partitions that occur in stability resamples.
     preds_per_rule = [
         [
             Predicate(feature=f, op=op, value=thr)  # type: ignore[arg-type]
@@ -180,12 +182,30 @@ def discover_rules(
     indicator = np.column_stack(
         [_fast_mask(frame, preds).astype(np.float32) for preds in preds_per_rule]
     )
+    # Different tree paths often collapse to the same indicator on a resample;
+    # exact duplicates and constants make coordinate descent needlessly ill
+    # conditioned without representing additional hypotheses (the raw trial
+    # count above still charges every generated rule).
+    standard_deviation = indicator.std(axis=0)
+    usable = np.flatnonzero(standard_deviation > 1e-8)
+    if len(usable) == 0:
+        return [], total_generated
+    indicator = indicator[:, usable]
+    preds_per_rule = [preds_per_rule[int(index)] for index in usable]
+    _, distinct = np.unique(indicator.T, axis=0, return_index=True)
+    distinct = np.sort(distinct)
+    indicator = indicator[:, distinct]
+    preds_per_rule = [preds_per_rule[int(index)] for index in distinct]
+    indicator = (indicator - indicator.mean(axis=0)) / indicator.std(axis=0)
     lasso = ElasticNetCV(
-        l1_ratio=1.0,
+        l1_ratio=0.99,
         alphas=20,
         cv=3,
         tol=1e-3,
-        max_iter=3000,
+        # Correlated binary tree rules can need a long coordinate-descent path.
+        # Let the solver converge instead of accepting noisy coefficients or
+        # silencing the statistical canary's ConvergenceWarning.
+        max_iter=20_000,
         selection="random",
         random_state=seed,
         n_jobs=-1,

@@ -221,7 +221,7 @@ fun InstrumentScreen(vm: InstrumentViewModel) {
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Characters,
-                    autoCorrect = false,
+                    autoCorrectEnabled = false,
                 ),
             )
             OutlinedTextField(
@@ -233,7 +233,7 @@ fun InstrumentScreen(vm: InstrumentViewModel) {
                     Text("Date only: 2026-07-20; or hour: 2026-07-20T09:30:00-04:00")
                 },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(autoCorrect = false),
+                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
                 isError = vm.intendedEntryEvents.any { it.type != "EIA" },
             )
             vm.intendedEntryEvents.forEach { event ->
@@ -270,7 +270,7 @@ fun InstrumentScreen(vm: InstrumentViewModel) {
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Characters,
-                    autoCorrect = false,
+                    autoCorrectEnabled = false,
                 ),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

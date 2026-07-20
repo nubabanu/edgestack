@@ -16,6 +16,8 @@ import contextlib
 import json
 import os
 import tempfile
+import threading
+import time as time_module
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -39,6 +41,7 @@ from edgestack.exceptions import DataError, TestPeriodLockedError
 from edgestack.logging import get_logger, log_event
 
 log = get_logger("catalog")
+_LOCK_STATE = threading.local()
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS experiments (
@@ -150,7 +153,114 @@ CREATE TABLE IF NOT EXISTS publications_v2 (
     bundle_hash TEXT NOT NULL,
     payload JSON NOT NULL
 );
+CREATE TABLE IF NOT EXISTS data_coverage_v1 (
+    dataset_id TEXT PRIMARY KEY,
+    updated_at TIMESTAMP NOT NULL,
+    payload JSON NOT NULL
+);
+CREATE TABLE IF NOT EXISTS evidence_gaps_v1 (
+    requirement_id TEXT PRIMARY KEY,
+    campaign_id TEXT NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    state TEXT NOT NULL,
+    payload JSON NOT NULL
+);
+CREATE TABLE IF NOT EXISTS acquisition_jobs_v1 (
+    job_id TEXT PRIMARY KEY,
+    priority BIGINT NOT NULL,
+    state TEXT NOT NULL,
+    attempts BIGINT NOT NULL,
+    not_before TIMESTAMP,
+    lease_owner TEXT,
+    lease_expires_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    payload JSON NOT NULL
+);
+CREATE TABLE IF NOT EXISTS research_campaigns_v1 (
+    campaign_id TEXT PRIMARY KEY,
+    manifest_hash TEXT NOT NULL,
+    lifecycle TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    payload JSON NOT NULL
+);
+CREATE TABLE IF NOT EXISTS research_worker_state_v1 (
+    worker_id TEXT PRIMARY KEY,
+    updated_at TIMESTAMP NOT NULL,
+    payload JSON NOT NULL
+);
+CREATE TABLE IF NOT EXISTS shadow_strategies_v1 (
+    strategy_id TEXT PRIMARY KEY,
+    campaign_id TEXT NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    payload JSON NOT NULL
+);
+CREATE TABLE IF NOT EXISTS promoted_sleeves_v2 (
+    sleeve_id TEXT PRIMARY KEY,
+    artifact_hash TEXT NOT NULL,
+    promoted_at TIMESTAMP NOT NULL,
+    payload JSON NOT NULL
+);
+CREATE TABLE IF NOT EXISTS research_proposals_v1 (
+    proposal_id TEXT PRIMARY KEY,
+    manifest_hash TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    payload JSON NOT NULL
+);
+CREATE TABLE IF NOT EXISTS research_proposal_attempts_v1 (
+    attempt_id TEXT PRIMARY KEY,
+    proposal_id TEXT NOT NULL,
+    sequence BIGINT NOT NULL,
+    occurred_at TIMESTAMP NOT NULL,
+    stage TEXT NOT NULL,
+    payload JSON NOT NULL,
+    UNIQUE (proposal_id, sequence)
+);
 """
+
+
+@contextmanager
+def exclusive_path_lock(
+    target: Path,
+    *,
+    timeout_seconds: float = 60.0,
+    stale_seconds: float = 3_600.0,
+) -> Iterator[None]:
+    """Cross-process, re-entrant lock for one catalog database or data file."""
+    resolved = target.resolve()
+    held: set[Path] = getattr(_LOCK_STATE, "held", set())
+    if resolved in held:
+        yield
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = target.with_name(f".{target.name}.lock")
+    deadline = time_module.monotonic() + timeout_seconds
+    descriptor: int | None = None
+    while descriptor is None:
+        try:
+            descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                age = time_module.time() - lock_path.stat().st_mtime
+            except FileNotFoundError:
+                continue
+            if age > stale_seconds:
+                with contextlib.suppress(FileNotFoundError):
+                    lock_path.unlink()
+                continue
+            if time_module.monotonic() >= deadline:
+                raise DataError(f"timed out waiting for catalog lock {lock_path.name}") from None
+            time_module.sleep(0.05)
+    os.write(descriptor, f"{os.getpid()}\n".encode())
+    os.close(descriptor)
+    _LOCK_STATE.held = {*held, resolved}
+    try:
+        yield
+    finally:
+        _LOCK_STATE.held = held
+        with contextlib.suppress(FileNotFoundError):
+            lock_path.unlink()
 
 
 def atomic_write_bytes(path: Path, payload: bytes) -> None:
@@ -237,16 +347,17 @@ class DataCatalog:
     # -- connections ---------------------------------------------------------
 
     def _ensure_schema(self) -> None:
-        with duckdb.connect(str(self.db_path)) as con:
+        with exclusive_path_lock(self.db_path), duckdb.connect(str(self.db_path)) as con:
             con.execute(_DDL)
 
     @contextmanager
     def connect(self) -> Iterator[duckdb.DuckDBPyConnection]:
-        con = duckdb.connect(str(self.db_path))
-        try:
-            yield con
-        finally:
-            con.close()
+        with exclusive_path_lock(self.db_path):
+            con = duckdb.connect(str(self.db_path))
+            try:
+                yield con
+            finally:
+                con.close()
 
     # -- price storage ---------------------------------------------------------
 
@@ -261,20 +372,21 @@ class DataCatalog:
         written: dict[str, int] = {}
         for symbol, group in bars.groupby("symbol", sort=True):
             path = safe_child_path(self.prices_dir, f"{symbol}.parquet")
-            merged = group
-            if path.exists():
-                existing = pd.read_parquet(path)
-                merged = (
-                    pd.concat([existing, group], ignore_index=True)
-                    .drop_duplicates(subset=["symbol", "date"], keep="last")
-                    .sort_values("date")
-                    .reset_index(drop=True)
-                )
-            import io
+            with exclusive_path_lock(path):
+                merged = group
+                if path.exists():
+                    existing = pd.read_parquet(path)
+                    merged = (
+                        pd.concat([existing, group], ignore_index=True)
+                        .drop_duplicates(subset=["symbol", "date"], keep="last")
+                        .sort_values("date")
+                        .reset_index(drop=True)
+                    )
+                import io
 
-            buf = io.BytesIO()
-            merged[list(BAR_COLUMNS)].to_parquet(buf, index=False)
-            atomic_write_bytes(path, buf.getvalue())
+                buf = io.BytesIO()
+                merged[list(BAR_COLUMNS)].to_parquet(buf, index=False)
+                atomic_write_bytes(path, buf.getvalue())
             written[str(symbol)] = len(group)
         log_event(log, 20, "bars written", provider=provider, symbols=len(written))
         return written
@@ -291,19 +403,20 @@ class DataCatalog:
         written: dict[str, int] = {}
         for symbol, group in actions.groupby("symbol", sort=True):
             path = safe_child_path(self.corporate_actions_dir, f"{symbol}.parquet")
-            merged = group
-            if path.exists():
-                merged = (
-                    pd.concat([pd.read_parquet(path), group], ignore_index=True)
-                    .drop_duplicates(["symbol", "date", "action_type"], keep="last")
-                    .sort_values(["date", "action_type"])
-                    .reset_index(drop=True)
-                )
-            import io
+            with exclusive_path_lock(path):
+                merged = group
+                if path.exists():
+                    merged = (
+                        pd.concat([pd.read_parquet(path), group], ignore_index=True)
+                        .drop_duplicates(["symbol", "date", "action_type"], keep="last")
+                        .sort_values(["date", "action_type"])
+                        .reset_index(drop=True)
+                    )
+                import io
 
-            buffer = io.BytesIO()
-            merged.loc[:, list(CORPORATE_ACTION_COLUMNS)].to_parquet(buffer, index=False)
-            atomic_write_bytes(path, buffer.getvalue())
+                buffer = io.BytesIO()
+                merged.loc[:, list(CORPORATE_ACTION_COLUMNS)].to_parquet(buffer, index=False)
+                atomic_write_bytes(path, buffer.getvalue())
             written[str(symbol)] = len(group)
         return written
 
@@ -317,19 +430,22 @@ class DataCatalog:
                 interval_value = int(cast(Any, interval))
                 directory = self.intraday_dir / f"{interval_value}m"
                 path = safe_child_path(directory, f"{symbol}.parquet")
-                merged = interval_group
-                if path.exists():
-                    merged = (
-                        pd.concat([pd.read_parquet(path), interval_group], ignore_index=True)
-                        .drop_duplicates(["symbol", "timestamp", "interval_minutes"], keep="last")
-                        .sort_values("timestamp")
-                        .reset_index(drop=True)
-                    )
-                import io
+                with exclusive_path_lock(path):
+                    merged = interval_group
+                    if path.exists():
+                        merged = (
+                            pd.concat([pd.read_parquet(path), interval_group], ignore_index=True)
+                            .drop_duplicates(
+                                ["symbol", "timestamp", "interval_minutes"], keep="last"
+                            )
+                            .sort_values("timestamp")
+                            .reset_index(drop=True)
+                        )
+                    import io
 
-                buffer = io.BytesIO()
-                merged.loc[:, list(INTRADAY_BAR_COLUMNS)].to_parquet(buffer, index=False)
-                atomic_write_bytes(path, buffer.getvalue())
+                    buffer = io.BytesIO()
+                    merged.loc[:, list(INTRADAY_BAR_COLUMNS)].to_parquet(buffer, index=False)
+                    atomic_write_bytes(path, buffer.getvalue())
                 written[str(symbol)] += len(interval_group)
         return written
 
@@ -341,8 +457,8 @@ class DataCatalog:
         start: datetime | None = None,
         end: datetime | None = None,
     ) -> pd.DataFrame:
-        if interval_minutes not in {15, 60}:
-            raise DataError("intraday interval must be 15 or 60 minutes")
+        if interval_minutes not in {1, 5, 15, 60}:
+            raise DataError("intraday interval must be 1, 5, 15, or 60 minutes")
         path = safe_child_path(
             self.intraday_dir / f"{interval_minutes}m", f"{symbol.upper()}.parquet"
         )

@@ -2,6 +2,7 @@ package com.edgestack.app.domain.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import java.time.LocalDate
 
 /** One daily OHLC bar; [adj] is the dividend/split-adjusted close. */
@@ -35,6 +36,175 @@ data class TrackedPosition(
 
 @Serializable
 data class TrackedPositions(val positions: List<TrackedPosition> = emptyList())
+
+/** Indicative quote returned by the PC gateway or its no-key Yahoo fallback. */
+@Serializable
+data class MarketQuoteV1(
+    val symbol: String,
+    val price: Double,
+    val bid: Double? = null,
+    val ask: Double? = null,
+    @SerialName("previous_close") val previousClose: Double? = null,
+    val change: Double? = null,
+    @SerialName("change_percent") val changePercent: Double? = null,
+    @SerialName("observed_at") val observedAt: String,
+    @SerialName("market_session") val marketSession: String,
+    @SerialName("freshness_status") val freshnessStatus: String,
+    @SerialName("age_seconds") val ageSeconds: Double,
+    @SerialName("stale_after_seconds") val staleAfterSeconds: Double = 120.0,
+    val provider: String,
+    val feed: String,
+    val latency: String,
+    @SerialName("from_cache") val fromCache: Boolean = false,
+    val warnings: List<String> = emptyList(),
+) {
+    fun isAlertEligible(): Boolean =
+        freshnessStatus == "FRESH" && marketSession in setOf("PRE", "REGULAR", "POST")
+
+    fun sourceLabel(): String = "$provider / $feed"
+}
+
+@Serializable
+data class QuoteBatchV1(
+    @SerialName("requested_at") val requestedAt: String,
+    val quotes: List<MarketQuoteV1> = emptyList(),
+    @SerialName("missing_symbols") val missingSymbols: List<String> = emptyList(),
+    @SerialName("providers_attempted") val providersAttempted: List<String> = emptyList(),
+    val note: String = "Indicative quotes only; canonical signals use official closes.",
+)
+
+// --- continuous Edge Factory read-only contracts ---
+
+@Serializable
+data class DataCoverageV1(
+    @SerialName("dataset_id") val datasetId: String,
+    val dataset: String,
+    val provider: String,
+    val feed: String,
+    val symbol: String,
+    val frequency: String,
+    val start: String? = null,
+    val end: String? = null,
+    @SerialName("observation_count") val observationCount: Int = 0,
+    @SerialName("missing_sessions") val missingSessions: Int = 0,
+    @SerialName("quality_status") val qualityStatus: String = "UNKNOWN",
+    @SerialName("point_in_time") val pointInTime: Boolean = false,
+    @SerialName("content_hash") val contentHash: String = "",
+    @SerialName("raw_content_hashes") val rawContentHashes: List<String> = emptyList(),
+    @SerialName("retrieved_at") val retrievedAt: String,
+    @SerialName("quality_results") val qualityResults: Map<String, JsonElement> = emptyMap(),
+    val limitations: List<String> = emptyList(),
+)
+
+@Serializable
+data class EvidenceGapV1(
+    @SerialName("requirement_id") val requirementId: String,
+    @SerialName("campaign_id") val campaignId: String,
+    val dataset: String,
+    val symbols: List<String> = emptyList(),
+    val frequency: String,
+    val start: String,
+    val end: String,
+    @SerialName("required_observations") val requiredObservations: Int,
+    @SerialName("observed_observations") val observedObservations: Int = 0,
+    val state: String,
+    val provider: String? = null,
+    @SerialName("next_action") val nextAction: String,
+    @SerialName("job_id") val jobId: String? = null,
+)
+
+@Serializable
+data class CampaignSummaryV1(
+    @SerialName("campaign_id") val campaignId: String,
+    @SerialName("manifest_hash") val manifestHash: String,
+    val name: String,
+    val family: String,
+    val lifecycle: String,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+    @SerialName("trial_count") val trialCount: Int = 0,
+    @SerialName("completed_trials") val completedTrials: Int = 0,
+    @SerialName("data_requirements") val dataRequirements: List<String> = emptyList(),
+    @SerialName("failure_reasons") val failureReasons: List<String> = emptyList(),
+    @SerialName("next_action") val nextAction: String = "",
+    @SerialName("artifact_hash") val artifactHash: String? = null,
+    @SerialName("promotion_eligible") val promotionEligible: Boolean = false,
+    @SerialName("previously_accessed") val previouslyAccessed: Boolean = true,
+    val metrics: Map<String, JsonElement> = emptyMap(),
+)
+
+@Serializable
+data class WorkerHealthV1(
+    val state: String = "IDLE",
+    val paused: Boolean = false,
+    @SerialName("current_job_id") val currentJobId: String? = null,
+    @SerialName("process_priority") val processPriority: String = "below_normal",
+    @SerialName("max_workers") val maxWorkers: Int = 4,
+    @SerialName("storage_used_gb") val storageUsedGb: Double = 0.0,
+    @SerialName("storage_cap_gb") val storageCapGb: Double = 75.0,
+    @SerialName("heartbeat_at") val heartbeatAt: String? = null,
+    @SerialName("last_error") val lastError: String? = null,
+)
+
+@Serializable
+data class ResearchOverviewV1(
+    @SerialName("generated_at") val generatedAt: String,
+    val worker: WorkerHealthV1 = WorkerHealthV1(),
+    @SerialName("proposal_count") val proposalCount: Int = 0,
+    @SerialName("fresh_proposal_count") val freshProposalCount: Int = 0,
+    @SerialName("campaign_counts") val campaignCounts: Map<String, Int> = emptyMap(),
+    @SerialName("acquisition_job_counts") val acquisitionJobCounts: Map<String, Int> = emptyMap(),
+    @SerialName("coverage_counts") val coverageCounts: Map<String, Int> = emptyMap(),
+    @SerialName("provider_health") val providerHealth: Map<String, String> = emptyMap(),
+    @SerialName("current_campaign") val currentCampaign: CampaignSummaryV1? = null,
+    @SerialName("evidence_gaps") val evidenceGaps: List<EvidenceGapV1> = emptyList(),
+    @SerialName("next_jobs") val nextJobs: List<String> = emptyList(),
+    val blockers: List<String> = emptyList(),
+)
+
+@Serializable
+data class ShadowStrategyV1(
+    @SerialName("strategy_id") val strategyId: String,
+    @SerialName("campaign_id") val campaignId: String,
+    @SerialName("artifact_hash") val artifactHash: String,
+    val status: String,
+    @SerialName("started_at") val startedAt: String,
+    @SerialName("resolved_through") val resolvedThrough: String? = null,
+    val sessions: Int = 0,
+    val trades: Int = 0,
+    @SerialName("effective_resolved_outcomes")
+    val effectiveResolvedOutcomes: Double = 0.0,
+    val equity: Double,
+    @SerialName("net_return") val netReturn: Double = 0.0,
+    @SerialName("benchmark_returns") val benchmarkReturns: Map<String, Double> = emptyMap(),
+    @SerialName("realized_slippage_bps") val realizedSlippageBps: Double? = null,
+    val warnings: List<String> = emptyList(),
+)
+
+@Serializable
+data class GrowthDiagnosticsV1(
+    @SerialName("canonical_run_id") val canonicalRunId: String? = null,
+    @SerialName("as_of") val asOf: String,
+    val action: String,
+    @SerialName("expected_log_growth") val expectedLogGrowth: Double,
+    @SerialName("expected_log_growth_lower_95") val expectedLogGrowthLower95: Double,
+    @SerialName("comparator_log_growth") val comparatorLogGrowth: Map<String, Double> = emptyMap(),
+    @SerialName("quarter_kelly_limit") val quarterKellyLimit: Double,
+    @SerialName("effective_leverage") val effectiveLeverage: Double,
+    @SerialName("constraint_limits") val constraintLimits: Map<String, Double> = emptyMap(),
+    @SerialName("binding_constraints") val bindingConstraints: List<String> = emptyList(),
+    @SerialName("evidence_state") val evidenceState: String,
+    val warnings: List<String> = emptyList(),
+)
+
+@Serializable
+data class ResearchSnapshotV1(
+    val overview: ResearchOverviewV1? = null,
+    val campaigns: List<CampaignSummaryV1> = emptyList(),
+    val coverage: List<DataCoverageV1> = emptyList(),
+    val strategies: List<ShadowStrategyV1> = emptyList(),
+    val growth: GrowthDiagnosticsV1? = null,
+)
 
 // --- paper account (GET /paper on the PC) ---
 @Serializable

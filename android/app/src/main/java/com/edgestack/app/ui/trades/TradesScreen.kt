@@ -30,9 +30,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.edgestack.app.data.remote.YahooChartClient
 import com.edgestack.app.data.repo.PositionsRepository
+import com.edgestack.app.data.repo.QuoteRepository
 import com.edgestack.app.data.repo.SyncRepository
+import com.edgestack.app.domain.model.MarketQuoteV1
 import com.edgestack.app.domain.model.PaperResponse
 import com.edgestack.app.domain.model.TrackedPosition
 import com.edgestack.app.domain.pnlAt
@@ -46,13 +47,13 @@ import kotlinx.coroutines.launch
 class TradesViewModel(
     private val syncRepo: SyncRepository,
     private val positionsRepo: PositionsRepository,
-    private val quotesClient: YahooChartClient,
+    private val quotesClient: QuoteRepository,
 ) : ViewModel() {
     var paper by mutableStateOf<PaperResponse?>(null); private set
     var status by mutableStateOf(""); private set
     var loading by mutableStateOf(false); private set
     var positions by mutableStateOf(positionsRepo.load()); private set
-    var quotes by mutableStateOf<Map<String, Double>>(emptyMap()); private set
+    var quotes by mutableStateOf<Map<String, MarketQuoteV1>>(emptyMap()); private set
     var symbolDraft by mutableStateOf("")
     var quantityDraft by mutableStateOf("")
     var entryPriceDraft by mutableStateOf("")
@@ -191,7 +192,7 @@ private fun PaperSection(vm: TradesViewModel) {
 private fun MyPositionsSection(vm: TradesViewModel) {
     Text("My positions", style = MaterialTheme.typography.titleMedium)
     Text(
-        "Your own tracked entries with delayed/indicative device quotes — " +
+        "Your own tracked entries with indicative server/device quotes — " +
             "not the canonical server view.",
         style = MaterialTheme.typography.bodySmall,
         color = Color.Gray,
@@ -208,7 +209,7 @@ private fun MyPositionsSection(vm: TradesViewModel) {
             singleLine = true,
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.Characters,
-                autoCorrect = false,
+                autoCorrectEnabled = false,
             ),
         )
         OutlinedTextField(
@@ -261,7 +262,8 @@ private fun MyPositionsSection(vm: TradesViewModel) {
         )
     }
     vm.positions.forEach { position ->
-        val pnl = position.pnlAt(vm.quotes[position.symbol])
+        val quote = vm.quotes[position.symbol]
+        val pnl = position.pnlAt(quote?.price)
         Card {
             Row(
                 Modifier.fillMaxWidth().padding(10.dp),
@@ -281,7 +283,7 @@ private fun MyPositionsSection(vm: TradesViewModel) {
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.Gray,
                     )
-                    val last = vm.quotes[position.symbol]
+                    val last = quote?.price
                     if (pnl == null || last == null) {
                         Text("last — • P&L —", style = MaterialTheme.typography.bodySmall)
                     } else {
@@ -291,6 +293,12 @@ private fun MyPositionsSection(vm: TradesViewModel) {
                                 "(${"%+.2f".format(pnl.profitPercent)}%)",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (pnl.profit >= 0) Accent else AccentRed,
+                        )
+                        Text(
+                            "${quote.sourceLabel()} • ${quote.freshnessStatus.lowercase()} • " +
+                                "age ${quote.ageSeconds.toInt()}s",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (quote.isAlertEligible()) Color.Gray else AccentRed,
                         )
                         position.stop?.takeIf { last <= it }?.let {
                             Text(

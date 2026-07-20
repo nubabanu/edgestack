@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 from datetime import UTC, date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -83,6 +83,7 @@ class SleeveContributionV2(V2Model):
     expected_return_lower_95: float
     effective_sample_size: float = Field(ge=0)
     evidence_grade: EvidenceGrade
+    signal_parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 class WatchlistEntryV2(V2Model):
