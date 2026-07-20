@@ -51,7 +51,7 @@ DASHBOARD_PATH = ROOT / "artifacts" / "tranche_status.html"
 LOG_PATH = ROOT / "logs" / "tranche_watch.log"
 TOAST_SCRIPT = ROOT / "scripts" / "notify_toast.ps1"
 
-SYMBOLS = ("ACN", "CTSH", "EPAM")
+SYMBOLS = ("ACN", "CTSH", "EPAM", "SPY")  # SPY: calm+dip entries for the core
 BASKET = ("ACN", "CTSH", "EPAM", "DXC", "IBM", "IT")
 STALE_AFTER_DAYS = 5
 EARNINGS_BLACKOUT_DAYS = 3
@@ -171,7 +171,18 @@ def evaluate(symbol: str, df: pd.DataFrame, basket: pd.Series, earnings: str | N
     rz = rel_zscore(df["adj_close"], basket)
 
     down3 = (ret < 0) & (ret.shift() < 0) & (ret.shift(2) < 0)
-    if symbol == "ACN":
+    if symbol == "SPY":
+        # validated index rule: any of RSI2<10 / 3 down days / weak close,
+        # but only inside the calm regime (>200DMA, vol<30%) — the entry
+        # with the best compound growth in the whole research program.
+        in_calm = bool(c.iloc[-1] > s200.iloc[-1]) and bool(vol20.iloc[-1] < 0.30)
+        dip_now = bool(r2.iloc[-1] < 10) or bool(down3.iloc[-1]) or bool(ibs.iloc[-1] < 0.2)
+        t1 = in_calm and dip_now
+        t1_detail = (
+            f"calm={in_calm} RSI2={r2.iloc[-1]:.0f} down3={bool(down3.iloc[-1])} "
+            f"IBS={ibs.iloc[-1]:.2f} (calm AND any-dip fires)"
+        )
+    elif symbol == "ACN":
         t1 = bool(r2.iloc[-1] < 10)
         t1_detail = f"RSI2={r2.iloc[-1]:.0f} (<10 fires)"
     else:
@@ -199,6 +210,10 @@ def evaluate(symbol: str, df: pd.DataFrame, basket: pd.Series, earnings: str | N
         t2_detail += " [CAUTION: 61% historical whipsaw rate in this regime]"
 
     t3 = bool((c > s200).iloc[-1])
+    if symbol == "SPY":
+        # For the index, above-200DMA is the steady state; alert only on the
+        # actual reclaim cross (for the crashed names, "still above" is news).
+        t3 = t3 and not bool((c > s200).iloc[-2])
     t3_detail = (
         f"close={c.iloc[-1]:.2f} SMA200={s200.iloc[-1]:.2f} ({c.iloc[-1] / s200.iloc[-1] - 1:+.1%})"
     )
@@ -444,7 +459,7 @@ def main() -> int:
     )
     for symbol in SYMBOLS:
         df = load(symbol)
-        earnings = next_earnings(symbol, today)
+        earnings = None if symbol == "SPY" else next_earnings(symbol, today)  # ETFs don't report
         status = evaluate(symbol, df, basket, earnings)
         age = (today - date.fromisoformat(status["as_of"])).days
         if age > STALE_AFTER_DAYS:
@@ -469,7 +484,9 @@ def main() -> int:
         status["window_open"] = window_open
 
         session_no = len(df)
-        for trig in ("T1", "T2", "T3", "REL"):
+        # REL is relative strength vs the IT-services basket — meaningless for SPY
+        trigs = ("T1", "T2", "T3") if symbol == "SPY" else ("T1", "T2", "T3", "REL")
+        for trig in trigs:
             info = status[trig]
             flag = "FIRED" if info["fired"] else "-"
             lines.append(f"{symbol} {trig:<4} {flag:<5} {info['detail']}")

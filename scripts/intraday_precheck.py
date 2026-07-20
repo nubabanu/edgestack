@@ -40,7 +40,7 @@ def fetch_daily_with_today(symbol: str) -> pd.DataFrame:
     """Recent daily bars; during the session the last row is today's partial."""
     resp = requests.get(
         f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
-        params={"range": "6mo", "interval": "1d", "includePrePost": "false"},
+        params={"range": "1y", "interval": "1d", "includePrePost": "false"},
         headers=UA,
         timeout=20,
     )
@@ -78,6 +78,11 @@ def provisional_t1(symbol: str, df: pd.DataFrame) -> tuple[bool, str]:
     rets = c.pct_change()
     down3 = bool((rets.iloc[-3:] < 0).all())
     r2 = rsi2(c)
+    if symbol == "SPY":
+        calm = bool(len(c) >= 200 and c.iloc[-1] > c.rolling(200).mean().iloc[-1])
+        calm = calm and float(rets.rolling(20).std().iloc[-1]) * (252**0.5) < 0.30
+        dip = r2 < 10 or down3 or ibs < 0.2
+        return calm and dip, f"calm={calm} RSI2={r2:.0f} down3={down3} IBS={ibs:.2f}"
     if symbol == "ACN":
         return r2 < 10, f"RSI2={r2:.0f} (<10 fires)"
     return down3 or ibs < 0.2, f"down3={down3} IBS={ibs:.2f} (<0.2 fires)"
