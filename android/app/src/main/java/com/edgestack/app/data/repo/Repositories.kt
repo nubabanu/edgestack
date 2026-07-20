@@ -20,7 +20,9 @@ import com.edgestack.app.domain.model.PatternLeaderBoardV2
 import com.edgestack.app.domain.model.PatternLeaderRequestV2
 import com.edgestack.app.domain.model.PaperResponse
 import com.edgestack.app.domain.model.PortfolioRecommendationV2
+import com.edgestack.app.domain.model.QuoteBatchV1
 import com.edgestack.app.domain.model.RecommendationPreviewRequestV2
+import com.edgestack.app.domain.model.ResearchSnapshotV1
 import com.edgestack.app.domain.model.SniperPlanV2
 import com.edgestack.app.domain.model.SniperPreviewRequestV2
 import com.edgestack.app.domain.model.TrackedPosition
@@ -147,6 +149,16 @@ class EdgesRepository(private val store: JsonFileStore) {
         store.write("edges_monitoring.json", JsonObject.serializer(), payload)
 }
 
+/** Server-owned Edge Factory snapshot cached as one atomic offline document. */
+class ResearchRepository(private val store: JsonFileStore) {
+    fun load(): ResearchSnapshotV1 =
+        store.read("research_snapshot.json", ResearchSnapshotV1.serializer())
+            ?: ResearchSnapshotV1()
+
+    fun save(snapshot: ResearchSnapshotV1) =
+        store.write("research_snapshot.json", ResearchSnapshotV1.serializer(), snapshot)
+}
+
 /** Last server-evaluated sniper plan. Offline mode displays it without recalculating signals. */
 class SniperRepository(private val store: JsonFileStore) {
     fun load(): SniperPlanV2? =
@@ -163,6 +175,7 @@ class SyncRepository(
     private val oilRepo: OilDecisionRepository,
     private val sniperRepo: SniperRepository,
     private val edgesRepo: EdgesRepository,
+    private val researchRepo: ResearchRepository,
     private val http: OkHttpClient,
 ) {
     private suspend fun api(): EdgeStackApi? {
@@ -177,6 +190,13 @@ class SyncRepository(
 
     suspend fun paper(): Result<PaperResponse> = apiCatching {
         (api() ?: error("no server URL configured")).paper()
+    }
+
+    suspend fun marketQuotes(symbols: List<String>): Result<QuoteBatchV1> = apiCatching {
+        require(symbols.isNotEmpty()) { "at least one quote symbol is required" }
+        (api() ?: error("no server URL configured")).marketQuotes(
+            symbols.map { it.trim().uppercase() }.distinct().joinToString(","),
+        )
     }
 
     suspend fun testConnection(): Result<String> = apiCatching {
@@ -269,6 +289,17 @@ class SyncRepository(
         api.monitoringEdges().also(edgesRepo::saveMonitoring)
     }
 
+    suspend fun research(): Result<ResearchSnapshotV1> = apiCatching {
+        val api = api() ?: error("no server URL configured")
+        ResearchSnapshotV1(
+            overview = api.researchOverview(),
+            campaigns = api.researchCampaigns(),
+            coverage = api.dataCoverage(),
+            strategies = api.paperStrategies(),
+            growth = api.growthDiagnostics(),
+        ).also(researchRepo::save)
+    }
+
     suspend fun edgeDetail(id: String): Result<JsonObject> = apiCatching {
         (api() ?: error("server required for details")).edgeDetail(id)
     }
@@ -317,6 +348,15 @@ class SyncRepository(
         runCatching { api.latestSniper() }.onSuccess(sniperRepo::save)
         runCatching { api.edges() }.onSuccess(edgesRepo::saveCatalog)
         runCatching { api.monitoringEdges() }.onSuccess(edgesRepo::saveMonitoring)
+        runCatching {
+            ResearchSnapshotV1(
+                overview = api.researchOverview(),
+                campaigns = api.researchCampaigns(),
+                coverage = api.dataCoverage(),
+                strategies = api.paperStrategies(),
+                growth = api.growthDiagnostics(),
+            )
+        }.onSuccess(researchRepo::save)
         val previewResult = preview()
         val preview = previewResult.getOrElse {
             recommendationRepo.clearPreview()

@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
                         container.recommendationRepo,
                         container.syncRepo,
                         container.settings,
-                        container.quotes,
+                        container.yahoo,
                     ) as T
                 TradesViewModel::class.java ->
                     TradesViewModel(
@@ -90,7 +90,11 @@ class MainActivity : ComponentActivity() {
                 SniperViewModel::class.java ->
                     SniperViewModel(container.sniperRepo, container.syncRepo) as T
                 EdgesViewModel::class.java ->
-                    EdgesViewModel(container.edgesRepo, container.syncRepo) as T
+                    EdgesViewModel(
+                        container.edgesRepo,
+                        container.researchRepo,
+                        container.syncRepo,
+                    ) as T
                 SettingsViewModel::class.java ->
                     SettingsViewModel(container.settings, container.syncRepo) as T
                 else -> throw IllegalArgumentException("unknown $modelClass")
@@ -102,7 +106,7 @@ class MainActivity : ComponentActivity() {
                 var tab by remember { mutableIntStateOf(0) }
                 val tabs = listOf(
                     "Portfolio", "Calendar", "Risk", "Analyze",
-                    "Sniper", "Edges", "Trades", "Settings",
+                    "Sniper", "Edge Lab", "Trades", "Settings",
                 )
                 Scaffold(
                     bottomBar = { DisclaimerFooter() },

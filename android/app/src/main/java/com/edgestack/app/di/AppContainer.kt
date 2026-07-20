@@ -11,7 +11,9 @@ import com.edgestack.app.data.repo.EdgesRepository
 import com.edgestack.app.data.repo.InstrumentAnalysisRepository
 import com.edgestack.app.data.repo.OilDecisionRepository
 import com.edgestack.app.data.repo.PositionsRepository
+import com.edgestack.app.data.repo.QuoteRepository
 import com.edgestack.app.data.repo.RecommendationRepository
+import com.edgestack.app.data.repo.ResearchRepository
 import com.edgestack.app.data.repo.SniperRepository
 import com.edgestack.app.data.repo.SyncRepository
 import okhttp3.OkHttpClient
@@ -34,10 +36,19 @@ class AppContainer(context: Context) {
     val oilRepo = OilDecisionRepository(fileStore)
     val sniperRepo = SniperRepository(fileStore)
     val edgesRepo = EdgesRepository(fileStore)
+    val researchRepo = ResearchRepository(fileStore)
     val positionsRepo = PositionsRepository(fileStore)
-    val quotes = YahooChartClient(http)
     val calendarRepo = CalendarRepository(seed)
     val syncRepo = SyncRepository(
-        settings, recommendationRepo, instrumentRepo, oilRepo, sniperRepo, edgesRepo, http,
+        settings,
+        recommendationRepo,
+        instrumentRepo,
+        oilRepo,
+        sniperRepo,
+        edgesRepo,
+        researchRepo,
+        http,
     )
+    val yahoo = YahooChartClient(http)
+    val quotes = QuoteRepository(syncRepo, yahoo)
 }

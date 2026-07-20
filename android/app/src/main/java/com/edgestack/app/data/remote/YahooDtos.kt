@@ -25,7 +25,10 @@ data class YahooResult(
 data class YahooMeta(
     val symbol: String,
     val regularMarketPrice: Double? = null,
+    val regularMarketTime: Long? = null,
     val previousClose: Double? = null,
+    val chartPreviousClose: Double? = null,
+    val marketState: String? = null,
     val exchangeTimezoneName: String = "America/New_York",
 )
 

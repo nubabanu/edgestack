@@ -1,0 +1,109 @@
+schema_version: 1
+campaign_id: earnings-seasonal-sue-mutation-2011-2022-v1
+created_at: "2026-07-20T21:19:00Z"
+name: "Globally charged seasonal-SUE filing mutation"
+family: earnings_filing_drift
+previously_accessed: true
+promotion_eligible: false
+promotion_blockers:
+  - "This mutation was registered after inspecting the parent filing campaign and is charged to the same global family."
+  - "The static surviving-stock universe and 2011-2022 price interval were previously accessed."
+  - "The curated SEC event snapshot is not an immutable historical EDGAR vintage archive."
+  - "This is the final permitted mutation on this historical interval; only a fresh prospective period may follow."
+
+research_start: "2011-01-03"
+research_end: "2022-12-30"
+final_holdout_start: "2023-01-01"
+symbols:
+  - AAPL
+  - ACN
+  - ADBE
+  - AMD
+  - AMZN
+  - BA
+  - BAC
+  - CAT
+  - COP
+  - COST
+  - CRM
+  - CSCO
+  - CTSH
+  - CVX
+  - DE
+  - DIS
+  - DXC
+  - EPAM
+  - FDX
+  - GE
+  - GOOGL
+  - GS
+  - HD
+  - HON
+  - IBM
+  - INTC
+  - IT
+  - JNJ
+  - JPM
+  - KO
+  - LLY
+  - LOW
+  - MA
+  - MCD
+  - META
+  - MRK
+  - MSFT
+  - NFLX
+  - NKE
+  - NVDA
+  - ORCL
+  - PEP
+  - PFE
+  - PG
+  - QCOM
+  - SBUX
+  - T
+  - TGT
+  - TXN
+  - UNH
+  - UPS
+  - V
+  - VZ
+  - WFC
+  - WMT
+  - XOM
+benchmark_symbol: SPY
+diversified_baseline_symbols: [SPY, TLT, SHY, GLD]
+
+feature_definition:
+  method: seasonal_random_walk_sue
+  event: "SEC 8-K item 2.02 acceptance timestamp with first-filed diluted EPS joined to its fiscal period end."
+  surprise: "Seasonal EPS difference versus q-4 divided by the standard deviation of the prior eight seasonal differences (minimum six); fiscal gaps must be 330-400 days."
+  availability: "First XNYS regular-session open strictly after accepted_at; no close-date approximation."
+  pre_event_momentum: "Adjusted-close return over 126 sessions ending before the executable open."
+parameter_grid:
+  minimum_eps_change: [0.0, 0.5, 1.0]
+  require_positive_pre_event_momentum: [false, true]
+  horizon_sessions: [5, 21, 63]
+
+portfolio_definition:
+  weighting: "Equal weight every active eligible issuer; gross exposure capped at 1.0 and unused weight earns cash yield."
+  overlap: "Repeated events for one issuer form one binary position; positions remain active for the frozen horizon."
+  leverage: 1.0
+
+base_roundtrip_cost_bps: 20.0
+stress_roundtrip_cost_bps: 50.0
+cash_yield_series: DGS3MO
+financing_spread_bps: 200.0
+validation_folds: 5
+bootstrap_samples: 2000
+bootstrap_block_sessions: 20
+fdr_alpha: 0.05
+minimum_positive_folds: 4
+minimum_deflated_sharpe_probability: 0.95
+maximum_drawdown: 0.25
+seed: 1618033
+required_growth_comparators:
+  - buy_now_spy
+  - risk_matched_spy
+  - diversified_baseline
+  - financed_spy_same_risk

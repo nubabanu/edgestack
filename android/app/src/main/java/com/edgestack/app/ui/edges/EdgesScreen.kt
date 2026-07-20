@@ -17,6 +17,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,9 +32,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.edgestack.app.data.repo.EdgesRepository
+import com.edgestack.app.data.repo.ResearchRepository
 import com.edgestack.app.data.repo.SyncRepository
 import com.edgestack.app.domain.model.BacktestRunV2
 import com.edgestack.app.domain.model.EdgeSummaryV2
+import com.edgestack.app.domain.model.ResearchSnapshotV1
 import com.edgestack.app.ui.components.Refreshable
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
@@ -42,10 +45,12 @@ import kotlinx.serialization.json.JsonPrimitive
 
 class EdgesViewModel(
     repository: EdgesRepository,
+    researchRepository: ResearchRepository,
     private val syncRepository: SyncRepository,
 ) : ViewModel() {
     var edges by mutableStateOf(repository.loadCatalog()); private set
     var monitoring by mutableStateOf(repository.loadMonitoring()); private set
+    var research by mutableStateOf(researchRepository.load()); private set
     var backtests by mutableStateOf<List<BacktestRunV2>>(emptyList()); private set
     var message by mutableStateOf(""); private set
     var loading by mutableStateOf(false); private set
@@ -83,17 +88,28 @@ class EdgesViewModel(
         loading = true
         message = ""
         viewModelScope.launch {
+            val updates = mutableListOf<String>()
+            syncRepository.research().fold(
+                onSuccess = {
+                    research = it
+                    updates += "Edge Factory updated"
+                },
+                onFailure = {
+                    updates += "factory offline (${it.message})"
+                },
+            )
             syncRepository.edges().fold(
                 onSuccess = {
                     edges = it
-                    message = "Loaded ${it.size} edges from the server."
+                    updates += "${it.size} catalog edges"
                 },
                 onFailure = {
-                    message = "Offline: ${it.message}. Showing the last cached catalog."
+                    updates += "catalog offline (${it.message})"
                 },
             )
             syncRepository.monitoringEdges().onSuccess { monitoring = it }
             syncRepository.backtests().onSuccess { backtests = it }
+            message = updates.joinToString(" • ") + ". Cached results remain available offline."
             loading = false
         }
     }
@@ -141,10 +157,11 @@ private fun EdgesList(vm: EdgesViewModel) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
-            Text("Edge catalog", style = MaterialTheme.typography.titleLarge)
+            Text("Edge Lab", style = MaterialTheme.typography.titleLarge)
             Text(
-                "Validated edges with lifecycle status, monitoring health, and backtest runs. " +
-                    "Statistics are historical evidence, not forecasts.",
+                "Server-owned acquisition, bounded research, shadow paper books, and canonical " +
+                    "growth diagnostics. The device displays and caches results; it never " +
+                    "computes signals or submits orders.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray,
             )
@@ -155,6 +172,145 @@ private fun EdgesList(vm: EdgesViewModel) {
                 Text(vm.message, style = MaterialTheme.typography.labelSmall)
             }
         }
+        vm.research.growth?.let { growth ->
+            item {
+                Card {
+                    Column(
+                        Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text("Canonical action: ${growth.action}", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Evidence ${growth.evidenceState} • leverage " +
+                                "${"%.2f".format(growth.effectiveLeverage)}x • quarter-Kelly " +
+                                "${"%.2f".format(growth.quarterKellyLimit)}x",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Expected log growth ${"%+.2f%%".format(growth.expectedLogGrowth * 100)} " +
+                                "(lower 95% ${"%+.2f%%".format(growth.expectedLogGrowthLower95 * 100)})",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Binding: ${growth.bindingConstraints.joinToString().ifBlank { "none" }}",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        growth.comparatorLogGrowth.toList().sortedBy { it.first }.forEach {
+                            Text(
+                                "vs ${it.first}: ${"%+.2f%%".format(it.second * 100)} log growth",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        growth.constraintLimits.toList().sortedBy { it.second }.forEach {
+                            Text("${it.first}: ${"%.2f".format(it.second)}x", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+        }
+        vm.research.overview?.let { overview ->
+            item {
+                val worker = overview.worker
+                Card {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("Worker ${worker.state}", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "${worker.maxWorkers} workers • ${worker.processPriority} priority • " +
+                                "${"%.2f".format(worker.storageUsedGb)} / " +
+                                "${"%.0f".format(worker.storageCapGb)} GB",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        LinearProgressIndicator(
+                            progress = {
+                                (worker.storageUsedGb / worker.storageCapGb).coerceIn(0.0, 1.0).toFloat()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            "Queue: ${overview.acquisitionJobCounts.entries.joinToString { "${it.key} ${it.value}" }}",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Text(
+                            "Registered proposals: ${overview.proposalCount} • fresh/blind: " +
+                                "${overview.freshProposalCount}",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        overview.providerHealth.forEach {
+                            Text("${it.key}: ${it.value}", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+        }
+        if (vm.research.campaigns.isNotEmpty()) {
+            item { Text("Campaign funnel", style = MaterialTheme.typography.titleMedium) }
+            items(vm.research.campaigns) { campaign ->
+                Card {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(campaign.name, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "${campaign.lifecycle} • ${campaign.completedTrials}/${campaign.trialCount} trials",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(campaign.nextAction, style = MaterialTheme.typography.labelSmall)
+                        campaign.failureReasons.take(2).forEach {
+                            Text("Deficit: $it", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        }
+                        campaign.metrics.entries.sortedBy { it.key }.take(8).forEach {
+                            Text(
+                                "${it.key.replace('_', ' ')}: ${render(it.value)}",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        val openGaps = vm.research.overview?.evidenceGaps.orEmpty()
+            .filterNot { it.state == "READY" }
+        if (openGaps.isNotEmpty()) {
+            item { Text("Acquisition progress", style = MaterialTheme.typography.titleMedium) }
+            items(openGaps.take(20)) { gap ->
+                Card {
+                    Column(Modifier.padding(10.dp)) {
+                        Text("${gap.dataset} ${gap.frequency} • ${gap.state}")
+                        Text(
+                            "${gap.observedObservations}/${gap.requiredObservations} minimum observations • " +
+                                "${gap.symbols.size} symbols • ${gap.provider ?: "no free provider"}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        val progress = if (gap.requiredObservations > 0) {
+                            gap.observedObservations.toFloat() / gap.requiredObservations
+                        } else 0f
+                        LinearProgressIndicator(
+                            progress = { progress.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(gap.nextAction, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+        if (vm.research.strategies.isNotEmpty()) {
+            item { Text("Independent paper shadows", style = MaterialTheme.typography.titleMedium) }
+            items(vm.research.strategies) { shadow ->
+                Card {
+                    Column(Modifier.padding(10.dp)) {
+                        Text(shadow.strategyId, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "${shadow.status} • ${shadow.sessions} sessions • ${shadow.trades} trades • " +
+                                "${"%.1f".format(shadow.effectiveResolvedOutcomes)} resolved • " +
+                                "net ${"%+.2f%%".format(shadow.netReturn * 100)}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        shadow.benchmarkReturns.forEach {
+                            Text("vs ${it.key}: ${"%+.2f%%".format(it.value * 100)}", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+        }
+        item { Text("Validated edge catalog", style = MaterialTheme.typography.titleMedium) }
         if (vm.edges.isEmpty()) {
             item {
                 Text(

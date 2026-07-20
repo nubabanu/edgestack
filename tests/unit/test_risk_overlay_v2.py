@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -193,6 +194,18 @@ def test_leverage_increases_by_quarter_per_session_and_reduces_immediately() -> 
     assert repeated.effective_leverage == 0.25
     assert second.effective_leverage == 0.50
     assert reduced.effective_leverage == 0.10
+
+
+def test_quarter_kelly_is_an_independent_binding_leverage_constraint() -> None:
+    recommendation = size_recommendation(
+        base=_base(),
+        profile=RiskProfileV2(maximum_gross_leverage=5.0),
+        state=_state(),
+        inputs=replace(_inputs(), quarter_kelly_leverage_limit=0.40),
+    )
+
+    assert recommendation.effective_leverage == 0.40
+    assert recommendation.binding_constraints == ("quarter_kelly",)
 
 
 def test_stale_data_preserves_or_reduces_prior_positions_and_cannot_add_names() -> None:

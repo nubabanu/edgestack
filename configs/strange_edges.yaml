@@ -1,0 +1,140 @@
+schema_version: 1
+campaign_id: strange-edges-20260720-v1
+created_at: "2026-07-20T00:00:00Z"
+source_sha256: 142f20b7a69761f65084fbb07c1137ad2bcdf3658ae5090f557be576557f00ed
+source_description: "User-supplied Strange edges worth testing brief"
+trial_cap: 1500
+final_holdout_start: "2023-01-01"
+
+# This campaign is deliberately research-only. USAspending's current API is a
+# revised snapshot rather than an ALFRED-like historical vintage archive, and
+# the first entity map below is hand curated. Passing results may start a
+# prospective shadow, but can never promote from this historical run.
+promotion_eligible: false
+promotion_blockers:
+  - "USAspending historical publication vintages are not available in the current input."
+  - "Recipient-to-listed-parent mappings require independent point-in-time verification."
+  - "A fresh prospective shadow period is mandatory."
+
+hypotheses:
+  - id: government_contract_surprise
+    family: procurement
+    status: READY_EXPLORATORY
+    dataset: usaspending_monthly_contract_obligations
+    reason: "Public API and local adjusted daily prices are available."
+  - id: labor_peer_information_propagation
+    family: labor_graph
+    status: BLOCKED_LICENSE
+    dataset: point_in_time_historical_job_postings
+    reason: "No compliant, point-in-time historical postings dataset is available locally."
+  - id: open_source_blast_radius
+    family: software_ecosystem
+    status: BLOCKED_POINT_IN_TIME
+    dataset: github_release_adoption_and_revenue_dependency_graph
+    reason: "Current download counts are cumulative; historical adoption vintages and segment revenue mappings are missing."
+  - id: resume_polishing_velocity
+    family: labor_internal
+    status: BLOCKED_COMPLIANCE
+    dataset: licensed_aggregate_profile_revision_history
+    reason: "No licensed aggregate revision history is supplied; scraping is prohibited."
+  - id: app_demand_monetization_mismatch
+    family: app_demand
+    status: BLOCKED_LICENSE
+    dataset: point_in_time_app_downloads_reviews_and_revenue
+    reason: "Reliable historical download and revenue estimates are commercial and absent."
+  - id: corporate_jet_route_topology
+    family: corporate_travel
+    status: BLOCKED_POINT_IN_TIME
+    dataset: historical_flight_tracks_and_point_in_time_aircraft_ownership
+    reason: "Historical flight tracks and unobfuscated point-in-time ownership mappings are absent."
+  - id: analyst_cfo_disagreement
+    family: earnings_language
+    status: NEEDS_DATA
+    dataset: timestamped_speaker_attributed_earnings_call_transcripts
+    reason: "SEC filings do not supply complete speaker-attributed call transcripts."
+  - id: bond_to_equity_lag
+    family: credit_equity
+    status: BLOCKED_LICENSE
+    dataset: trace_historical_transaction_level_bond_trades
+    reason: "The required transaction history and bond-to-issuer map are not supplied under an applicable agreement."
+  - id: patent_originality_commercialization
+    family: innovation
+    status: BLOCKED_COMBINATION_INPUT
+    dataset: point_in_time_patents_plus_historical_hiring
+    reason: "Patent data is public, but the pre-registered interaction requires unavailable historical hiring data."
+
+combinations:
+  - id: internal_stress_triangle
+    components: [resume_polishing_velocity, front_loaded_job_postings, analyst_cfo_disagreement]
+    status: BLOCKED_COMPONENTS
+  - id: open_source_predator
+    components: [open_source_blast_radius, developer_adoption, revenue_dependency, analyst_coverage]
+    status: BLOCKED_COMPONENTS
+  - id: procurement_implementation
+    components: [government_contract_surprise, contract_specific_hiring, facility_supplier_activity]
+    status: BLOCKED_COMPONENTS
+  - id: app_quality_divergence
+    components: [app_downloads, app_ratings, app_revenue]
+    status: BLOCKED_COMPONENTS
+  - id: credit_labor_divergence
+    components: [bond_to_equity_lag, resume_polishing_velocity, aggressive_job_postings]
+    status: BLOCKED_COMPONENTS
+
+government_contract_study:
+  acquisition_start: "2011-01-01"
+  acquisition_end: "2022-12-31"
+  evaluation_start: "2014-01-01"
+  award_type_codes: [A, B, C, D]
+  symbols:
+    LMT: ["LOCKHEED MARTIN"]
+    NOC: ["NORTHROP GRUMMAN"]
+    RTX: ["RAYTHEON"]
+    GD: ["GENERAL DYNAMICS"]
+    BA: ["BOEING"]
+    HII: ["HUNTINGTON INGALLS"]
+    LHX: ["L3HARRIS"]
+    LDOS: ["LEIDOS"]
+    TXT: ["TEXTRON"]
+    HON: ["HONEYWELL"]
+  feature_methods: [seasonal_mad, trailing_mad, yoy_log_change]
+  availability_lag_days: [30, 45, 60]
+  horizons: [5, 21, 63]
+  selection_quantiles: [0.20, 0.30]
+  neutralizations: [raw, size_beta_momentum]
+  feature_definitions:
+    seasonal_mad: "signed_log(actual) minus expanding prior same-calendar-month median, scaled by 1.4826 MAD; at least 3 prior years"
+    trailing_mad: "signed_log(actual) minus prior-24-month median, scaled by 1.4826 MAD; exactly past data only"
+    yoy_log_change: "signed_log(actual) minus its 12-month lag"
+  neutralization_definition: "Cross-sectional ridge residual of score on PIT log 60-session median dollar volume, 252-session beta to SPY, and 126-session momentum."
+  neutralization_ridge_alpha: 10.0
+  selection_definition: "Equal-weight the highest-score ceil(q*N) available companies at each monthly signal; no short leg."
+  overlapping_cohorts: "Average active equal-weight cohorts and cap gross exposure at 1.0."
+  return_definition: "Adjusted open-to-open total return; signal after conservative availability lag, entry next session open, exit after the registered horizon."
+  cost_definition: "Half the registered round-trip cost times daily L1 change in risky-asset weights; cash earns DGS3MO/252 while idle."
+  cash_yield_series: DGS3MO
+  comparators: [buy_now_spy, risk_matched_spy, diversified_baseline, financed_spy_same_risk]
+  diversified_baseline_symbols: [SPY, TLT, SHY, GLD]
+  execution_delay_sessions: 1
+  base_roundtrip_cost_bps: 20.0
+  stress_roundtrip_cost_bps: 50.0
+  minimum_months_history: 24
+  minimum_cross_section: 5
+  validation_folds: 5
+  embargo_sessions: 63
+  bootstrap_samples: 2000
+  bootstrap_block_sessions: 20
+  fdr_alpha: 0.05
+  seeds: [42, 314159, 271828]
+  placebos: [company_shuffle, timestamp_shift_one_month, random_portfolio]
+  required_gates:
+    - complete_trial_accounting
+    - positive_net_calendar_growth_lower_bound
+    - positive_benchmark_relative_lower_bound
+    - fdr_q_value_at_most_0_05
+    - spa_p_consistent_at_most_0_05
+    - stepm_superior
+    - five_walk_forward_folds
+    - fold_sign_consistency_at_least_0_60
+    - survives_stress_cost
+    - beats_placebos
+    - prospective_shadow_required

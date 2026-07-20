@@ -21,6 +21,8 @@ from edgestack.api.sniper_contracts import SniperPreviewRequestV2
 from edgestack.config import EdgeStackConfig
 from edgestack.data.calendar import TradingCalendar
 from edgestack.data.catalog import DataCatalog
+from edgestack.data.live_quotes import ProviderHealthReport, QuoteBatch
+from edgestack.data.quote_service import LiveQuoteService, build_live_quote_service
 from edgestack.discovery.edge_store import current_statuses, load_edges
 from edgestack.exceptions import DataError, EdgeStackError
 from edgestack.recommendation.compatibility import (
@@ -49,12 +51,23 @@ from edgestack.recommendation.service import (
 from edgestack.recommendation.sniper import build_sniper_plan
 from edgestack.recommendation.sniper_schemas import SniperPlanV2
 from edgestack.recommendation.trade_calendar import compare_recheck
+from edgestack.research.schemas import (
+    CampaignSummaryV1,
+    CandidateProposalV1,
+    DataCoverageV1,
+    GrowthDiagnosticsV1,
+    ProposalAttemptV1,
+    ProposalAuditV1,
+    ResearchOverviewV1,
+    ShadowStrategyV1,
+)
+from edgestack.research.service import ResearchQueryService
 from edgestack.types import EdgeStatus
 
 DISCLAIMER = "Research output only. Not investment advice."
 
 
-def create_app(cfg: EdgeStackConfig):
+def create_app(cfg: EdgeStackConfig, *, quote_service: LiveQuoteService | None = None):
     try:
         from fastapi import FastAPI, HTTPException
     except ImportError as exc:  # pragma: no cover - depends on extras
@@ -67,6 +80,8 @@ def create_app(cfg: EdgeStackConfig):
     recommendations = CanonicalRecommendationService(
         CanonicalBundleRepository(catalog.artifacts_dir)
     )
+    live_quotes = quote_service or build_live_quote_service()
+    research = ResearchQueryService(catalog)
 
     def _canonical() -> CanonicalRecommendationBundleV2:
         try:
@@ -94,6 +109,87 @@ def create_app(cfg: EdgeStackConfig):
     @app.get("/version")
     def version() -> dict:
         return {"version": __version__, "config_hash": cfg.config_hash(), "disclaimer": DISCLAIMER}
+
+    @app.get("/market/quotes", response_model=QuoteBatch)
+    def market_quotes(symbols: str) -> QuoteBatch:
+        """Return indicative snapshots; these never enter canonical research or fills."""
+        try:
+            result = live_quotes.fetch(symbols)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if not result.quotes:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "message": "no live quotes are currently available",
+                    "missing_symbols": list(result.missing_symbols),
+                    "providers_attempted": list(result.providers_attempted),
+                },
+            )
+        return result
+
+    @app.get("/market/providers/health", response_model=ProviderHealthReport)
+    def market_provider_health() -> ProviderHealthReport:
+        """Expose sanitized runtime provider state without credentials."""
+        return live_quotes.health()
+
+    @app.get("/research/overview", response_model=ResearchOverviewV1)
+    def research_overview() -> ResearchOverviewV1:
+        return research.overview()
+
+    @app.get("/research/campaigns", response_model=list[CampaignSummaryV1])
+    def research_campaigns() -> tuple[CampaignSummaryV1, ...]:
+        return research.campaigns()
+
+    @app.get("/research/campaigns/{campaign_id}", response_model=CampaignSummaryV1)
+    def research_campaign(campaign_id: str) -> CampaignSummaryV1:
+        try:
+            return research.campaign(campaign_id)
+        except DataError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/data/coverage", response_model=list[DataCoverageV1])
+    def data_coverage() -> tuple[DataCoverageV1, ...]:
+        return research.coverage()
+
+    @app.get("/research/proposals", response_model=list[CandidateProposalV1])
+    def research_proposals() -> tuple[CandidateProposalV1, ...]:
+        return research.proposals()
+
+    @app.get("/research/proposals/{proposal_id}", response_model=CandidateProposalV1)
+    def research_proposal(proposal_id: str) -> CandidateProposalV1:
+        try:
+            return research.proposal(proposal_id)
+        except DataError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get(
+        "/research/proposals/{proposal_id}/attempts",
+        response_model=list[ProposalAttemptV1],
+    )
+    def research_proposal_attempts(proposal_id: str) -> tuple[ProposalAttemptV1, ...]:
+        try:
+            return research.proposal_attempts(proposal_id)
+        except DataError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get(
+        "/research/proposals/{proposal_id}/audit",
+        response_model=ProposalAuditV1,
+    )
+    def research_proposal_audit(proposal_id: str) -> ProposalAuditV1:
+        try:
+            return research.proposal_audit(proposal_id)
+        except DataError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/paper/strategies", response_model=list[ShadowStrategyV1])
+    def paper_strategies() -> tuple[ShadowStrategyV1, ...]:
+        return research.shadows()
+
+    @app.get("/recommendations/growth-diagnostics", response_model=GrowthDiagnosticsV1)
+    def growth_diagnostics() -> GrowthDiagnosticsV1:
+        return research.growth_diagnostics()
 
     @app.get("/edges")
     def edges() -> list[dict]:

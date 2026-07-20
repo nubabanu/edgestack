@@ -25,6 +25,10 @@ class DailyCheckWorker(
         val before = container.settings.current()
         val beforeRisk = container.settings.decodedRiskState(before)
         val beforePlan = container.sniperRepo.load()
+        val beforeResearch = container.researchRepo.load()
+        container.syncRepo.research().onSuccess { afterResearch ->
+            notifyResearchTransitions(beforeResearch, afterResearch)
+        }
         container.syncRepo.syncAll().onSuccess {
             val after = container.settings.current()
             val afterRisk = container.settings.decodedRiskState(after)
@@ -86,6 +90,55 @@ class DailyCheckWorker(
         return Result.success()
     }
 
+    private fun notifyResearchTransitions(
+        before: com.edgestack.app.domain.model.ResearchSnapshotV1,
+        after: com.edgestack.app.domain.model.ResearchSnapshotV1,
+    ) {
+        val priorCampaigns = before.campaigns.associateBy { it.campaignId }
+        after.campaigns.forEach { campaign ->
+            val prior = priorCampaigns[campaign.campaignId] ?: return@forEach
+            if (prior.lifecycle != campaign.lifecycle) {
+                AlertNotifier.notify(
+                    applicationContext,
+                    AlertNotifier.CHANNEL_CANONICAL,
+                    300 + campaign.campaignId.hashCode().and(0x7fff),
+                    "Edge campaign ${campaign.lifecycle}",
+                    "${campaign.name}: ${campaign.nextAction}",
+                )
+            }
+        }
+        val priorShadows = before.strategies.associateBy { it.strategyId }
+        after.strategies.forEach { shadow ->
+            val prior = priorShadows[shadow.strategyId]
+            if (prior == null || prior.status != shadow.status) {
+                AlertNotifier.notify(
+                    applicationContext,
+                    AlertNotifier.CHANNEL_CANONICAL,
+                    20_000 + shadow.strategyId.hashCode().and(0x7fff),
+                    "Paper shadow ${shadow.status}",
+                    "${shadow.strategyId}: ${shadow.sessions} sessions, " +
+                        "${"%+.2f%%".format(shadow.netReturn * 100)} net.",
+                )
+            }
+        }
+        val beforeGrowth = before.growth
+        val afterGrowth = after.growth
+        if (beforeGrowth != null && afterGrowth != null &&
+            (beforeGrowth.action != afterGrowth.action ||
+                beforeGrowth.evidenceState != afterGrowth.evidenceState)
+        ) {
+            AlertNotifier.notify(
+                applicationContext,
+                AlertNotifier.CHANNEL_RISK,
+                40_001,
+                "Canonical action ${afterGrowth.action}",
+                "Evidence ${afterGrowth.evidenceState}; leverage " +
+                    "${"%.2f".format(afterGrowth.effectiveLeverage)}x; binding " +
+                    afterGrowth.bindingConstraints.joinToString().ifBlank { "none" },
+            )
+        }
+    }
+
     /** Alert when a tracked position's stop or target level is crossed. */
     private suspend fun notifyStopTargetBreaches(container: com.edgestack.app.di.AppContainer) {
         val positions = container.positionsRepo.load()
@@ -94,7 +147,9 @@ class DailyCheckWorker(
             container.quotes.latestQuotes(positions.map { it.symbol }.distinct())
         }.getOrElse { return }
         positions.forEachIndexed { index, position ->
-            val last = quotes[position.symbol] ?: return@forEachIndexed
+            val quote = quotes[position.symbol] ?: return@forEachIndexed
+            if (!quote.isAlertEligible()) return@forEachIndexed
+            val last = quote.price
             position.stop?.takeIf { last <= it }?.let { stop ->
                 AlertNotifier.notify(
                     applicationContext,
@@ -102,7 +157,7 @@ class DailyCheckWorker(
                     160 + index,
                     "${position.symbol} at stop level",
                     "Last ${"%.2f".format(last)} <= stop ${"%.2f".format(stop)} " +
-                        "(entry ${"%.2f".format(position.entryPrice)}). Delayed device quote.",
+                        "(entry ${"%.2f".format(position.entryPrice)}). ${quote.sourceLabel()}.",
                 )
             }
             position.target?.takeIf { last >= it }?.let { target ->
@@ -112,7 +167,7 @@ class DailyCheckWorker(
                     180 + index,
                     "${position.symbol} at target level",
                     "Last ${"%.2f".format(last)} >= target ${"%.2f".format(target)} " +
-                        "(entry ${"%.2f".format(position.entryPrice)}). Delayed device quote.",
+                        "(entry ${"%.2f".format(position.entryPrice)}). ${quote.sourceLabel()}.",
                 )
             }
         }

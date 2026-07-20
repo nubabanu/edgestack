@@ -8,6 +8,10 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from edgestack.recommendation.growth import (
+    REQUIRED_GROWTH_COMPARATORS,
+    log_growth_superiority,
+)
 from edgestack.recommendation.manifests import PromotionDecisionV2, ProspectiveEvidenceV2
 from edgestack.recommendation.schemas import AssetKind, EvidenceGrade
 from edgestack.validation.clustered import paired_sharpe_improvement
@@ -43,6 +47,8 @@ class PromotionInputs:
     stress_scenarios: dict[str, bool]
     prospective_evidence: ProspectiveEvidenceV2 | None = None
     compound_ablations_pass: bool | None = None
+    buy_now_spy: pd.Series | None = None
+    financed_spy_same_risk: pd.Series | None = None
 
 
 def risk_match_benchmark(training_strategy: pd.Series, benchmark: pd.Series) -> pd.Series:
@@ -65,6 +71,22 @@ def evaluate_promotion(inputs: PromotionInputs, *, seed: int = 42) -> PromotionD
     baseline_test = paired_sharpe_improvement(
         inputs.strategy_returns, inputs.diversified_baseline, seed=seed + 1
     )
+    growth_bounds = log_growth_superiority(
+        inputs.strategy_returns,
+        {
+            "buy_now_spy": (
+                inputs.buy_now_spy if inputs.buy_now_spy is not None else inputs.risk_matched_spy
+            ),
+            "risk_matched_spy": inputs.risk_matched_spy,
+            "diversified_baseline": inputs.diversified_baseline,
+            "financed_spy_same_risk": (
+                inputs.financed_spy_same_risk
+                if inputs.financed_spy_same_risk is not None
+                else inputs.risk_matched_spy
+            ),
+        },
+        seed=seed + 10,
+    )
     reasons = []
     if len(valid_folds) < MIN_VALID_OUTER_FOLDS:
         reasons.append(f"valid outer folds {len(valid_folds)} < {MIN_VALID_OUTER_FOLDS}")
@@ -78,6 +100,9 @@ def evaluate_promotion(inputs: PromotionInputs, *, seed: int = 42) -> PromotionD
         reasons.append("Sharpe lower bound versus risk-matched SPY is not positive")
     if baseline_test["ci_low"] <= 0:
         reasons.append("Sharpe lower bound versus baseline is not positive")
+    failed_growth = [name for name in REQUIRED_GROWTH_COMPARATORS if growth_bounds[name] <= 0]
+    if failed_growth:
+        reasons.append("log-growth lower bound is not positive versus: " + ", ".join(failed_growth))
     failed_stress = sorted(
         name for name in REQUIRED_STRESS_SCENARIOS if not inputs.stress_scenarios.get(name, False)
     )
@@ -102,6 +127,7 @@ def evaluate_promotion(inputs: PromotionInputs, *, seed: int = 42) -> PromotionD
         stepm_superior=inputs.sleeve_id in inputs.stepm_superior_ids,
         sharpe_lower_bound_vs_spy=spy_test["ci_low"],
         sharpe_lower_bound_vs_baseline=baseline_test["ci_low"],
+        log_growth_lower_bounds=growth_bounds,
         stress_scenarios_passed=tuple(
             sorted(name for name, passed in inputs.stress_scenarios.items() if passed)
         ),

@@ -56,6 +56,47 @@ For a data-prepared offline check:
 
 The orchestrator fails on data-quality, artifact, schema, or checksum errors. It writes all outputs to a temporary directory, renames the completed run to `artifacts/recommendations/runs/<content-hash>`, and then atomically replaces `artifacts/recommendations/current.json`. Failure before the pointer swap leaves the prior publication current.
 
+## Run the continuous Edge Factory
+
+The factory turns missing evidence into resumable work instead of treating
+`INSUFFICIENT` as a terminal conclusion. Copy `.env.example`, add any free Alpaca
+and FRED credentials you own, declare a real SEC user-agent, then run:
+
+```bash
+edgestack research status --config configs/live.yaml
+edgestack research queue --config configs/live.yaml
+edgestack research run --config configs/live.yaml
+edgestack research run --once --config configs/live.yaml
+edgestack research pause --config configs/live.yaml
+edgestack research resume --config configs/live.yaml
+edgestack research proposal-import configs/proposal.example.json --config configs/live.yaml
+edgestack research proposals --config configs/live.yaml
+edgestack research factor-audit factor_panel.parquet --factor-name breadth_trend
+edgestack research strange-edges --config configs/default.yaml
+```
+
+It runs below normal priority with four isolated worker processes and a 75 GB combined data/artifact
+cap. Priority is PIT universe repair, prospective shadows, evidence acquisition,
+then frozen evaluation. Monthly cohorts are content-addressed and capped at 1,500
+pre-registered trials. Long free-tier intraday gaps become `BLOCKED_FREE_TIER`
+when delayed Alpaca SIP is not configured; Yahoo is never misrepresented as a
+source of decade-long minute history. Other viable campaigns continue.
+
+The monthly universe reverse-walks the public S&P 500 change log, ranks members
+on trailing 60-session dollar volume, keeps one-minute bars for ETFs and the top
+25 stocks, and five-minute bars for ranks 26–100. Fifteen- and sixty-minute bars
+are deterministic derivatives. Earnings, ALFRED vintages, and FINRA off-exchange
+short-sale volume are stored with raw hashes, normalized Parquet, provenance,
+coverage, quality, and limitations. FINRA volume is not short interest.
+
+Candidate returns include cash yield and every waiting day. Promotion additionally
+requires positive lower-confidence net log-growth versus buy-now SPY, risk-matched
+SPY, the diversified baseline, and financed SPY at the same realized risk. Sizing
+uses a shrinkage quarter-Kelly ceiling inside the existing minimum-of-independent-
+constraints overlay; 5× remains a hard ceiling, never a target. Only a healthy
+promoted sleeve whose frozen next-open signal is currently active can affect
+canonical paper. This repository still ships no live adapter.
+
 Fail-fast applies to the symbols tonight's publication consumes (baseline policy plus configured universe). Delisted point-in-time catalog members that return empty series are skipped with a warning, and the pre-flight quality gate covers the required symbols; the full research catalog remains covered by `edgestack data validate`. The publication step separately re-validates its own panel and requires 252 aligned return sessions for the policy ETFs — backfill them once with:
 
 ```bash
@@ -65,6 +106,18 @@ edgestack data download --symbols "SPY,TLT,SHY,GLD" --start 2015-01-02 --config 
 ## Public interface
 
 - `GET /recommendations/latest` returns the verified canonical bundle.
+- `GET /research/overview`, `/research/campaigns`, and
+  `/research/campaigns/{campaign_id}` return worker, queue, evidence-gap, and
+  frozen campaign state.
+- `GET /research/proposals`, `/research/proposals/{proposal_id}`, and its
+  `/attempts` and `/audit` subresources expose finite external hypotheses and
+  their complete search history without executing agent-generated code.
+- `GET /data/coverage` reports source/feed coverage, quality, hashes, and limitations.
+- `GET /paper/strategies` returns independent shadow books and benchmark-relative results.
+- `GET /recommendations/growth-diagnostics` returns the canonical action, log-growth
+  range, recommended leverage, and every binding constraint. Non-promoted evidence
+  cannot produce an entry action.
+- `GET /market/quotes?symbols=SPY,ACN` returns normalized indicative snapshots from the configured live-quote chain. `GET /market/providers/health` reports configuration, cooldown, freshness, and cache state without exposing credentials. These endpoints cannot feed canonical signals or paper fills.
 - `POST /recommendations/preview` accepts `RiskProfileV2`, optional `RiskStateV2`/equity override, and an optional reset request. It only recalculates sizing and stress; it cannot research, promote, select, or persist.
 - `POST /instruments/analyze` accepts a stock/ETF ticker or commodity name/proxy and an optional intended-entry timestamp. It returns day/week/month/year best and worst historical windows, tailwinds, headwinds, counter-effects, news context, current-year observations, and explicit abstentions. Only compatible frozen promoted timing artifacts can make a window actionable or create a directional rating.
 - `POST /instruments/recheck` compares a prior analysis with the latest canonical inputs and reports whether the selected timing still holds or a higher-ranked alternative emerged.
@@ -80,6 +133,31 @@ Run the API with:
 ```bash
 edgestack api serve --config configs/live.yaml
 ```
+
+### Indicative live quotes
+
+Copy `.env.example` to the gitignored `.env` and add any tokens you own. The
+default REST snapshot order is Finnhub, Twelve Data, Alpaca, then the no-key
+Yahoo fallback; unconfigured providers are skipped. Accounts and keys must be
+created with the vendors themselves:
+
+- [Finnhub API documentation](https://finnhub.io/docs/api)
+- [Twelve Data API documentation](https://twelvedata.com/docs)
+- [Alpaca Market Data documentation](https://docs.alpaca.markets/us/docs/about-market-data-api)
+
+```bash
+python scripts/agent_toolkit.py quote SPY,ACN
+python scripts/agent_toolkit.py quote SPY --provider alpaca
+curl "http://127.0.0.1:8000/market/quotes?symbols=SPY,ACN"
+curl "http://127.0.0.1:8000/market/providers/health"
+```
+
+The gateway caches quotes for five seconds and marks active-session observations
+older than 120 seconds as stale. Alpaca free data is labeled `IEX_ONLY`; Yahoo is
+labeled unofficial with unknown latency. Provider plan limits can change, so the
+gateway reacts to authentication errors and HTTP 429/5xx responses instead of
+encoding marketing allowances. Alpha Vantage is not in the live chain because
+its free US `GLOBAL_QUOTE` defaults to end-of-day data.
 
 Hourly and 15-minute analysis are opt-in because daily bars cannot identify an intraday slot:
 
@@ -155,8 +233,10 @@ Tabs:
 - **Risk** — server-calculated leverage, binding constraint, stress and financing, canonical targets.
 - **Analyze** — instrument timing plus a manual eToro OIL paper gate with a prominent `BLOCKED`, `OBSERVE`, or `PAPER_ONLY` card; best/worst windows, exit maps, context, and automatic rechecks remain server-derived.
 - **Sniper** — staged shadow plan with equity/loss-budget preview; paper only.
-- **Edges** — validated edge catalog with search and status filters, monitoring health, backtest runs.
-- **Trades** — canonical paper account state, plus a personal position tracker with delayed device quotes and unrealized P&L (device-side display only; never feeds signals).
+- **Edge Lab** — worker/provider/storage health, exact acquisition gaps, campaign
+  funnel and trials, shadow-versus-benchmark paper results, canonical growth and
+  leverage diagnostics, plus the validated catalog. Server results are cached offline.
+- **Trades** — canonical paper account state, plus a personal position tracker with backend-first indicative quotes, a no-key Yahoo device fallback, source/freshness labels, and unrealized P&L. Stale or market-closed quotes cannot fire stop/target notifications and never feed signals.
 - **Settings** — server URL, risk-sizing profile, connection test, sync.
 
 Build and install:
@@ -166,6 +246,10 @@ cd android
 ./gradlew assembleDebug     # output: app/build/outputs/apk/debug/app-debug.apk
 ./gradlew assembleRelease   # R8-minified and release-signed (see below)
 ```
+
+Current local release: `releases/EdgeStack-v1.7.apk` (version code 8), SHA-256
+`98c08f577b98a5849aa6c26c107c948a80c9f67aacbdbe0738c035bea4d56b80`.
+The APK is RSA-signed with Android APK Signature Scheme v2.
 
 Release signing reads `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, and `RELEASE_KEY_PASSWORD` from the gitignored `android/local.properties`; generate a keystore once with `keytool -genkeypair -keystore keystore/edgestack-release.jks -alias edgestack -keyalg RSA -validity 10950`. Without these properties the release build is unsigned. Debug and release signatures differ — switching between them on a device requires uninstalling first.
 
@@ -203,7 +287,10 @@ Different horizons have separate labels, artifacts, calibrators, statistics, and
 
 ## Documentation
 
+- [Upstream research systems: adopted ideas and data boundaries](docs/upstream-research-systems.md)
 - [V2 architecture and operations](docs/recommendation-engine-v2.md)
+- [Opening spike/fade research campaign](docs/opening-fade-study.md)
+- [Strange-edge campaign: data feasibility and frozen results](docs/strange-edges-study.md)
 - [Migration and claim withdrawal](docs/v2-migration.md)
 - [Statistical validation](docs/statistical-validation.md)
 - [Backtesting and execution](docs/backtesting.md)

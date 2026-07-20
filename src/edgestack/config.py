@@ -36,7 +36,7 @@ class PathsConfig(_Section):
 
 
 class UniverseConfig(_Section):
-    source: Literal["local", "stooq", "yahoo", "synthetic"] = "local"
+    source: Literal["local", "stooq", "yahoo", "alpaca", "synthetic"] = "local"
     symbols: tuple[str, ...] = ()
     benchmark_symbol: str = "SPY"
     min_price: float = Field(default=5.0, gt=0)
@@ -165,6 +165,26 @@ class MonitoringConfig(_Section):
         return self
 
 
+class ResearchConfig(_Section):
+    """Bounded continuous-research resource and safety policy."""
+
+    continuous: bool = True
+    max_workers: int = Field(default=4, ge=1, le=12)
+    storage_cap_gb: float = Field(default=75.0, gt=1, le=1_000)
+    max_trials_per_campaign: int = Field(default=1_500, ge=1, le=50_000)
+    process_priority: Literal["idle", "below_normal", "normal"] = "below_normal"
+    pause_during_nightly: bool = True
+    alpaca_safety_delay_minutes: int = Field(default=16, ge=15, le=120)
+    liquid_stock_count: int = Field(default=100, ge=25, le=500)
+    one_minute_stock_count: int = Field(default=25, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _one_minute_tier_is_subset(self) -> ResearchConfig:
+        if self.one_minute_stock_count > self.liquid_stock_count:
+            raise ValueError("one_minute_stock_count cannot exceed liquid_stock_count")
+        return self
+
+
 class PaperConfig(_Section):
     live_trading_enabled: bool = False
     initial_cash: float = Field(default=100_000.0, gt=0)
@@ -195,6 +215,7 @@ class EdgeStackConfig(_Section):
     scoring: ScoringConfig = ScoringConfig()
     risk: RiskConfig = RiskConfig()
     monitoring: MonitoringConfig = MonitoringConfig()
+    research: ResearchConfig = ResearchConfig()
     paper: PaperConfig = PaperConfig()
 
     @model_validator(mode="after")

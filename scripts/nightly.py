@@ -23,6 +23,7 @@ from edgestack.recommendation.nightly import (
     load_legacy_watchlist,
 )
 from edgestack.recommendation.policy import load_baseline_policy
+from edgestack.research.locks import nightly_lock
 
 # Catalog symbols with no bar for this many days are treated as delisted and
 # skipped by the nightly fetch. Their history remains in the catalog —
@@ -122,21 +123,24 @@ def run_nightly(
     build_features: bool = True,
     fetch_news: bool = True,
 ) -> str:
-    if update_prices:
-        update_data(cfg, run_date)
-    validate_required(cfg)
-    if build_features:
-        run_features_build(cfg)
-    news: tuple[NewsEvidenceV2, ...] = ()
-    if fetch_news:
-        news = gather_news_evidence(
-            _news_symbols(cfg),
-            Path(cfg.paths.data_dir) / "cache" / "news",
-            timeout_seconds=cfg.data.request_timeout_seconds,
+    with nightly_lock(Path(cfg.paths.artifacts_dir)):
+        if update_prices:
+            update_data(cfg, run_date)
+        validate_required(cfg)
+        if build_features:
+            run_features_build(cfg)
+        news: tuple[NewsEvidenceV2, ...] = ()
+        if fetch_news:
+            news = gather_news_evidence(
+                _news_symbols(cfg),
+                Path(cfg.paths.data_dir) / "cache" / "news",
+                timeout_seconds=cfg.data.request_timeout_seconds,
+            )
+            print(f"nightly news context: {len(news)} items")
+        publication = build_and_publish_canonical_baseline(
+            cfg, run_date=run_date, news_evidence=news
         )
-        print(f"nightly news context: {len(news)} items")
-    publication = build_and_publish_canonical_baseline(cfg, run_date=run_date, news_evidence=news)
-    return publication.run_id
+        return publication.run_id
 
 
 def main() -> int:

@@ -1,0 +1,114 @@
+campaign_version: opening-fade-v1
+repository_config: configs/live.yaml
+provider: yahoo
+primary_interval_minutes: 5
+fallback_interval_minutes: 15
+primary_symbols: [SPY, QQQ, IWM, DIA]
+secondary_symbols: [XLK, SMH, XLF, XLE, XLY, XLP, TLT, GLD]
+stock_symbols: [AAPL, MSFT, NVDA, AMD, AMZN, META, GOOGL, TSLA]
+artifacts_dir: artifacts/research/opening_fade
+event_calendar_csv: null
+previously_accessed_start: 2024-01-01
+minimum_stock_price: 5.0
+minimum_stock_opening_dollar_volume: 1000000.0
+
+definition:
+  version: opening-fade-occurrence-v1
+  positive_gap_min: 0.002
+  spike_atr_min: 0.15
+  opening_window_minutes: 15
+  evaluation_time: "10:30"
+  premarket_start: "04:00"
+  regular_open: "09:30"
+  regular_close: "16:00"
+  gap_buckets: [0.0, 0.002, 0.004, 0.0075, 0.0125]
+  spike_bps_thresholds: [10.0, 20.0, 35.0, 50.0]
+  spike_atr_thresholds: [0.10, 0.20, 0.30]
+
+costs:
+  commission_bps: 0.0
+  half_spread_bps: 0.5
+  base_slippage_bps: 0.75
+  impact_coeff_bps: 5.0
+  short_borrow_annualized: 0.03
+  sec_fee_bps: 0.03
+  assumed_participation: 0.001
+  maximum_bar_participation: 0.05
+
+validation:
+  train_sessions: 252
+  test_sessions: 63
+  n_folds: 4
+  embargo_sessions: 1
+  bootstrap_samples: 2000
+  block_length: 20
+  minimum_effective_sample_size: 100
+  minimum_positive_fold_fraction: 0.70
+  minimum_deflated_sharpe_probability: 0.95
+  maximum_drawdown_floor: -0.20
+  minimum_instruments: 2
+  minimum_years: 2
+  maximum_single_instrument_trade_fraction: 0.75
+  minimum_neighborhood_positive_fraction: 0.50
+  fdr_alpha: 0.05
+  random_seed: 42
+
+# Frozen bounded family. Unsupported candidates remain in the trial count.
+candidates:
+  # A — confirmed opening-spike fades
+  - {candidate_id: A_VWAP_15, family: A, direction: SHORT, rule: confirmed_vwap_failure, params: {opening_minutes: 15, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "10:30"}}
+  - {candidate_id: A_VWAP_15_HALF, family: A, direction: SHORT, rule: confirmed_vwap_failure, params: {opening_minutes: 15, gap_min: 0.002, spike_atr_min: 0.15, target: HALF_SPIKE, exit_time: "11:00"}}
+  - {candidate_id: A_VWAP_STRICT, family: A, direction: SHORT, rule: confirmed_vwap_failure, params: {opening_minutes: 15, gap_min: 0.004, spike_atr_min: 0.20, target: PREVIOUS_CLOSE, exit_time: "11:00"}}
+  - {candidate_id: A_OR_LOW_15, family: A, direction: SHORT, rule: confirmed_opening_low, params: {opening_minutes: 15, gap_min: 0.002, spike_atr_min: 0.15, target: PREVIOUS_CLOSE, exit_time: "11:00"}}
+  - {candidate_id: A_LOWER_HIGH, family: A, direction: SHORT, rule: lower_high_break, params: {opening_minutes: 15, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: A_OR_BREAKOUT, family: A, direction: LONG, rule: opening_range_breakout, params: {opening_minutes: 15, buffer_bps: 5, target: OR_HIGH, r_multiple: 1.0, exit_time: "11:00"}}
+  - {candidate_id: A_VWAP_RECLAIM, family: A, direction: LONG, rule: vwap_reclaim, params: {opening_minutes: 15, target: OR_HIGH, r_multiple: 1.0, exit_time: "11:00"}}
+
+  # B — opening-range false breakouts
+  - {candidate_id: B_OR5_MID, family: B, direction: SHORT, rule: false_breakout, params: {opening_minutes: 5, buffer_bps: 0, target: OR_MID, exit_time: "11:00"}}
+  - {candidate_id: B_OR15_MID, family: B, direction: SHORT, rule: false_breakout, params: {opening_minutes: 15, gap_population: POSITIVE, gap_min: 0.002, buffer_bps: 0, target: OR_MID, exit_time: "11:00"}}
+  - {candidate_id: B_OR15_BUFFER, family: B, direction: SHORT, rule: false_breakout, params: {opening_minutes: 15, gap_population: NONPOSITIVE, gap_min: 0.002, buffer_bps: 5, target: OR_LOW, exit_time: "12:00"}}
+  - {candidate_id: B_OR30_LOW, family: B, direction: SHORT, rule: false_breakout, params: {opening_minutes: 30, buffer_bps: 0, target: OR_LOW, exit_time: "12:00"}}
+
+  # C — overnight-high rejection (requires genuine extended-hours bars)
+  - {candidate_id: C_ONH_TOUCH, family: C, direction: SHORT, rule: overnight_rejection, requires: [premarket], params: {overshoot_bps: 0, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: C_ONH_OVERSHOOT5, family: C, direction: SHORT, rule: overnight_rejection, requires: [premarket], params: {overshoot_bps: 5, target: PREVIOUS_CLOSE, exit_time: "11:00"}}
+  - {candidate_id: C_ONH_OVERSHOOT10, family: C, direction: SHORT, rule: overnight_rejection, requires: [premarket], params: {overshoot_bps: 10, target: HALF_GAP, exit_time: "12:00"}}
+  - {candidate_id: C_ONH_ATR_OVERSHOOT, family: C, direction: SHORT, rule: overnight_rejection, requires: [premarket], params: {overshoot_atr_fraction: 0.05, target: OPEN, exit_time: "11:00"}}
+
+  # D — gap fill versus naive gap short
+  - {candidate_id: D_NAIVE_GAP, family: D, direction: SHORT, rule: naive_positive_gap, params: {gap_min: 0.002, signal_time: "09:45", target: FULL_GAP, exit_time: "11:00"}}
+  - {candidate_id: D_GAP_VWAP, family: D, direction: SHORT, rule: gap_fill_confirmed, params: {gap_min: 0.002, spike_atr_min: 0.15, target: FULL_GAP, exit_time: "12:00"}}
+  - {candidate_id: D_GAP_OR_LOW, family: D, direction: SHORT, rule: confirmed_opening_low, params: {gap_min: 0.002, spike_atr_min: 0.15, target: HALF_GAP, exit_time: "12:00"}}
+
+  # E — timestamp-aligned cross-index/leadership confirmation
+  - {candidate_id: E_QQQ_WITH_SPY, family: E, direction: SHORT, rule: cross_index_vwap, params: {instrument: QQQ, peer: SPY, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: E_SPY_WITH_QQQ, family: E, direction: SHORT, rule: cross_index_vwap, params: {instrument: SPY, peer: QQQ, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: E_QQQ_WITH_SMH, family: E, direction: SHORT, rule: cross_index_vwap, params: {instrument: QQQ, peer: SMH, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: E_QQQ_SPY_DIVERGENCE, family: E, direction: SHORT, rule: cross_index_divergence, params: {instrument: QQQ, peer: SPY, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: E_BREADTH_CONFIRM, family: E, direction: SHORT, rule: confirmed_vwap_failure, requires: [breadth], params: {gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+
+  # F — point-in-time scheduled-event populations
+  - {candidate_id: F_EVENT_SEPARATE, family: F, direction: SHORT, rule: event_population, requires: [event_calendar], params: {gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: F_EVENT_WAIT_1030, family: F, direction: SHORT, rule: event_wait, requires: [event_calendar], params: {wait_until: "10:30", gap_min: 0.002, spike_atr_min: 0.15, target: PREVIOUS_CLOSE, exit_time: "12:00"}}
+  - {candidate_id: F_EVENT_EXCLUDE_CONTROL, family: F, direction: SHORT, rule: event_exclude, requires: [event_calendar], params: {gap_min: 0.004, spike_atr_min: 0.20, target: OPEN, exit_time: "11:00"}}
+
+  # G — fixed preregistered volatility regimes
+  - {candidate_id: G_CALM_VWAP, family: G, direction: SHORT, rule: regime_calm, params: {gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: G_STRESSED_VWAP, family: G, direction: SHORT, rule: regime_stressed, params: {gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: G_UPTREND_VWAP, family: G, direction: SHORT, rule: feature_filter, params: {feature: short_trend_state, operator: eq, value: UP, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: G_DOWNTREND_VWAP, family: G, direction: SHORT, rule: feature_filter, params: {feature: short_trend_state, operator: eq, value: DOWN, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: G_LARGE_GAP_VWAP, family: G, direction: SHORT, rule: feature_filter, params: {feature: primary_gap, operator: ge, value: 0.0075, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: G_SMALL_GAP_VWAP, family: G, direction: SHORT, rule: feature_filter, params: {feature: primary_gap, operator: between, low: 0.002, high: 0.004, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: G_WIDE_OR_VWAP, family: G, direction: SHORT, rule: feature_filter, params: {feature: opening_range_atr, operator: ge, value: 0.30, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: G_DRAWDOWN_VWAP, family: G, direction: SHORT, rule: feature_filter, params: {feature: recent_drawdown60, operator: le, value: -0.05, gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+
+  # H — mirror, continuation, naive, random, and no-trade controls
+  - {candidate_id: H_LONG_MIRROR, family: H, direction: LONG, rule: long_mirror, params: {gap_min: 0.002, spike_atr_min: 0.15, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: H_CONTINUATION, family: H, direction: LONG, rule: continuation, params: {gap_min: 0.002, spike_atr_min: 0.15, target: OR_HIGH, r_multiple: 1.0, exit_time: "11:00"}}
+  - {candidate_id: H_NAIVE_0945, family: H, direction: SHORT, rule: naive_positive_gap, params: {gap_min: 0.002, signal_time: "09:45", target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: H_NAIVE_1000, family: H, direction: SHORT, rule: naive_positive_gap, params: {gap_min: 0.002, signal_time: "10:00", target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: H_RANDOM_MATCHED, family: H, direction: SHORT, rule: random_time_matched, params: {gap_min: 0.002, target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: H_UNCONDITIONAL_SHORT, family: H, direction: SHORT, rule: unconditional_short, params: {signal_time: "09:45", target: OPEN, exit_time: "11:00"}}
+  - {candidate_id: H_FIXED_OR, family: H, direction: SHORT, rule: false_breakout, params: {opening_minutes: 15, buffer_bps: 0, target: OR_MID, exit_time: "11:00"}}
+  - {candidate_id: H_NO_TRADE, family: H, direction: NONE, rule: no_trade, params: {}}

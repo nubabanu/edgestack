@@ -181,10 +181,13 @@ class YahooProvider(PriceDataProvider, IntradayDataProvider):
                 "OHLC split-adjusted only; adj_close is split+dividend adjusted",
                 "no delisted securities: survivorship-biased symbol coverage",
                 "no point-in-time universe membership",
+                "1m history is vendor-limited to 7 calendar days per request",
+                "5m history is vendor-limited to 59 calendar days per request",
                 "60m history is vendor-limited to 729 calendar days per request",
                 "15m history is vendor-limited to 59 calendar days per request",
+                "OHLCV trades only; no historical bid/ask or auction imbalance",
             ),
-            frequencies=("1d", "60m"),
+            frequencies=("1d", "1m", "5m", "15m", "60m"),
         )
 
     def fetch_daily_bars(self, symbols: tuple[str, ...], start: date, end: date) -> pd.DataFrame:
@@ -246,13 +249,20 @@ class YahooProvider(PriceDataProvider, IntradayDataProvider):
         return df, actions
 
     def fetch_intraday_bars(
-        self, symbols: tuple[str, ...], start: date, end: date, *, interval: str = "60m"
+        self,
+        symbols: tuple[str, ...],
+        start: date,
+        end: date,
+        *,
+        interval: str = "60m",
+        include_prepost: bool = False,
     ) -> pd.DataFrame:
-        limits = {"15m": (15, 59), "60m": (60, 729)}
+        limits = {"1m": (1, 7), "5m": (5, 59), "15m": (15, 59), "60m": (60, 729)}
         if interval not in limits:
-            raise ProviderError("the V2 timing workflow accepts only 15m or 60m Yahoo bars")
+            raise ProviderError("Yahoo intraday interval must be 1m, 5m, 15m, or 60m")
         interval_minutes, maximum_days = limits[interval]
-        if (end - start).days > maximum_days:
+        requested_days = (end - start).days + 1
+        if requested_days > maximum_days:
             raise ProviderError(
                 f"Yahoo {interval} requests are limited to at most {maximum_days} calendar days"
             )
@@ -261,7 +271,7 @@ class YahooProvider(PriceDataProvider, IntradayDataProvider):
             "period1": str(int(pd.Timestamp(start, tz="UTC").timestamp())),
             "period2": str(int(pd.Timestamp(end + timedelta(days=1), tz="UTC").timestamp())),
             "interval": interval,
-            "includePrePost": "false",
+            "includePrePost": "true" if include_prepost else "false",
             "events": "div,splits",
         }
         for index, symbol in enumerate(symbols):

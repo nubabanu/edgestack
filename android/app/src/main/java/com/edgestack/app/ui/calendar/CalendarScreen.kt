@@ -148,7 +148,7 @@ fun CalendarScreen(vm: CalendarViewModel) {
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Characters,
-                        autoCorrect = false,
+                        autoCorrectEnabled = false,
                     ),
                 )
                 TextButton(onClick = { vm.shade() }, enabled = !vm.loading) {

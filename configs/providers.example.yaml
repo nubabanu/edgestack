@@ -15,13 +15,40 @@
 #              adj_close is split+dividend adjusted. No delisted symbols
 #              (survivorship bias), throttling possible, may break anytime.
 #
+#   alpaca     Authenticated historical stock bars. The research worker requests
+#              paginated split-adjusted SIP bars, freezes symbol mapping with
+#              `asof`, and ends requests at least 16 minutes behind wall time.
+#              Keys: EDGESTACK_ALPACA_API_KEY_ID / _SECRET_KEY.
+#
 #   stooq      Free Stooq EOD CSV endpoint. Split-adjusted, NO dividend
 #              adjustment. Some networks receive a JavaScript anti-bot page —
 #              EdgeStack detects it and refuses to parse garbage.
 #
-# NOT bundled (interfaces exist in edgestack.data.providers.base, awaiting a
-# licensed data source): fundamentals, earnings timestamps, macro vintages,
-# short borrow/locate, options metrics, sentiment, news.
-# Short candidates therefore always carry SHORT_RESEARCH_CANDIDATE status.
+# Continuous-research context sources:
+#
+#   fred       FRED/ALFRED initial-release and vintage-aware observations.
+#              Key: EDGESTACK_FRED_API_KEY.
+#   sec_edgar  Keyless bulk submissions/company facts plus timestamped 8-K
+#              item 2.02 events. User agent: EDGESTACK_SEC_USER_AGENT.
+#   finra      Keyless Reg SHO off-exchange short-sale volume. This is explicitly
+#              not short interest and has incomplete exchange coverage.
+#
+# Direct shorting, options, borrow/locate, sentiment, and live brokerage remain
+# outside capital-eligible scope. Bearish research uses inverse ETFs only.
 #
 # Never commit API keys. Use environment variables and `.env` (see .env.example).
+
+# Indicative live quotes (separate from `universe.source` and canonical bars):
+#
+#   finnhub     Key: EDGESTACK_FINNHUB_API_KEY. Vendor real-time US-equity quote.
+#   twelvedata  Key: EDGESTACK_TWELVE_DATA_API_KEY. Basic US-equity quote;
+#               free coverage does not include real-time extended hours.
+#   alpaca      Keys: EDGESTACK_ALPACA_API_KEY_ID and
+#               EDGESTACK_ALPACA_API_SECRET_KEY. Indicative quotes are IEX-only;
+#               this is separate from delayed historical SIP acquisition.
+#   yahoo       No key. Unofficial last-resort fallback with unknown latency.
+#
+# Selection, cache and stale thresholds are runtime environment settings rather
+# than YAML research configuration, so credentials never enter config hashes.
+# Quotes are display/paper-alert inputs only and cannot alter research, canonical
+# recommendations, paper fills, or the live-trading safety rail.

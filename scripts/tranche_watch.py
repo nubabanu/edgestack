@@ -41,6 +41,8 @@ import numpy as np
 import pandas as pd
 import requests
 
+from edgestack.data.catalog import atomic_write_bytes
+
 ROOT = Path(__file__).resolve().parents[1]
 PRICES = ROOT / "data" / "curated" / "prices"
 STATE_PATH = ROOT / "artifacts" / "tranche_watch_state.json"
@@ -65,6 +67,17 @@ GO_ALERT_THRESHOLD = 60
 # fresh go-backtest PASS.
 GO_ALERTS_ENABLED = False
 POST_EARNINGS_WINDOW_SESSIONS = 5
+PUBLIC_TRIGGER_TYPES = (
+    "T1",
+    "T2",
+    "T3",
+    "REL",
+    "SECTOR",
+    "CAL",
+    "WINDOW",
+    "REVIEW",
+    "GO",
+)
 POSITIONS_TEMPLATE = {
     "_howto": (
         "Record each actual buy here so the watcher can run exit/review checks. "
@@ -537,6 +550,7 @@ def main() -> int:
     alerts: list[str] = []
     statuses: list[dict] = []
     fired: list[tuple[str, str, str]] = []
+    events: list[dict[str, str]] = []
 
     basket, above50 = basket_series()
     breadth_count = int(above50.iloc[-1].sum())
@@ -549,6 +563,14 @@ def main() -> int:
     prev_breadth = state.get("sector_breadth", breadth_count)
     if breadth_count >= 4 and prev_breadth < 4:
         alerts.append(f"ALERT SECTOR: breadth crossed to {breadth_count}/{len(BASKET)} above SMA50")
+        events.append(
+            {
+                "symbol": "BASKET",
+                "trigger": "SECTOR",
+                "as_of": today.isoformat(),
+                "detail": f"breadth crossed to {breadth_count}/{len(BASKET)} above SMA50",
+            }
+        )
     state["sector_breadth"] = breadth_count
 
     peer_note = (
@@ -582,6 +604,14 @@ def main() -> int:
                     )
                     state[wkey] = 1
                     fired.append((symbol, "WINDOW", status["as_of"]))
+                    events.append(
+                        {
+                            "symbol": symbol,
+                            "trigger": "WINDOW",
+                            "as_of": status["as_of"],
+                            "detail": f"post-earnings window open (printed {earnings})",
+                        }
+                    )
         status["window_open"] = window_open
 
         session_no = len(df)
@@ -600,6 +630,14 @@ def main() -> int:
                     )
                     state[key] = session_no
                     fired.append((symbol, trig, status["as_of"]))
+                    events.append(
+                        {
+                            "symbol": symbol,
+                            "trigger": trig,
+                            "as_of": status["as_of"],
+                            "detail": str(info["detail"]),
+                        }
+                    )
         if status["CAL"]:
             key = f"{symbol}:CAL:{today.year}-{today.month}"
             lines.append(f"{symbol} CAL   {status['CAL']}")
@@ -609,6 +647,14 @@ def main() -> int:
                 )
                 state[key] = 1
                 fired.append((symbol, "CAL", status["as_of"]))
+                events.append(
+                    {
+                        "symbol": symbol,
+                        "trigger": "CAL",
+                        "as_of": status["as_of"],
+                        "detail": str(status["CAL"]),
+                    }
+                )
 
         score = go_score(
             t1=status["T1"]["fired"],
@@ -630,6 +676,14 @@ def main() -> int:
                     f"ALERT {symbol} GO: entry score {score}/100 — plan says act this week"
                 )
                 state[key] = session_no
+                events.append(
+                    {
+                        "symbol": symbol,
+                        "trigger": "GO",
+                        "as_of": status["as_of"],
+                        "detail": f"entry score {score}/100",
+                    }
+                )
         statuses.append(status)
 
     lines += paper_autopilot(plan, fired)
@@ -640,6 +694,15 @@ def main() -> int:
         if session_no - state.get(key, -(10**9)) >= COOLDOWN_SESSIONS["REVIEW"]:
             alerts.append(f"ALERT {msg}")
             state[key] = session_no
+            parts = key.split(":")
+            events.append(
+                {
+                    "symbol": parts[1] if len(parts) > 1 else "UNKNOWN",
+                    "trigger": "REVIEW",
+                    "as_of": today.isoformat(),
+                    "detail": msg,
+                }
+            )
 
     stamp = today.isoformat()
     with LOG_PATH.open("a", encoding="utf-8") as fh:
@@ -648,9 +711,19 @@ def main() -> int:
             fh.write(line + "\n")
     STATE_PATH.write_text(json.dumps(state, indent=2))
     public = [{k: v for k, v in s.items() if k != "_series"} for s in statuses]
-    STATUS_PATH.write_text(
-        json.dumps({"run_date": stamp, "breadth": breadth, "symbols": public}, indent=2)
+    status_payload = json.dumps(
+        {
+            "run_status": "ok",
+            "run_date": stamp,
+            "trigger_types": PUBLIC_TRIGGER_TYPES,
+            "go_alerts_enabled": GO_ALERTS_ENABLED,
+            "breadth": breadth,
+            "symbols": public,
+            "events": events,
+        },
+        indent=2,
     )
+    atomic_write_bytes(STATUS_PATH, status_payload.encode("utf-8"))
     write_dashboard(statuses, breadth, alerts, stamp)
 
     for line in lines:

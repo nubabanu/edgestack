@@ -16,6 +16,7 @@ from edgestack.recommendation.financing import (
     annualized_financing,
     funding_rate_is_stale,
 )
+from edgestack.recommendation.growth import shrinkage_quarter_kelly_limit
 from edgestack.recommendation.schemas import (
     AssetKind,
     BaseRecommendationV2,
@@ -45,6 +46,7 @@ class RiskInputsV2:
     liquidity_position_limits: dict[str, float]
     funding_rate: float
     funding_rate_as_of: date
+    quarter_kelly_leverage_limit: float = MAX_SYSTEM_LEVERAGE
     monitoring_healthy: bool = True
     stress_acceptable: bool = True
     data_fresh: bool = True
@@ -56,9 +58,12 @@ class RiskInputsV2:
             self.historical_995_one_day_loss,
             self.bootstrapped_99_path_drawdown,
             self.funding_rate,
+            self.quarter_kelly_leverage_limit,
         )
         if any(not np.isfinite(value) or value < 0 for value in values):
             raise ValidationError("risk inputs must be finite and non-negative")
+        if self.quarter_kelly_leverage_limit > MAX_SYSTEM_LEVERAGE:
+            raise ValidationError("quarter-Kelly leverage limit cannot exceed 5x")
         if any(
             not np.isfinite(value) or value < 0 for value in self.liquidity_position_limits.values()
         ):
@@ -132,6 +137,10 @@ def estimate_risk_inputs(
         liquidity_position_limits=liquidity_position_limits,
         funding_rate=funding_rate,
         funding_rate_as_of=funding_rate_as_of,
+        quarter_kelly_leverage_limit=shrinkage_quarter_kelly_limit(
+            portfolio_returns,
+            stressed_annual_variance=stressed_volatility**2,
+        ),
     )
 
 
@@ -247,6 +256,7 @@ def size_recommendation(
     worst_one_day = max(inputs.parametric_995_one_day_loss, inputs.historical_995_one_day_loss)
     remaining_drawdown = max(0.0, profile.maximum_drawdown - next_state.current_drawdown)
     limits: dict[str, float] = {
+        "quarter_kelly": inputs.quarter_kelly_leverage_limit,
         "user_cap": profile.maximum_gross_leverage,
         "target_volatility": _safe_ratio(
             profile.target_volatility, inputs.stressed_forecast_volatility

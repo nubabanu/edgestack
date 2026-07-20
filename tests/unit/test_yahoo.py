@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 import pytest
 
 from edgestack.data.providers.yahoo import (
+    YahooProvider,
     parse_chart_payload,
     parse_corporate_actions,
     parse_intraday_chart_payload,
@@ -86,10 +88,48 @@ def test_parse_intraday_payload_preserves_timezone_aware_timestamp() -> None:
     assert bars_15["interval_minutes"].unique().tolist() == [15]
 
 
+@pytest.mark.parametrize(("interval", "minutes"), [("1m", 1), ("5m", 5)])
+def test_intraday_fetch_supports_fine_bars_and_extended_hours(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, interval: str, minutes: int
+) -> None:
+    provider = YahooProvider(tmp_path, timeout=1, max_retries=0, cache_ttl_days=1)
+    seen: dict[str, str] = {}
+
+    def fake_request(symbol: str, params: dict[str, str]) -> dict[str, Any]:
+        assert symbol == "SPY"
+        seen.update(params)
+        return FIXTURE
+
+    monkeypatch.setattr(provider, "_request_with_retries", fake_request)
+    bars = provider.fetch_intraday_bars(
+        ("SPY",),
+        date(2024, 1, 2),
+        date(2024, 1, 3),
+        interval=interval,
+        include_prepost=True,
+    )
+
+    assert bars["interval_minutes"].unique().tolist() == [minutes]
+    assert seen["interval"] == interval
+    assert seen["includePrePost"] == "true"
+
+
+def test_intraday_fetch_rejects_unsupported_interval(tmp_path) -> None:
+    provider = YahooProvider(tmp_path, timeout=1, max_retries=0, cache_ttl_days=1)
+
+    with pytest.raises(ProviderError, match="1m, 5m, 15m, or 60m"):
+        provider.fetch_intraday_bars(("SPY",), date(2024, 1, 2), date(2024, 1, 3), interval="30m")
+
+
+def test_one_minute_fetch_limit_counts_both_endpoint_dates(tmp_path) -> None:
+    provider = YahooProvider(tmp_path, timeout=1, max_retries=0, cache_ttl_days=1)
+
+    with pytest.raises(ProviderError, match="at most 7 calendar days"):
+        provider.fetch_intraday_bars(("SPY",), date(2024, 1, 1), date(2024, 1, 8), interval="1m")
+
+
 @pytest.mark.network
 def test_live_fetch_small_window(tmp_path) -> None:
-    from edgestack.data.providers.yahoo import YahooProvider
-
     provider = YahooProvider(tmp_path, timeout=30, max_retries=1, cache_ttl_days=1)
     bars = provider.fetch_daily_bars(("AAPL",), date(2024, 1, 2), date(2024, 1, 31))
     assert len(bars) >= 15
