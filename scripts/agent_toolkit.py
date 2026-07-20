@@ -471,6 +471,42 @@ def cmd_leverage_check(args: argparse.Namespace) -> dict:
     }
 
 
+def cmd_quote(args: argparse.Namespace) -> dict:
+    """Live quotes incl. pre/post-market via Yahoo's crumb-gated endpoint.
+
+    Freshness: free Yahoo quotes are real-time-ish to ~15min delayed
+    depending on venue; the canonical signal remains the official close.
+    """
+    from tranche_watch import _yahoo_session
+
+    session, crumb = _yahoo_session()
+    symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+    resp = session.get(
+        "https://query1.finance.yahoo.com/v7/finance/quote",
+        params={"symbols": ",".join(symbols), "crumb": crumb},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    out = {"quotes": [], "note": "signals fire on official closes, not live prints"}
+    for q in resp.json()["quoteResponse"]["result"]:
+        out["quotes"].append(
+            {
+                "symbol": q.get("symbol"),
+                "market_state": q.get("marketState"),
+                "regular": q.get("regularMarketPrice"),
+                "regular_change_pct": round(q.get("regularMarketChangePercent") or 0, 2),
+                "pre": q.get("preMarketPrice"),
+                "pre_change_pct": (
+                    round(q["preMarketChangePercent"], 2)
+                    if q.get("preMarketChangePercent") is not None
+                    else None
+                ),
+                "post": q.get("postMarketPrice"),
+            }
+        )
+    return out
+
+
 def cmd_go_backtest(args: argparse.Namespace) -> dict:
     """Validate the tranche-watch GO score: forward returns by score bucket."""
     from tranche_watch import BASKET, GO_ALERT_THRESHOLD, go_score
@@ -626,6 +662,8 @@ def main() -> int:
     p.add_argument("--horizon", type=int, default=60)
     p = sub.add_parser("go-backtest")
     p.add_argument("symbol")
+    p = sub.add_parser("quote")
+    p.add_argument("symbols", help="comma-separated, e.g. EPAM,CTSH,SPY")
     args = parser.parse_args()
 
     handlers = {
@@ -642,6 +680,7 @@ def main() -> int:
         "vol-screen": cmd_vol_screen,
         "leverage-check": cmd_leverage_check,
         "go-backtest": cmd_go_backtest,
+        "quote": cmd_quote,
     }
     try:
         result = handlers[args.command](args)
