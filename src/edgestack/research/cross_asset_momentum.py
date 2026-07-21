@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from edgestack.config import EdgeStackConfig
 from edgestack.data.catalog import DataCatalog, atomic_write_bytes, safe_child_path
 from edgestack.discovery.multiple_testing import benjamini_hochberg
-from edgestack.exceptions import DataError
+from edgestack.exceptions import DataError, ValidationError
 from edgestack.recommendation.growth import (
     REQUIRED_GROWTH_COMPARATORS,
     annualized_log_growth,
@@ -33,9 +33,11 @@ from edgestack.recommendation.hashing import stable_hash
 from edgestack.recommendation.manifests import TrialKind, TrialRecordV2, TrialStatus
 from edgestack.research.schemas import CampaignLifecycle, CampaignSummaryV1, ShadowStrategyV1
 from edgestack.research.store import ResearchStore
-from edgestack.validation.advanced_tests import spa_test, stepm_superior
+from edgestack.validation.advanced_tests import model_confidence_set, spa_test, stepm_superior
 from edgestack.validation.clustered import stationary_bootstrap_indices
 from edgestack.validation.metrics import deflated_sharpe_ratio, max_drawdown, sharpe_ratio
+from edgestack.validation.overfitting import pbo_cscv
+from edgestack.validation.selection import persist_trial_returns
 
 
 class _FrozenModel(BaseModel):
@@ -629,6 +631,37 @@ def evaluate_cross_asset_campaign(
 
     data_hash = _scoped_data_hash(store.catalog, manifest)
     run_id = stable_hash({"manifest_hash": manifest.manifest_hash, "data_hash": data_hash})[:24]
+    # Overfitting diagnostics (report-only) + T x k replay persistence. NOTE:
+    # these add report keys, so previously published run_ids must not be
+    # re-executed with this code (existing convention for report changes).
+    try:
+        mcs: dict[str, Any] = model_confidence_set(
+            strategy_frame,
+            size=store.catalog.cfg.validation.mcs_size,
+            reps=min(manifest.bootstrap_samples, 1_000),
+            block_size=manifest.bootstrap_block_sessions,
+            seed=manifest.seed + 300,
+        )
+    except ValidationError as exc:
+        mcs = {"status": "UNAVAILABLE", "reason": str(exc)}
+    try:
+        pbo: dict[str, Any] = pbo_cscv(
+            strategy_frame, n_partitions=store.catalog.cfg.validation.pbo_partitions
+        )
+    except ValidationError as exc:
+        pbo = {"status": "UNAVAILABLE", "reason": str(exc)}
+    trial_returns_path: str | None = None
+    try:
+        artifact = persist_trial_returns(
+            spy,
+            strategy_frame,
+            persist_dir=store.catalog.artifacts_dir / "trial_returns",
+            batch_id=f"{manifest.campaign_id}--{run_id}",
+        )
+        store.record_trial_returns_artifact(artifact)
+        trial_returns_path = artifact["path"]
+    except (DataError, OSError):
+        trial_returns_path = None
     report: dict[str, Any] = {
         "schema_version": 1,
         "campaign_id": manifest.campaign_id,
@@ -646,6 +679,9 @@ def evaluate_cross_asset_campaign(
         "family_tests": {
             "spa": spa,
             "stepm_superior_candidate_ids": sorted(superior),
+            "mcs": mcs,
+            "pbo": pbo,
+            "trial_returns_path": trial_returns_path,
         },
         "historical_qualifier_ids": qualifier_ids,
         "results": results,

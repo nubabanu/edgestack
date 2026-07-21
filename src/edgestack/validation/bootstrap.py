@@ -70,6 +70,47 @@ def block_bootstrap_ci(
     return float(lo), float(hi)
 
 
+def suggested_block_length(values: np.ndarray, *, fallback: int = 20) -> dict:
+    """Politis-White optimal block length — a REPORT-ONLY diagnostic.
+
+    Wraps ``arch.bootstrap.optimal_block_length`` (lazy import). Never feeds
+    the block length actually used by validation — the configured
+    ``block_length_sessions`` stays canonical; this exists so logs can show
+    how far the fixed choice sits from the data-driven estimate. Falls back
+    (``source="fallback"``) when arch is unavailable, the cleaned series is
+    shorter than 100 observations (the estimator is unstable there), or the
+    estimate comes back non-finite or below 1.
+    """
+    arr = np.asarray(values, dtype=float)
+    arr = arr[~np.isnan(arr)]
+    result = {
+        "stationary": float(fallback),
+        "circular": float(fallback),
+        "configured": float(fallback),
+        "source": "fallback",
+        "n": len(arr),
+    }
+    if len(arr) < 100:
+        return result
+    try:
+        from arch.bootstrap import optimal_block_length
+    except ImportError:
+        return result
+    est = optimal_block_length(arr)
+    stationary = float(est["stationary"].iloc[0])
+    circular = float(est["circular"].iloc[0])
+    if not (np.isfinite(stationary) and np.isfinite(circular)) or stationary < 1 or circular < 1:
+        return result
+    result.update(
+        {
+            "stationary": max(1.0, stationary),
+            "circular": max(1.0, circular),
+            "source": "politis_white",
+        }
+    )
+    return result
+
+
 def mean_pvalue_bootstrap(
     values: np.ndarray,
     *,

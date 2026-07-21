@@ -22,7 +22,12 @@ import pandas as pd
 import requests
 
 from edgestack.config import EdgeStackConfig
-from edgestack.data.providers.base import IntradayDataProvider, PriceDataProvider, ProviderMetadata
+from edgestack.data.providers.base import (
+    IntradayDataProvider,
+    PriceDataProvider,
+    ProviderMetadata,
+    range_cache_fresh,
+)
 from edgestack.data.providers.registry import register_price_provider
 from edgestack.data.schemas import validate_bars, validate_intraday_bars
 from edgestack.exceptions import ProviderError
@@ -230,7 +235,7 @@ class YahooProvider(PriceDataProvider, IntradayDataProvider):
         if (
             cache_file.exists()
             and actions_file.exists()
-            and (time.time() - cache_file.stat().st_mtime) < self.cache_ttl_s
+            and range_cache_fresh(cache_file.stat().st_mtime, end, self.cache_ttl_s)
         ):
             return pd.read_parquet(cache_file), pd.read_parquet(actions_file)
         params = {

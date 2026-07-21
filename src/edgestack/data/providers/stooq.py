@@ -21,7 +21,7 @@ import pandas as pd
 import requests
 
 from edgestack.config import EdgeStackConfig
-from edgestack.data.providers.base import PriceDataProvider, ProviderMetadata
+from edgestack.data.providers.base import PriceDataProvider, ProviderMetadata, range_cache_fresh
 from edgestack.data.providers.registry import register_price_provider
 from edgestack.data.schemas import validate_bars
 from edgestack.exceptions import ProviderError
@@ -108,7 +108,9 @@ class StooqProvider(PriceDataProvider):
 
     def _cached_download(self, symbol: str, start: date, end: date) -> str:
         cache_file = self.cache_dir / f"{symbol.upper()}_{start:%Y%m%d}_{end:%Y%m%d}.csv"
-        if cache_file.exists() and (time.time() - cache_file.stat().st_mtime) < self.cache_ttl_s:
+        if cache_file.exists() and range_cache_fresh(
+            cache_file.stat().st_mtime, end, self.cache_ttl_s
+        ):
             return cache_file.read_text(encoding="utf-8")
         params = {
             "s": f"{symbol.lower()}.us",

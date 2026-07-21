@@ -47,9 +47,83 @@ from edgestack.research.schemas import CampaignLifecycle, CampaignSummaryV1, Sha
 from edgestack.research.store import ResearchStore
 from edgestack.research.templates import CampaignTemplate
 from edgestack.research.universe import ALL_RESEARCH_ETFS, INVERSE_ETFS
-from edgestack.validation.advanced_tests import spa_test, stepm_superior
+from edgestack.validation.advanced_tests import model_confidence_set, spa_test, stepm_superior
+from edgestack.validation.bootstrap import suggested_block_length
 from edgestack.validation.clustered import session_effective_sample_size, stationary_mean_test
 from edgestack.validation.metrics import deflated_sharpe_ratio, max_drawdown, sharpe_ratio
+from edgestack.validation.overfitting import pbo_cscv
+from edgestack.validation.selection import persist_trial_returns
+
+
+def _family_overfitting_diagnostics(
+    store: ResearchStore,
+    benchmark: pd.Series,
+    frame: pd.DataFrame,
+    *,
+    batch_id: str,
+) -> dict:
+    """Report-only overfitting diagnostics for a complete candidate family.
+
+    MCS + PBO + Politis-White block-length check, plus persistence of the
+    T x k return matrix so the diagnostics can be replayed on stored
+    batches. Diagnostics never abort a promotion review: failures degrade
+    to UNAVAILABLE envelopes.
+    """
+    from edgestack.exceptions import DataError, ValidationError
+
+    cfg = store.catalog.cfg.validation
+    seed = store.catalog.cfg.project.random_seed
+    try:
+        mcs: dict = model_confidence_set(
+            frame,
+            size=cfg.mcs_size,
+            reps=max(100, min(cfg.bootstrap_samples, 1_000)),
+            block_size=cfg.block_length_sessions,
+            seed=seed,
+        )
+    except ValidationError as exc:
+        mcs = {"status": "UNAVAILABLE", "reason": str(exc)}
+    try:
+        pbo: dict = pbo_cscv(frame, n_partitions=cfg.pbo_partitions)
+    except ValidationError as exc:
+        pbo = {"status": "UNAVAILABLE", "reason": str(exc)}
+    diagnostic = suggested_block_length(
+        frame.mean(axis=1).dropna().to_numpy(), fallback=cfg.block_length_sessions
+    )
+    path: str | None = None
+    persist_error: str | None = None
+    try:
+        artifact = persist_trial_returns(
+            benchmark,
+            frame,
+            persist_dir=store.catalog.artifacts_dir / "trial_returns",
+            batch_id=batch_id,
+        )
+        store.record_trial_returns_artifact(artifact)
+        path = artifact["path"]
+    except (DataError, OSError) as exc:
+        persist_error = str(exc)
+    return {
+        "mcs": mcs,
+        "pbo": pbo,
+        "block_length_diagnostic": diagnostic,
+        "trial_returns_path": path,
+        "persist_error": persist_error,
+    }
+
+
+def _overfitting_promotion_fields(diagnostics: dict, candidate_id: str, cfg: Any) -> dict:
+    """Translate family diagnostics into PromotionInputs keyword arguments."""
+    mcs = diagnostics["mcs"]
+    member = candidate_id in mcs["included"] if "included" in mcs else None
+    pvalue = mcs.get("pvalues", {}).get(candidate_id)
+    return {
+        "mcs_member": member,
+        "mcs_pvalue": pvalue,
+        "pbo_cscv": diagnostics["pbo"].get("pbo"),
+        "pbo_max": cfg.pbo_max,
+        "overfitting_gates_binding": cfg.overfitting_gates_binding,
+    }
 
 
 def _raw_daily_signal(candidate: dict[str, Any], prices: pd.DataFrame) -> pd.Series:
@@ -1347,6 +1421,9 @@ def review_daily_shadow_promotion(
         block_size=store.catalog.cfg.validation.block_length_sessions,
         seed=store.catalog.cfg.project.random_seed,
     )
+    overfitting = _family_overfitting_diagnostics(
+        store, baseline, frame, batch_id=f"{template.template_id}--{candidate_id}"
+    )
     fold_size = len(strategy) // 5
     folds = {
         f"outer_{index + 1}": strategy.iloc[index * fold_size : (index + 1) * fold_size]
@@ -1426,6 +1503,9 @@ def review_daily_shadow_promotion(
             stepm_superior_ids=(shadow.strategy_id,) if candidate_id in superior else (),
             stress_scenarios=stress_scenarios,
             prospective_evidence=prospective,
+            **_overfitting_promotion_fields(
+                overfitting, candidate_id, store.catalog.cfg.validation
+            ),
         ),
         seed=store.catalog.cfg.project.random_seed,
     )
@@ -1588,6 +1668,9 @@ def review_event_shadow_promotion(
         block_size=store.catalog.cfg.validation.block_length_sessions,
         seed=store.catalog.cfg.project.random_seed,
     )
+    overfitting = _family_overfitting_diagnostics(
+        store, baseline, frame, batch_id=f"{template.template_id}--{candidate_id}"
+    )
     fold_size = len(strategy) // 5
     folds = {
         f"outer_{index + 1}": strategy.iloc[index * fold_size : (index + 1) * fold_size]
@@ -1679,6 +1762,9 @@ def review_event_shadow_promotion(
             stepm_superior_ids=(shadow.strategy_id,) if candidate_id in superior else (),
             stress_scenarios=stress_scenarios,
             prospective_evidence=prospective,
+            **_overfitting_promotion_fields(
+                overfitting, candidate_id, store.catalog.cfg.validation
+            ),
         ),
         seed=store.catalog.cfg.project.random_seed,
     )

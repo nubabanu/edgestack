@@ -9,8 +9,9 @@ limitations. Free/prototype feeds must be honest about their gaps.
 from __future__ import annotations
 
 import abc
+import time
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -19,6 +20,29 @@ from edgestack.types import UniverseSnapshot
 
 if TYPE_CHECKING:
     from edgestack.data.live_quotes import ProviderQuote
+
+# 16:00 ET is 20:00 UTC in summer, 21:00 UTC in winter; the later bound is
+# safe year-round.
+_US_CLOSE_UTC_HOUR = 21
+
+
+def range_cache_fresh(
+    mtime_epoch_s: float, end: date, ttl_s: float, *, now_s: float | None = None
+) -> bool:
+    """True when a cached (start, end) daily-bar response is still trustworthy.
+
+    TTL alone is not enough: a response fetched before session ``end``'s close
+    is permanently missing the final bar, and serving it for the whole TTL
+    masks fresh data from every later fetch of the same range (observed
+    2026-07-20: a pre-close catch-up run poisoned the nightly refresh and
+    blocked publication). The cache must postdate the end-date US close
+    (~21:00 UTC) AND be within TTL.
+    """
+    now = time.time() if now_s is None else now_s
+    if now - mtime_epoch_s >= ttl_s:
+        return False
+    close_utc = datetime(end.year, end.month, end.day, _US_CLOSE_UTC_HOUR, tzinfo=UTC)
+    return mtime_epoch_s >= close_utc.timestamp()
 
 
 @dataclass(frozen=True)

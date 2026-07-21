@@ -56,6 +56,20 @@ For a data-prepared offline check:
 
 The orchestrator fails on data-quality, artifact, schema, or checksum errors. It writes all outputs to a temporary directory, renames the completed run to `artifacts/recommendations/runs/<content-hash>`, and then atomically replaces `artifacts/recommendations/current.json`. Failure before the pointer swap leaves the prior publication current.
 
+The scheduled chain records each core and auxiliary stage in
+`artifacts/nightly_status.json` and returns a truthful aggregate exit code. Daily
+price refreshes run in bounded subprocesses with one fresh-process retry and use
+Yahoo with per-symbol Stooq failover; fallback rows are provenance-labelled and
+are restated by Yahoo when the primary feed recovers. A daily range cache is not
+reused unless it was written after the requested end session closed.
+
+The legacy five-component WIND score is published only as a backward-readable V2
+historical diagnostic with `DESCRIPTIVE_ONLY`,
+`HISTORICAL_DIAGNOSTIC_ONLY`, and `NO_ACTION`. It cannot create an alert, order
+ticket, allocation, or promotion decision. The former leveraged WIND paper books
+are retired; the replacement is an unlevered, fixed-notional one-session-delay
+shadow that remains research-only after its prospective review gate.
+
 ## Run the continuous Edge Factory
 
 The factory turns missing evidence into resumable work instead of treating
@@ -247,8 +261,8 @@ cd android
 ./gradlew assembleRelease   # R8-minified and release-signed (see below)
 ```
 
-Current local release: `releases/EdgeStack-v1.7.apk` (version code 8), SHA-256
-`98c08f577b98a5849aa6c26c107c948a80c9f67aacbdbe0738c035bea4d56b80`.
+Current local release: `releases/EdgeStack-v1.8.apk` (version code 9), SHA-256
+`02f991947fdb90580295007c70c9b312270a71e5f14f30b17ef3a82a31f587bd`.
 The APK is RSA-signed with Android APK Signature Scheme v2.
 
 Release signing reads `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, and `RELEASE_KEY_PASSWORD` from the gitignored `android/local.properties`; generate a keystore once with `keytool -genkeypair -keystore keystore/edgestack-release.jks -alias edgestack -keyalg RSA -validity 10950`. Without these properties the release build is unsigned. Debug and release signatures differ — switching between them on a device requires uninstalling first.
@@ -291,6 +305,7 @@ Different horizons have separate labels, artifacts, calibrators, statistics, and
 - [V2 architecture and operations](docs/recommendation-engine-v2.md)
 - [Opening spike/fade research campaign](docs/opening-fade-study.md)
 - [Strange-edge campaign: data feasibility and frozen results](docs/strange-edges-study.md)
+- [Market-cycle claim ledger and WIND audit](docs/market-cycle-claim-audit.md)
 - [Migration and claim withdrawal](docs/v2-migration.md)
 - [Statistical validation](docs/statistical-validation.md)
 - [Backtesting and execution](docs/backtesting.md)

@@ -20,6 +20,7 @@ from edgestack.validation.bootstrap import (
     block_bootstrap_ci,
     bootstrap_ci,
     mean_pvalue_bootstrap,
+    suggested_block_length,
 )
 from edgestack.validation.metrics import (
     deflated_sharpe_ratio,
@@ -27,6 +28,7 @@ from edgestack.validation.metrics import (
     expected_max_sharpe,
     hit_rate,
     max_drawdown,
+    min_track_record_length,
     probabilistic_sharpe_ratio,
     profit_factor,
     sharpe_ratio,
@@ -146,3 +148,44 @@ def test_bayes_shrinkage_pulls_small_samples_to_neutral() -> None:
     rng = np.random.default_rng(9)
     big = rng.normal(0.01, 0.005, 2000)
     assert prob_mean_positive(big) > 0.999
+
+
+def test_min_track_record_length_inverts_psr() -> None:
+    sr, sr_bench, skew, kurt = 0.08, 0.02, -0.4, 5.0
+    result = min_track_record_length(sr, sr_bench, 252, skew, kurt, confidence=0.95)
+    min_n = result["min_n"]
+    assert np.isfinite(min_n) and min_n > 2
+    # PSR reaches confidence exactly at min_n and misses it a few obs short.
+    at = probabilistic_sharpe_ratio(sr, sr_bench, int(np.ceil(min_n)), skew, kurt)
+    below = probabilistic_sharpe_ratio(sr, sr_bench, max(2, int(min_n) - 5), skew, kurt)
+    assert at >= 0.95
+    assert below < 0.95
+
+
+def test_min_track_record_length_edge_cases() -> None:
+    hopeless = min_track_record_length(0.01, 0.02, 100, 0.0, 3.0)
+    assert hopeless["min_n"] == float("inf") and not hopeless["satisfied"]
+    modest = min_track_record_length(0.05, 0.0, 5000, 0.0, 3.0, confidence=0.90)
+    stricter = min_track_record_length(0.05, 0.0, 5000, 0.0, 3.0, confidence=0.99)
+    assert stricter["min_n"] > modest["min_n"]  # monotone in confidence
+    assert modest["satisfied"]
+
+
+def test_suggested_block_length_ar1_exceeds_iid() -> None:
+    rng = np.random.default_rng(5)
+    n = 2000
+    iid = rng.normal(0, 0.01, n)
+    ar = np.empty(n)
+    ar[0] = 0.0
+    eps = rng.normal(0, 0.01, n)
+    for i in range(1, n):
+        ar[i] = 0.9 * ar[i - 1] + eps[i]
+    res_iid = suggested_block_length(iid)
+    res_ar = suggested_block_length(ar)
+    assert res_iid["source"] == "politis_white" == res_ar["source"]
+    assert res_ar["stationary"] > 3 * res_iid["stationary"]
+
+
+def test_suggested_block_length_fallbacks() -> None:
+    short = suggested_block_length(np.random.default_rng(1).normal(0, 1, 50), fallback=13)
+    assert short["source"] == "fallback" and short["stationary"] == 13.0

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -89,3 +92,72 @@ def test_spa_refuses_incomplete_trial_family() -> None:
             complete_trial_ids=("standalone", "failed_compound"),
             reps=100,
         )
+
+
+def test_complete_family_tests_full_output_and_persistence(tmp_path) -> None:
+    from edgestack.validation.selection import BENCHMARK_COLUMN
+
+    rng = np.random.default_rng(17)
+    index = pd.bdate_range("2019-01-01", periods=400)
+    benchmark = pd.Series(rng.normal(0.0, 0.01, len(index)), index=index)
+    trials = pd.DataFrame(
+        {
+            "alpha": rng.normal(0.001, 0.01, len(index)),
+            "beta": rng.normal(0.0, 0.01, len(index)),
+            "gamma": rng.normal(0.0, 0.01, len(index)),
+        },
+        index=index,
+    )
+    # reps >= 1000: arch's StepM is numerically unstable at low rep counts
+    # on families with no clear winner (production always runs >= 2000).
+    result = complete_family_tests(
+        benchmark,
+        trials,
+        complete_trial_ids=("alpha", "beta", "gamma"),
+        reps=1_000,
+        pbo_partitions=8,
+        persist_dir=tmp_path / "trial_returns",
+        batch_id="unit-batch",
+    )
+    assert set(result) == {
+        "spa",
+        "stepm_superior",
+        "mcs",
+        "pbo",
+        "block_length_diagnostic",
+        "trial_returns_path",
+    }
+    assert "included" in result["mcs"] and "pbo" in result["pbo"]
+    assert result["block_length_diagnostic"]["configured"] == 20.0
+
+    parquet_path = tmp_path / "trial_returns" / "unit-batch.parquet"
+    assert str(parquet_path) == result["trial_returns_path"]
+    stored = pd.read_parquet(parquet_path)
+    assert list(stored.columns) == [BENCHMARK_COLUMN, "alpha", "beta", "gamma"]
+    assert all(str(dtype) == "float32" for dtype in stored.dtypes)
+    meta = json.loads((tmp_path / "trial_returns" / "unit-batch.meta.json").read_text())
+    assert meta["sha256"] == hashlib.sha256(parquet_path.read_bytes()).hexdigest()
+    assert meta["n_trials"] == 3 and meta["n_rows"] == len(index)
+
+
+def test_complete_family_tests_persistence_arg_pairing(tmp_path) -> None:
+    from edgestack.exceptions import DataError
+    from edgestack.validation.selection import persist_trial_returns
+
+    rng = np.random.default_rng(19)
+    index = pd.bdate_range("2019-01-01", periods=200)
+    benchmark = pd.Series(rng.normal(0, 0.01, len(index)), index=index)
+    trials = pd.DataFrame(
+        {"a": rng.normal(0, 0.01, len(index)), "b": rng.normal(0, 0.01, len(index))},
+        index=index,
+    )
+    with pytest.raises(ValidationError, match="passed together"):
+        complete_family_tests(
+            benchmark,
+            trials,
+            complete_trial_ids=("a", "b"),
+            reps=100,
+            persist_dir=tmp_path,
+        )
+    with pytest.raises(DataError, match="unsafe path"):
+        persist_trial_returns(benchmark, trials, persist_dir=tmp_path, batch_id="../escape")

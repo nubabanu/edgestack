@@ -36,7 +36,7 @@ class PathsConfig(_Section):
 
 
 class UniverseConfig(_Section):
-    source: Literal["local", "stooq", "yahoo", "alpaca", "synthetic"] = "local"
+    source: Literal["local", "stooq", "yahoo", "yahoo_stooq", "alpaca", "synthetic"] = "local"
     symbols: tuple[str, ...] = ()
     benchmark_symbol: str = "SPY"
     min_price: float = Field(default=5.0, gt=0)
@@ -95,6 +95,13 @@ class ValidationConfig(_Section):
     bootstrap_samples: int = Field(default=2000, ge=100)
     block_length_sessions: int = Field(default=20, ge=1)
     min_subperiod_consistency: float = Field(default=0.6, ge=0, le=1)
+    # Overfitting diagnostics (MCS membership / PBO ceiling). Report-only by
+    # default: thresholds are pre-registered here; flipping the binding flag
+    # is the one-line promotion-gate change.
+    mcs_size: float = Field(default=0.05, gt=0, lt=1)
+    pbo_partitions: int = Field(default=16, ge=4, le=20)
+    pbo_max: float = Field(default=0.20, ge=0, le=1)
+    overfitting_gates_binding: bool = False
 
 
 class DiscoveryConfig(_Section):
