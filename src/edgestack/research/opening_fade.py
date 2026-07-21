@@ -42,7 +42,7 @@ from edgestack.discovery.multiple_testing import benjamini_hochberg
 from edgestack.exceptions import DataError, ValidationError
 from edgestack.execution.costs import CostModel
 from edgestack.types import CostScenario, Side
-from edgestack.validation.advanced_tests import spa_test, stepm_superior
+from edgestack.validation.advanced_tests import model_confidence_set, spa_test, stepm_superior
 from edgestack.validation.bootstrap import block_bootstrap_ci, mean_pvalue_bootstrap
 from edgestack.validation.metrics import (
     deflated_sharpe_ratio,
@@ -53,6 +53,7 @@ from edgestack.validation.metrics import (
     sortino_ratio,
     var_es,
 )
+from edgestack.validation.overfitting import pbo_cscv
 
 EXCHANGE_TZ = "America/New_York"
 DISCLAIMER = (
@@ -2199,6 +2200,8 @@ def validate_candidates(
         "canonical_integration": False,
         "spa": family_tests["spa"],
         "stepm": family_tests["stepm"],
+        "mcs": family_tests.get("mcs", {"status": "UNAVAILABLE", "reason": "not computed"}),
+        "pbo": family_tests.get("pbo", {"status": "UNAVAILABLE", "reason": "not computed"}),
         "parameter_neighborhoods": neighborhood,
     }
 
@@ -2241,9 +2244,29 @@ def _complete_family_tests(
             size=cfg.validation.fdr_alpha,
             seed=cfg.validation.random_seed,
         )
+        # Overfitting diagnostics (report-only); their failure never voids SPA/StepM.
+        try:
+            mcs: dict[str, Any] = {
+                "status": "CALCULATED",
+                **model_confidence_set(
+                    models,
+                    size=cfg.validation.fdr_alpha,
+                    reps=min(cfg.validation.bootstrap_samples, 1_000),
+                    block_size=cfg.validation.block_length,
+                    seed=cfg.validation.random_seed,
+                ),
+            }
+        except (ImportError, ValidationError, ValueError) as exc:
+            mcs = {"status": "UNAVAILABLE", "reason": str(exc)}
+        try:
+            pbo: dict[str, Any] = {"status": "CALCULATED", **pbo_cscv(models)}
+        except (ValidationError, ValueError) as exc:
+            pbo = {"status": "UNAVAILABLE", "reason": str(exc)}
         return {
             "spa": {"status": "CALCULATED", **spa},
             "stepm": {"status": "CALCULATED", "superior_models": superior},
+            "mcs": mcs,
+            "pbo": pbo,
         }
     except (ImportError, ValidationError, ValueError) as exc:
         return {

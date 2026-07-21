@@ -32,6 +32,7 @@ from edgestack.discovery.event_studies import study_returns
 from edgestack.discovery.multiple_testing import fdr_adjust
 from edgestack.execution.costs import CostModel
 from edgestack.features.binning import QuantileBinner
+from edgestack.logging import get_logger, log_event
 from edgestack.types import (
     CandidateEdge,
     CostScenario,
@@ -44,8 +45,11 @@ from edgestack.types import (
     Side,
     condition_features,
 )
+from edgestack.validation.bootstrap import suggested_block_length
 from edgestack.validation.metrics import deflated_sharpe_ratio
 from edgestack.validation.splits import Fold, PurgedWalkForwardSplitter
+
+log = get_logger("validation.walk_forward")
 
 
 @dataclass
@@ -169,6 +173,30 @@ def validate_batch(
         )
         studies.append(study)
         outcome.p_value = study.p_value if study is not None else 1.0
+
+    # Report-only diagnostic: how the fixed bootstrap block length compares
+    # with the Politis-White estimate over this batch. Never changes the
+    # block length actually used above.
+    suggestions = [
+        suggested_block_length(
+            outcome.returns_by_scenario[conservative],
+            fallback=cfg.validation.block_length_sessions,
+        )
+        for outcome in outcomes
+        if len(outcome.returns_by_scenario[conservative]) >= 100
+    ]
+    estimated = [s["stationary"] for s in suggestions if s["source"] == "politis_white"]
+    if estimated:
+        log_event(
+            log,
+            20,
+            "block length diagnostic",
+            configured=cfg.validation.block_length_sessions,
+            suggested_median=round(float(np.median(estimated)), 1),
+            suggested_p10=round(float(np.percentile(estimated, 10)), 1),
+            suggested_p90=round(float(np.percentile(estimated, 90)), 1),
+            candidates_evaluated=len(estimated),
+        )
 
     pvals = np.array([o.p_value for o in outcomes])
     qvals = fdr_adjust(pvals, cfg.validation.fdr_method)

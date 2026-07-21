@@ -90,3 +90,50 @@ def test_cgs_hurdle() -> None:
     assert passes_cgs_hurdle(CGS_HURDLE_CROSS_SECTION + 0.01)
     assert not passes_cgs_hurdle(2.5)
     assert not passes_cgs_hurdle(3.5, cross_sectional=False)  # ts hurdle is 3.8
+
+
+def test_mcs_includes_strong_excludes_bad() -> None:
+    from edgestack.validation.advanced_tests import model_confidence_set
+
+    rng = np.random.default_rng(10)
+    models = pd.DataFrame(
+        {
+            "strong": _series(rng, 0.003).to_numpy(),
+            "bad": _series(rng, -0.003).to_numpy(),
+            **{f"noise{i}": _series(rng, 0.0).to_numpy() for i in range(4)},
+        },
+        index=_series(rng).index,
+    )
+    result = model_confidence_set(models, reps=300, seed=1)
+    assert "strong" in result["included"]
+    assert "bad" in result["excluded"]
+    assert set(result["pvalues"]) == set(models.columns)
+    assert result["n_models"] == 6 and result["n_days"] == N
+
+
+def test_mcs_keeps_indistinguishable_noise_together() -> None:
+    from edgestack.validation.advanced_tests import model_confidence_set
+
+    rng = np.random.default_rng(20)
+    models = pd.DataFrame(
+        {f"noise{i}": _series(rng, 0.0).to_numpy() for i in range(6)},
+        index=_series(rng).index,
+    )
+    result = model_confidence_set(models, reps=300, seed=2)
+    assert len(result["included"]) >= 5  # noise models are not distinguishable
+
+
+def test_mcs_guards() -> None:
+    from edgestack.exceptions import ValidationError
+    from edgestack.validation.advanced_tests import model_confidence_set
+
+    rng = np.random.default_rng(30)
+    one_col = pd.DataFrame({"only": _series(rng).to_numpy()})
+    with pytest.raises(ValidationError, match="at least 2 models"):
+        model_confidence_set(one_col)
+    short = pd.DataFrame({"a": np.zeros(30), "b": np.ones(30)})
+    with pytest.raises(ValidationError, match=">=60"):
+        model_confidence_set(short)
+    degenerate = pd.DataFrame({"a": np.zeros(100), "b": np.ones(100)})
+    with pytest.raises(ValidationError, match="pairwise loss differential"):
+        model_confidence_set(degenerate)

@@ -75,6 +75,33 @@ class ResearchStore:
     def __init__(self, catalog: DataCatalog) -> None:
         self.catalog = catalog
 
+    def record_trial_returns_artifact(self, artifact: dict) -> None:
+        """Register a persisted T x k trial-return matrix (replay input for MCS/PBO)."""
+        with self.catalog.connect() as con:
+            con.execute(
+                "INSERT OR REPLACE INTO trial_return_artifacts_v1 VALUES (?, ?, ?, ?, ?, ?)",
+                [
+                    artifact["batch_id"],
+                    datetime.now(UTC),
+                    artifact["path"],
+                    artifact["sha256"],
+                    int(artifact["n_trials"]),
+                    int(artifact["n_rows"]),
+                ],
+            )
+
+    def trial_returns_artifact(self, batch_id: str) -> dict | None:
+        with self.catalog.connect() as con:
+            row = con.execute(
+                "SELECT batch_id, created_at, path, sha256, n_trials, n_rows "
+                "FROM trial_return_artifacts_v1 WHERE batch_id = ?",
+                [batch_id],
+            ).fetchone()
+        if row is None:
+            return None
+        keys = ("batch_id", "created_at", "path", "sha256", "n_trials", "n_rows")
+        return dict(zip(keys, row, strict=True))
+
     def upsert_coverage(self, coverage: DataCoverageV1) -> None:
         with self.catalog.connect() as con:
             con.execute(

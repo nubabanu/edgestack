@@ -75,6 +75,29 @@ def test_static_universe_carries_survivorship_warning(cfg: EdgeStackConfig) -> N
     assert snap.symbols == ("AAA", "BBB")
 
 
+def test_range_cache_fresh_requires_post_close_write() -> None:
+    from datetime import UTC, datetime
+
+    from edgestack.data.providers.base import range_cache_fresh
+
+    end = date(2026, 7, 20)  # a Monday session
+    ttl_s = 30 * 86400
+    close = datetime(2026, 7, 20, 21, 0, tzinfo=UTC).timestamp()
+    now = datetime(2026, 7, 21, 7, 0, tzinfo=UTC).timestamp()
+
+    # Cached before the end-date close: permanently incomplete, never fresh
+    # (the 2026-07-20 poisoning: a 11:42 UTC catch-up run masked the close bar).
+    pre_close = datetime(2026, 7, 20, 11, 42, tzinfo=UTC).timestamp()
+    assert not range_cache_fresh(pre_close, end, ttl_s, now_s=now)
+
+    # Cached after the close and within TTL: fresh.
+    assert range_cache_fresh(close + 3600, end, ttl_s, now_s=now)
+
+    # TTL expiry still applies even post-close.
+    late_now = close + ttl_s + 7200
+    assert not range_cache_fresh(close + 3600, end, ttl_s, now_s=late_now)
+
+
 def test_stooq_network_marker_exists() -> None:
     # Real network access is exercised only via `pytest -m network` and the
     # demo pipeline; unit tests must stay offline.

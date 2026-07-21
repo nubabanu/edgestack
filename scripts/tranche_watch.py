@@ -42,6 +42,7 @@ import pandas as pd
 import requests
 
 from edgestack.data.catalog import atomic_write_bytes
+from edgestack.research.market_wind import WindSnapshotV2, snapshot_for_next_session
 
 ROOT = Path(__file__).resolve().parents[1]
 PRICES = ROOT / "data" / "curated" / "prices"
@@ -540,6 +541,25 @@ Generated nightly by scripts/tranche_watch.py.</footer></body></html>"""
     DASHBOARD_PATH.write_text(doc, encoding="utf-8")
 
 
+def market_wind_score(*, evaluated_on: date | None = None) -> dict:
+    """Return the explicitly non-actionable V2 WIND payload for the next session."""
+    try:
+        spy = load("SPY")
+        frame = pd.DataFrame({"close": spy["close"], "adj_close": spy["adj_close"]})
+        snapshot = snapshot_for_next_session(frame, evaluated_on=evaluated_on)
+        return snapshot.model_dump(mode="json")
+    except Exception as exc:  # display-only: never break the watcher
+        print(f"wind score unavailable: {exc}")
+        return WindSnapshotV2(
+            status="UNAVAILABLE",
+            as_of=None,
+            for_session=None,
+            score=None,
+            votes={},
+            reasons=(f"WATCHER_FAILED:{exc}",),
+        ).model_dump(mode="json")
+
+
 def main() -> int:
     LOG_PATH.parent.mkdir(exist_ok=True)
     STATE_PATH.parent.mkdir(exist_ok=True)
@@ -560,6 +580,14 @@ def main() -> int:
         "names": ", ".join(f"{s}{'+' if above50.iloc[-1][s] else '-'}" for s in BASKET),
     }
     lines.append(f"SECTOR breadth {breadth_count}/{len(BASKET)} above SMA50 ({breadth['names']})")
+    wind = market_wind_score()
+    if wind["status"] == "READY":
+        vote_text = ",".join(f"{name}={value:+d}" for name, value in wind["votes"].items())
+        lines.append(
+            f"WIND {wind['score']:+d} for {wind['for_session']} ({wind['label']}) [{vote_text}]"
+        )
+    else:
+        lines.append(f"WARN WIND unavailable ({','.join(wind['reasons'])})")
     prev_breadth = state.get("sector_breadth", breadth_count)
     if breadth_count >= 4 and prev_breadth < 4:
         alerts.append(f"ALERT SECTOR: breadth crossed to {breadth_count}/{len(BASKET)} above SMA50")
@@ -718,6 +746,7 @@ def main() -> int:
             "trigger_types": PUBLIC_TRIGGER_TYPES,
             "go_alerts_enabled": GO_ALERTS_ENABLED,
             "breadth": breadth,
+            "wind": wind,
             "symbols": public,
             "events": events,
         },

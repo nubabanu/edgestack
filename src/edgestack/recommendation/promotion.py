@@ -49,6 +49,12 @@ class PromotionInputs:
     compound_ablations_pass: bool | None = None
     buy_now_spy: pd.Series | None = None
     financed_spy_same_risk: pd.Series | None = None
+    # Overfitting diagnostics (report-only unless overfitting_gates_binding).
+    mcs_member: bool | None = None
+    mcs_pvalue: float | None = None
+    pbo_cscv: float | None = None
+    pbo_max: float = 0.20
+    overfitting_gates_binding: bool = False
 
 
 def risk_match_benchmark(training_strategy: pd.Series, benchmark: pd.Series) -> pd.Series:
@@ -115,6 +121,13 @@ def evaluate_promotion(inputs: PromotionInputs, *, seed: int = 42) -> PromotionD
         or not inputs.prospective_evidence.stock_promotion_clock_satisfied
     ):
         reasons.append("stock prospective evidence clock incomplete")
+    # Overfitting diagnostics: always echoed on the decision, but they veto
+    # only once validation.overfitting_gates_binding is flipped on.
+    if inputs.overfitting_gates_binding:
+        if inputs.mcs_member is False:
+            reasons.append("not in the model confidence set")
+        if inputs.pbo_cscv is not None and inputs.pbo_cscv > inputs.pbo_max:
+            reasons.append(f"PBO {inputs.pbo_cscv:.2f} exceeds ceiling {inputs.pbo_max:.2f}")
     promoted = not reasons
     return PromotionDecisionV2(
         sleeve_id=inputs.sleeve_id,
@@ -132,4 +145,8 @@ def evaluate_promotion(inputs: PromotionInputs, *, seed: int = 42) -> PromotionD
             sorted(name for name, passed in inputs.stress_scenarios.items() if passed)
         ),
         failure_reasons=tuple(reasons),
+        mcs_in_confidence_set=inputs.mcs_member,
+        mcs_pvalue=inputs.mcs_pvalue,
+        pbo_cscv=inputs.pbo_cscv,
+        overfitting_gates_binding=inputs.overfitting_gates_binding,
     )

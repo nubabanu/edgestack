@@ -14,7 +14,7 @@ paths:
   artifacts_dir: artifacts
 
 universe:
-  source: yahoo
+  source: yahoo_stooq             # Yahoo primary, per-symbol Stooq failover
   symbols: [SPY]                  # placeholder; PIT module supplies members
   benchmark_symbol: SPY
   min_price: 5.0

@@ -16,6 +16,8 @@ negated internally — callers always pass RETURNS.
 
 from __future__ import annotations
 
+from typing import Literal
+
 import numpy as np
 import pandas as pd
 
@@ -100,6 +102,80 @@ def stepm_superior(
     )
     stepm.compute()
     return [str(name) for name in stepm.superior_models]
+
+
+def model_confidence_set(
+    model_returns: pd.DataFrame,
+    *,
+    size: float = 0.05,
+    reps: int = 1000,
+    block_size: int = 20,
+    method: Literal["R", "max"] = "R",
+    seed: int = 42,
+) -> dict:
+    """Hansen-Lunde-Nason Model Confidence Set via `arch`.
+
+    Benchmark-free: returns the set of models statistically indistinguishable
+    from the best at confidence ``1 - size`` — structurally discourages
+    crowning one lucky path. Callers wanting the benchmark inside the set
+    append it as a column. The "R" method builds a k x k comparison
+    structure, so families larger than 500 models automatically switch to
+    the cheaper "max" method.
+    """
+    from arch.bootstrap import MCS
+
+    cleaned = model_returns.dropna()
+    if cleaned.shape[1] < 2:
+        raise ValidationError("MCS needs at least 2 models")
+    if len(cleaned) < 60:
+        raise ValidationError(f"need >=60 aligned observations for MCS, got {len(cleaned)}")
+    # ``arch`` cannot estimate the studentized loss differential when every
+    # model has the same centered path (for example, several constant-return
+    # controls).  Its R method falls through to the max method and, on some
+    # NumPy/Windows builds, that degenerate input can loop indefinitely or
+    # terminate the interpreter with an access violation.  There is no honest
+    # inferential result in this case: every pairwise differential has zero
+    # sampling variance.  Fail closed so callers report MCS as unavailable.
+    values = cleaned.to_numpy(dtype=float)
+    centered = values - values.mean(axis=0, keepdims=True)
+    if np.allclose(centered, centered[:, [0]], rtol=1e-12, atol=1e-15):
+        raise ValidationError("MCS needs nonzero variance in a pairwise loss differential")
+    if cleaned.shape[1] > 500:
+        method = "max"
+
+    def _compute(chosen: Literal["R", "max"]):
+        mcs = MCS(
+            -cleaned,
+            size=size,
+            reps=reps,
+            block_size=block_size,
+            method=chosen,
+            bootstrap="stationary",
+            seed=seed,
+        )
+        mcs.compute()
+        return mcs
+
+    try:
+        mcs = _compute(method)
+    except (IndexError, ValueError):
+        # arch's "R" elimination path can fail numerically on near-tied
+        # families; the "max" method is the standard robust fallback.
+        try:
+            method = "max"
+            mcs = _compute(method)
+        except (IndexError, ValueError) as exc:
+            raise ValidationError(f"MCS computation failed: {exc}") from exc
+    pvalues = {str(idx): float(v) for idx, v in mcs.pvalues["Pvalue"].items()}
+    return {
+        "included": tuple(sorted(str(m) for m in mcs.included)),
+        "excluded": tuple(sorted(str(m) for m in mcs.excluded)),
+        "pvalues": pvalues,
+        "size": size,
+        "method": method,
+        "n_models": int(cleaned.shape[1]),
+        "n_days": len(cleaned),
+    }
 
 
 def sharpe_difference_test(

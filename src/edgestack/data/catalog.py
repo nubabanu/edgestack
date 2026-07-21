@@ -217,6 +217,14 @@ CREATE TABLE IF NOT EXISTS research_proposal_attempts_v1 (
     payload JSON NOT NULL,
     UNIQUE (proposal_id, sequence)
 );
+CREATE TABLE IF NOT EXISTS trial_return_artifacts_v1 (
+    batch_id TEXT PRIMARY KEY,
+    created_at TIMESTAMP NOT NULL,
+    path TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    n_trials INTEGER NOT NULL,
+    n_rows INTEGER NOT NULL
+);
 """
 
 

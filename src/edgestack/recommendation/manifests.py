@@ -120,6 +120,13 @@ class PromotionDecisionV2(V2Model):
     log_growth_lower_bounds: dict[str, float] = Field(default_factory=dict)
     stress_scenarios_passed: tuple[str, ...]
     failure_reasons: tuple[str, ...] = ()
+    # Overfitting diagnostics (2026-07): optional with defaults so payloads
+    # stored before this change keep re-validating. Report-only until
+    # validation.overfitting_gates_binding is enabled.
+    mcs_in_confidence_set: bool | None = None
+    mcs_pvalue: float | None = Field(default=None, ge=0, le=1)
+    pbo_cscv: float | None = Field(default=None, ge=0, le=1)
+    overfitting_gates_binding: bool = False
 
 
 class ProspectiveEvidenceV2(V2Model):

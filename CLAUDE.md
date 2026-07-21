@@ -110,8 +110,21 @@ Windows Task Scheduler job **"EdgeStack Nightly"** runs `scripts/nightly.bat` da
 23:30, which runs `scripts/nightly.py` (price refresh for the whole catalog → quality gates
 → feature build → news → canonical publication) and then **always** runs
 `scripts/tranche_watch.py`, even if nightly failed. Logs: `logs/nightly_YYYYMMDD.log` and
-`logs/tranche_watch.log`. Known issue: nightly's Yahoo fetch intermittently dies with a
-fatal `PyEval_SaveThread` GIL error; the watcher tolerates this and flags stale data.
+`logs/tranche_watch.log`.
+
+Reliability rails (added 2026-07-21 after the 2026-07-20 outage, which was a double
+fault: the intermittent fatal `PyEval_SaveThread` GIL crash in the Yahoo fetch, plus
+cache poisoning — a pre-close daytime catch-up run cached the `..end=today` price range
+without the close bar, and the 30-day TTL served that stale range to every retry.
+`range_cache_fresh` in `data/providers/base.py` now refuses any cached daily range not
+written after the end date's US close): the price refresh uses the `yahoo_stooq` failover provider
+(`data/providers/failover.py`; Stooq fills per-symbol gaps with `adj_close=close` until
+Yahoo restates), each 25-symbol batch runs in a subprocess via
+`edgestack.data.fetch_worker` with one fresh-process retry (`--no-fetch-isolation` to
+debug in-process), and every chain stage is recorded through `scripts/run_stage.py` into
+`artifacts/nightly_status.json`. `scripts/nightly_status_report.py` ends the chain: it
+prints the stage summary, alerts via Telegram/toast on failure, and exits 0 (ok) /
+1 (auxiliary stage failed) / 2 (core stage failed) so Task Scheduler sees the truth.
 
 ### Tranche watch program (ACN / CTSH / EPAM / SPY)
 
@@ -134,6 +147,23 @@ validation gate on all three names (2026-07-19: the 60+ bucket does not beat
 unconditional forward returns), so `GO_ALERTS_ENABLED = False`. Do not enable without
 a fresh go-backtest PASS; the individual triggers remain the actionable alerts.
 
+A market-level **WIND score** (`market_wind_score()`, audit:
+`scripts/confluence_timing.py`) is logged and published in the status JSON as a V2
+`DESCRIPTIVE_ONLY` / `NO_ACTION` payload. Its five neutral price/calendar components
+are not observed mechanism flows. Corrected verdict: strict monotonicity and selective
+entry FAILED; the old QQQ daily switching veto passed historically (t=3.13) but does
+not validate delaying a planned purchase. WIND never fires alerts, creates tickets,
+sizes exposure, or gates a buy. Full source-claim audit:
+`docs/market-cycle-claim-audit.md`.
+
+The former 3x and 20x WIND paper experiments are RETIRED. `scripts/wind_paper_book.py`
+is now an idempotent retirement handler: it may settle only the position already
+pending at retirement, opens nothing new, then writes a content-addressed archive.
+`scripts/wind_execution_shadow.py` replaces it as the evidence collector: an unlevered,
+fixed-notional paired-fill audit comparing a negative-score session's open with a
+mandatory fill exactly one XNYS session later. It is reviewable only after 252
+prospective sessions and 30 completed events and can never promote automatically.
+
 `scripts/intraday_precheck.py` (Task Scheduler "EdgeStack Precheck", weekdays 21:45
 local via `scripts/precheck.bat`, logs to `logs/precheck.log`) fetches today's partial
 bar 15 min before the US close and sends a provisional-T1 heads-up so entries can be
@@ -154,7 +184,7 @@ automation would have done.
 Related one-offs on this machine: Windows Startup launcher
 (`%APPDATA%\...\Startup\EdgeStackAPI.bat`) keeps `scripts/api_serve.bat` (watchdog,
 0.0.0.0:8000) alive for the Android app; firewall rule "EdgeStack API" exists;
-`releases/EdgeStack-v1.6.apk` is the current companion build.
+`releases/EdgeStack-v1.8.apk` is the current companion build.
 
 `scripts/tranche_policy_backtest.py` is the companion cohort study; its headline:
 staged entry is insurance, not alpha, and lump-sum recovery odds depend heavily on

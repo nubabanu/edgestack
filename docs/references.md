@@ -101,6 +101,22 @@ sample. Campaign verdicts come only from frozen, reproducible evidence.**
   FOMC cycle. *The Journal of Finance, 74*(5), 2201–2248.
 - Birru, J. (2018). Day of the week and the cross-section of returns. *JFE, 130*(1).
 
+## Market-cycle audit sources
+
+- Cboe. 0DTE trading resources and daily SPX expiration availability.
+  https://www.cboe.com/tradable-products/0dte
+- NYSE. Opening and closing auction timelines and 15:50 imbalance dissemination.
+  https://www.nyse.com/trade/auctions
+- U.S. Treasury. General auction and issue/settlement timing by bill tenor.
+  https://www.treasurydirect.gov/auctions/general-auction-timing/
+- Gao, L., Han, Y., Li, S. Z., & Zhou, G. Market Intraday Momentum.
+  https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2440866
+- Avellaneda, M., & Lipkin, M. D. (2003). A market-induced mechanism for stock
+  pinning. *Quantitative Finance, 3*(6).
+- Fidelity and Betterment product disclosures on user-selected recurring
+  investments and drift-triggered rebalancing. These document platform
+  mechanics, not return predictability; see `docs/market-cycle-claim-audit.md`.
+
 ## Interpretable rule discovery (methods used by the rules campaign)
 
 - Friedman, J. H., & Popescu, B. E. (2008). Predictive learning via rule ensembles

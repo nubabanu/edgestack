@@ -325,6 +325,7 @@ def _watcher_health(
                 "global_active": [],
                 "events": [],
                 "go_scores": {},
+                "wind": None,
             },
             (),
         )
@@ -382,6 +383,7 @@ def _watcher_health(
                 "go_scores": go_scores,
                 "go_alerts_enabled": bool(payload.get("go_alerts_enabled", False)),
                 "breadth": breadth,
+                "wind": payload.get("wind"),
             },
             watch_symbols,
         )
@@ -404,6 +406,7 @@ def _watcher_health(
                 "global_active": [],
                 "events": [],
                 "go_scores": {},
+                "wind": None,
             },
             (),
         )

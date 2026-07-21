@@ -163,3 +163,67 @@ def test_compound_fails_when_any_incremental_ablation_gate_fails() -> None:
     decision = evaluate_promotion(inputs)
     assert not decision.promoted
     assert any("ablation" in reason for reason in decision.failure_reasons)
+
+
+def test_overfitting_diagnostics_report_only_never_veto() -> None:
+    base = _promotion_inputs(AssetKind.ETF)
+    inputs = PromotionInputs(
+        **{
+            **base.__dict__,
+            "mcs_member": False,
+            "mcs_pvalue": 0.01,
+            "pbo_cscv": 0.9,
+            "overfitting_gates_binding": False,
+        }
+    )
+    decision = evaluate_promotion(inputs)
+    assert decision.promoted  # report-only: terrible diagnostics cannot veto
+    assert decision.mcs_in_confidence_set is False
+    assert decision.mcs_pvalue == 0.01
+    assert decision.pbo_cscv == 0.9
+    assert decision.overfitting_gates_binding is False
+
+
+def test_overfitting_diagnostics_binding_vetoes() -> None:
+    base = _promotion_inputs(AssetKind.ETF)
+    inputs = PromotionInputs(
+        **{
+            **base.__dict__,
+            "mcs_member": False,
+            "pbo_cscv": 0.35,
+            "pbo_max": 0.20,
+            "overfitting_gates_binding": True,
+        }
+    )
+    decision = evaluate_promotion(inputs)
+    assert not decision.promoted
+    assert any("model confidence set" in reason for reason in decision.failure_reasons)
+    assert any("PBO" in reason for reason in decision.failure_reasons)
+    # None-valued diagnostics never produce reasons, even when binding.
+    clean = PromotionInputs(**{**base.__dict__, "overfitting_gates_binding": True})
+    assert evaluate_promotion(clean).promoted
+
+
+def test_pre_change_promotion_decision_payload_still_validates() -> None:
+    from edgestack.recommendation.manifests import PromotionDecisionV2
+
+    legacy_payload = {
+        "schema_version": 2,
+        "sleeve_id": "old-sleeve",
+        "artifact_hash": "abc",
+        "promoted": False,
+        "evidence_grade": "WATCHLIST",
+        "valid_outer_folds": 5,
+        "positive_outer_folds": 3,
+        "spa_consistent_pvalue": 0.2,
+        "stepm_superior": False,
+        "sharpe_lower_bound_vs_spy": -0.1,
+        "sharpe_lower_bound_vs_baseline": -0.2,
+        "log_growth_lower_bounds": {},
+        "stress_scenarios_passed": [],
+        "failure_reasons": ["failed SPA consistent p-value"],
+    }
+    decision = PromotionDecisionV2.model_validate(legacy_payload)
+    assert decision.mcs_in_confidence_set is None
+    assert decision.pbo_cscv is None
+    assert decision.overfitting_gates_binding is False

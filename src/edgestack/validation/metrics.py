@@ -130,6 +130,36 @@ def probabilistic_sharpe_ratio(
     return float(sps.norm.cdf(z))
 
 
+def min_track_record_length(
+    observed_sr: float,
+    benchmark_sr: float,
+    n: int,
+    skew: float,
+    kurt: float,
+    *,
+    confidence: float = 0.95,
+) -> dict:
+    """Bailey & Lopez de Prado MinTRL: smallest sample size at which the PSR
+    reaches ``confidence``.
+
+    Exact inversion of :func:`probabilistic_sharpe_ratio` (same variance
+    kernel, same per-period SR and ordinary-kurtosis conventions). Returns
+    ``{"min_n": float, "n": n, "satisfied": bool}``; ``min_n`` is ``inf``
+    when the observed SR does not exceed the benchmark or the kernel is
+    degenerate — no track record length can ever reach confidence there.
+    """
+    if n < 2:
+        raise ValidationError("need n >= 2 for MinTRL")
+    if not 0.0 < confidence < 1.0:
+        raise ValidationError("confidence must be in (0, 1)")
+    kernel = 1.0 - skew * observed_sr + (kurt - 1.0) / 4.0 * observed_sr**2
+    if observed_sr <= benchmark_sr or not np.isfinite(kernel) or kernel <= 0:
+        return {"min_n": float("inf"), "n": n, "satisfied": False}
+    z_conf = float(sps.norm.ppf(confidence))
+    min_n = 1.0 + kernel * (z_conf / (observed_sr - benchmark_sr)) ** 2
+    return {"min_n": float(min_n), "n": n, "satisfied": bool(n >= min_n)}
+
+
 def expected_max_sharpe(n_trials: int, var_sharpe: float) -> float:
     """E[max SR] among ``n_trials`` zero-skill trials with SR variance ``var_sharpe``."""
     if n_trials < 1:

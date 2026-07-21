@@ -139,3 +139,117 @@ fragile. Honest caveat: raw holdout CAGR trails SPY (15.3% vs ~21%); the
 book wins on risk-adjusted terms and drawdown (one third of SPY's), not on
 raw return in a bull market. It is the codified version of the final
 recommendation: diversified core, validated satellite, vol governor.
+
+## USO entry-timing transfer test (uso_entry_study.py, 2026-07-21)
+
+Question: do the tranche T1/T2/T3 entry triggers transfer to oil (USO), i.e.
+should tranche_watch cover it? Two independent tests, both negative:
+
+- **Zoo edge-check** (35 rules): zero survivors. Best was mr_rsi2_dip_uptrend
+  (dev/val beat B&H, holdout collapsed -0.52 vs 0.87; alpha t=1.69 < 2).
+- **Entry-timing transfer** (go-backtest gate: conditional forward return
+  must beat unconditional entry in all splits AND pooled non-overlapping
+  event t >= 2): **0 of 16 trigger x horizon combos pass**; best pooled
+  t = 0.57. Dev split is thin (curated USO starts 2015) — but no candidate
+  even trends toward passing.
+
+Verdict: **do NOT add USO to tranche_watch.** The equity dip/repair/trend
+triggers carry no measurable entry edge on oil. Honest caveats: single
+previously-accessed series, holdout previously accessed, USO roll-cost bleed
+makes buy-and-hold a weak baseline (which flatters timing rules — and they
+still failed).
+
+## Breadth timing suite (breadth_timing.py, 2026-07-21)
+
+First test of S&P breadth internals as a timing family — computed over
+POINT-IN-TIME membership (universe_pit), not the survivorship-biased catalog
+list. 11 pre-declared rules (textbook thresholds, no parameter search) x
+SPY/QQQ = 22 trials (~0.6 false positives expected at t>=2): washouts
+(%>20DMA < 15%), Zweig thrust (0.40 -> 0.615), participation gates
+(%>200DMA, with and without hysteresis), McClellan oscillator, net new
+highs, price+breadth confirm, dip-in-breadth-uptrend.
+
+Result: **ZERO survivors, zero near-survivors.** Best was
+dip_in_breadth_uptrend on SPY (pooled alpha t=1.98 — under the bar, and
+Sharpe < B&H in dev AND val; its t is carried by the previously-accessed
+2024+ window). Price+breadth confirm (t=1.63) adds nothing over the plain
+200-DMA gate. McClellan-positive is actively bad (holdout Sharpe -0.08 vs
+1.26).
+
+Verdict: breadth internals, measured honestly, do not improve on the
+already-validated price-based gates for SPY/QQQ exposure. Consistent with
+the zoo's standing conclusion: diversification wins, timing loses. Caveats:
+panel starts 2011 (dev split is 5y); PIT membership with free-feed price
+coverage of 379-475 members (reported per split in
+artifacts/breadth_timing.json).
+
+## Modern-era re-score of the rejected graveyard (modern_era_rescore.py, 2026-07-21)
+
+Hypothesis: "markets changed after 2020; rules rejected on full history may
+be good in the modern era." Re-scored ALL 407 (rule, vehicle) trials — full
+zoo library + breadth suite — on 2020-2022 and 2023-2026 windows only
+(candidate bar: >= B&H Sharpe in both + pooled 2020+ alpha t >= 2).
+
+Result: **8 candidates vs ~10 expected by chance** — and their composition
+is the real finding. The top candidates are the ALREADY-VALIDATED families
+re-emerging in the modern window: trend+dip composite (QQQ t=3.56), 3-down-
+days mean reversion (XLK t=3.33, QQQ t=3.11), 20d-high breakout (QQQ/SPY
+~t=2.1-2.2). The only true graveyard resurrection is PSAR on XLY (one
+sector, t=2.24) — exactly the profile of the ~10 chance hits.
+
+Verdict: the post-2020 market rewards the SAME edge families that worked
+before 2020. No evidence of edge rotation; strong evidence of edge
+stability. The "regimes changed" argument, tested against 407 rejected
+trials, resurrects nothing beyond noise. All windows previously accessed;
+hypothesis-generation only.
+
+## Ensemble4 re-weighting test (ensemble_weights.py, 2026-07-21)
+
+Prompted by the modern-era re-score ("the validated families lead post-2020
+— weight them accordingly"). Five pre-declared schemes (equal incumbent,
+alpha-t-weighted, Sharpe-weighted, inverse-vol, drop-worst), weight inputs
+from dev+val only, next-open fills at 2 bps, selection rule: beat equal's
+Sharpe in BOTH dev and val on QQQ; holdout reported after.
+
+Result: **no challenger beats equal weight in both splits** (alpha-t and
+inverse-vol win dev by +0.02 Sharpe, lose/tie val; drop-worst loses val
+badly). The four families' dev+val evidence is nearly uniform (alpha t
+2.18-3.08) — when evidence is this balanced, 1/N IS the evidence-based
+weighting (DeMiguel et al. 2009 in miniature). Differences across schemes
+are ±0.02 Sharpe: churn without signal.
+
+Verdict: keep ensemble4 equal-weighted. Weights that "lean into" any family
+are fitting noise in the seen window.
+
+## Legacy confluence "WIND" audit (confluence_timing.py, 2026-07-21)
+
+Five observable components retain the original arithmetic under neutral names:
+`turn_of_month`, `post_down_month`, `weekday_reversal`, `trend_vol_regime`,
+and `short_term_dip`. They are not treated as observed institutional flows or
+independent mechanisms. The reproduction is frozen to its original
+2026-07-15 cutoff with input hashes; all 2024+ data and source-agent results
+were previously accessed and are promotion-ineligible.
+
+Corrected findings:
+
+- **Strict monotonicity fails** in every SPY and QQQ split. The old report
+  clipped scores below -1 and above 4 into tail buckets, masking non-monotonic
+  extremes. The audit reports every exact score.
+- Selective entry still fails: score>=2 and score>=3 do not clear the old
+  all-split survivor bar.
+- The old daily switching rule that holds QQQ except on negative-score days
+  retains its historical result (pooled alpha t=3.13 at 2 bps); SPY does not
+  pass (t=1.43). A simple trend/volatility filter fails the all-split bar, but
+  the expanded ablations and cost checks are post-hoc diagnostics, not new
+  evidence.
+- Most importantly, an all-in/all-out daily switching backtest does **not**
+  validate delaying an already-planned purchase. WIND therefore has no
+  actionable veto, green light, sizing, or leverage interpretation.
+
+Operational verdict: the watcher publishes a V2 `DESCRIPTIVE_ONLY` / `NO_ACTION`
+payload and never alerts or creates tickets. Both leveraged paper experiments
+are retired. A new unlevered forward shadow compares a hypothetical purchase at
+a negative-score session's open with a mandatory fill exactly one XNYS session
+later. Review requires at least 252 prospective sessions and 30 completed
+events, and cannot promote automatically. See `docs/market-cycle-claim-audit.md`
+for the source-claim evidence ledger.
