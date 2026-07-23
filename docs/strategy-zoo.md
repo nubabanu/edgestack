@@ -280,3 +280,22 @@ to oil's daily noise. Operational consequence: `scripts/oil_surge_watch.py`
 SHOCK alerts are live (descriptive facts), DIP alerts stay DISPLAY-ONLY, and
 `DIP_TICKETS_ENABLED` remains False. Re-run the study before ever proposing
 to flip it; INSUFFICIENT/FAIL forever is a valid end state.
+
+### High-frequency + world-universe extension (2026-07-23, same day)
+
+Universe extended to 817 series (+ ~170 liquid world large caps: DAX, CAC,
+AEX, IBEX, MIB, FTSE, SMI, Nordics, Nikkei, Asia/LatAm ADRs; + obscure
+futures: oats, rough rice, feeder cattle, Pd, Pt, OJ, milk, lumber, ^VIX).
+Scan gained --min-period/--max-period/--min-dvol args.
+
+High-frequency band (5-40d, liquidity >= 1M/day): best sine correlations
+collapse to r ~ 0.03-0.05 with ~1% amplitudes. Two split-stable survivors:
+HE=F lean hogs at 19.3d (19.2/19.3 in independent halves) and HPE ~6.5d.
+**OOS kill test:** a phase-locked long/short on HE=F's 19.4d cycle, fitted on
+half 1 and traded on half 2 (3034 days, 2bps/flip): +5.8%/yr, Sharpe 0.14,
+t=0.48 - noise. Annual band over the world universe: zero survivors (best
+raw: WES.AX r=0.36, unstable). Structural conclusion: liquidity and short
+cycle length are ANTI-correlated with real periodicity - fast liquid markets
+arbitrage short waves away first; "obscure + high-frequency + easy to trade"
+is a self-cancelling combination. Reference scans:
+artifacts/periodicity_scan.json, artifacts/periodicity_scan_5_40.json.

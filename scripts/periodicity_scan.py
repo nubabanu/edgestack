@@ -61,19 +61,23 @@ def list_symbols() -> list[str]:
     return sorted(p.stem for p in PRICES.glob("*.parquet"))
 
 
-def load_returns(symbol: str) -> tuple[pd.Series, str | None]:
+def load_returns(symbol: str) -> tuple[pd.Series, float, str | None]:
+    """(log returns, median daily dollar volume in millions LOCAL ccy, drop reason)."""
     df = pd.read_parquet(PRICES / f"{symbol}.parquet")
     df = df.assign(date=pd.to_datetime(df["date"])).set_index("date").sort_index()
     adj = df["adj_close"].astype(float)
     adj = adj[adj > 0]
     if len(adj) < MIN_SESSIONS:
-        return pd.Series(dtype=float), "too short"
+        return pd.Series(dtype=float), 0.0, "too short"
     ret = np.log(adj).diff().dropna()
     if ret.abs().max() > MAX_ABS_RETURN:
-        return pd.Series(dtype=float), "corrupted (|ret|>200%)"
+        return pd.Series(dtype=float), 0.0, "corrupted (|ret|>200%)"
     if float(df["close"].iloc[-1]) < MIN_PRICE:
-        return pd.Series(dtype=float), "price < $1"
-    return ret, None
+        return pd.Series(dtype=float), 0.0, "price < $1"
+    tail = df.tail(504)
+    volume = tail["volume"] if "volume" in tail.columns else pd.Series(0.0, index=tail.index)
+    dvol = float((tail["close"] * volume.fillna(0.0)).median()) / 1e6
+    return ret, dvol, None
 
 
 def periodogram(returns: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -175,20 +179,46 @@ def null_distribution(lengths: list[int], rng: np.random.Generator) -> dict:
 
 
 def main() -> int:
+    import argparse
+
+    global MIN_PERIOD, MAX_PERIOD
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--min-period", type=int, default=MIN_PERIOD, help="band floor, days")
+    parser.add_argument("--max-period", type=int, default=MAX_PERIOD, help="band cap, days")
+    parser.add_argument(
+        "--min-dvol",
+        type=float,
+        default=0.0,
+        help="liquidity screen: min median daily volume in millions (LOCAL currency)",
+    )
+    args = parser.parse_args()
+    default_band = (args.min_period, args.max_period) == (MIN_PERIOD, MAX_PERIOD)
+    MIN_PERIOD, MAX_PERIOD = args.min_period, args.max_period
+    report_path = (
+        REPORT_PATH
+        if default_band
+        else REPORT_PATH.with_name(f"periodicity_scan_{MIN_PERIOD}_{MAX_PERIOD}.json")
+    )
+
     rng = np.random.default_rng(20260723)
     results: dict[str, dict] = {}
     dropped: dict[str, str] = {}
     lengths: list[int] = []
     for symbol in list_symbols():
         try:
-            returns, reason = load_returns(symbol)
+            returns, dvol, reason = load_returns(symbol)
         except Exception as exc:  # unreadable parquet etc.
             dropped[symbol] = f"load failed: {exc}"
             continue
         if reason:
             dropped[symbol] = reason
             continue
-        results[symbol] = analyze(returns)
+        if args.min_dvol and dvol < args.min_dvol:
+            dropped[symbol] = f"illiquid (median dvol {dvol:.1f}M < {args.min_dvol}M)"
+            continue
+        row = analyze(returns)
+        row["median_dvol_m"] = round(dvol, 1)
+        results[symbol] = row
         lengths.append(len(returns))
 
     null = null_distribution(lengths or [2520], rng)
@@ -220,7 +250,7 @@ def main() -> int:
     }
     from edgestack.data.catalog import atomic_write_bytes
 
-    atomic_write_bytes(REPORT_PATH, json.dumps(report, indent=2).encode("utf-8"))
+    atomic_write_bytes(report_path, json.dumps(report, indent=2).encode("utf-8"))
 
     print(f"scanned {len(results)} symbols ({len(dropped)} dropped)")
     print(
@@ -230,26 +260,26 @@ def main() -> int:
     )
     print("\nsurvivors (stable period AND beats null 95th pct on BOTH metrics):")
     header = (
-        f"{'symbol':8s} {'period_d':>8s} {'h1/h2':>12s} "
-        f"{'sine_r':>7s} {'g':>7s} {'amp%':>6s} {'annual%':>8s}"
+        f"{'symbol':12s} {'period_d':>8s} {'h1/h2':>14s} "
+        f"{'sine_r':>7s} {'g':>7s} {'amp%':>6s} {'dvolM':>8s}"
     )
     print(header)
     for sym in sorted(survivors, key=lambda s: -abs(results[s]["sine_corr_r"])):
         row = results[sym]
         print(
-            f"{sym:8s} {row['dominant_period_days']:>8} "
+            f"{sym:12s} {row['dominant_period_days']:>8} "
             f"{row['half1_period']}/{row['half2_period']:>6} "
             f"{row['sine_corr_r']:>7} {row['fisher_g']:>7} "
-            f"{row['amplitude_pct']:>6} {100 * row['annual_power_share']:>7.2f}"
+            f"{row['amplitude_pct']:>6} {row['median_dvol_m']:>8}"
         )
     print(f"\ntop {TOP_N} by raw |sine correlation| (most are NOT significant - check flags):")
     print(header + "  stable")
     for sym, row in ranked[:TOP_N]:
         print(
-            f"{sym:8s} {row['dominant_period_days']:>8} "
+            f"{sym:12s} {row['dominant_period_days']:>8} "
             f"{row['half1_period']}/{row['half2_period']:>6} "
             f"{row['sine_corr_r']:>7} {row['fisher_g']:>7} "
-            f"{row['amplitude_pct']:>6} {100 * row['annual_power_share']:>7.2f}  "
+            f"{row['amplitude_pct']:>6} {row['median_dvol_m']:>8}  "
             f"{'YES' if row['period_stable'] else '-'}"
         )
     return 0
