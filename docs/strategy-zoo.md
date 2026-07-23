@@ -408,3 +408,23 @@ universe is TODAY'S index members (survivorship-biased; SPY is not) and the
 bounded-entry variant is a post-study correction (made for correctness, not
 tuned, but a variant nonetheless). The pre-registered paper book measures
 precisely this rule forward and remains the arbiter.
+
+### Swing-scale ladder: is there anything better below 5%? (2026-07-23)
+
+Tested theta in {1,2,3,4}% with parameters scaled consistently (zone gap
+2*theta, timeout 420*theta sessions, entry/stop/target multipliers
+(1+theta)/(1-3*theta)/(1-theta) - at 5% these equal the tested rule
+exactly). Key intermediate finding: with the FIXED 5%-sized multipliers,
+sub-5% scales collapse to -95% CAGR (tiny targets vs -15% stops = negative
+geometric drift) - tolerances must scale with theta or the test is unfair.
+
+Fair-scaled results (10-slot book, 2003-2026): capture per trade is a
+near-constant ~theta/4 gross (0.56/0.84/1.09/1.25% at 2/3/4/5%) while
+costs are fixed per trade, so net edge rises monotonically with theta:
+CAGR at retail 20bps/side = -10.0% / +0.4% / +5.6% / +15.9%. Combined with
+the earlier 15%/30% failures, **theta=5% is the measured optimum of the
+entire ladder** - the largest scale at which oscillation structure is still
+dense, and the smallest at which the edge outruns costs. Sub-5% swings are
+mostly daily noise (stock daily vol 1.5-2%) taxed at full freight; true
+intraday swings are untestable here (59 sessions of 15m history) and face
+worse spread-per-swing economics. No change to the deployed rule.
