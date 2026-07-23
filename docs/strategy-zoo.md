@@ -299,3 +299,27 @@ cycle length are ANTI-correlated with real periodicity - fast liquid markets
 arbitrage short waves away first; "obscure + high-frequency + easy to trade"
 is a self-cancelling combination. Reference scans:
 artifacts/periodicity_scan.json, artifacts/periodicity_scan_5_40.json.
+
+## Real-price level-range scan (level_range_scan.py, 2026-07-23)
+
+Question: assets periodic by PRICE LEVEL (floor/ceiling in today's dollars),
+not by time. Real prices via CPIAUCSL (cached data/cache/cpi_cpiaucsl.csv;
+^-indices not deflated); band = [p10, p90] of the FIRST half of history;
+traversals and containment judged OUT-OF-SAMPLE on the second half;
+zero-drift matched-vol random-walk null (contained-by-chance 8.7%, OOS
+trips/yr 95th pct 0.13).
+
+Findings: 30 nominal survivors vs ~37 expected by chance at the 5% bar - the
+LIST is chance-level, only the tail is signal. The tail: **^VIX** (band
+12.4-32.4, NINE OOS traversals, 0.68/yr, containment 0.95 - mean-reverting
+by construction, but VIX products bleed roll yield and are not a buy-low
+vehicle), **HE=F lean hogs** (real $89-136, 5 IS + 5 OOS trips - the classic
+cobweb hog cycle, third independent scan it survives), and the repeat-
+trippers with IS>=3 AND OOS>=2: HST, REP.MC, VTR, DC=F milk, LE=F cattle,
+OJ=F, RB=F, CT=F. Notable cluster: ag commodities sit NEAR THEIR REAL FLOORS
+now (CT=F at 8% of band, OJ=F 15%, ZW=F wheat 27%, HE=F 27%, DC=F milk BELOW
+floor) - consistent with the production-cost-anchor story, but floors move
+(shale broke oil's $80 floor in 2014). Utilities/stocks in the list mostly
+broke OUT of their bands already (CNP 2.2x, VTR 2.5x, REP.MC 3.5x). No
+strategy promoted; buy-floor/sell-ceiling would owe the standard survivor-
+bar study, plus roll-yield modeling for any futures expression.
