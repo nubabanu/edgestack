@@ -466,3 +466,19 @@ alternative via three independent mechanisms: zero directional edge,
 cost drag multiplied by leverage, and half-account overbetting (geometric
 variance decay). Fourth leveraged proposal simulated and closed (after
 2x tech dips, 10-20x WIND days, 3x/20x paper experiments - all negative).
+
+### FDA-calendar extension of the pharma short test (2026-07-23)
+
+openFDA drugsfda database ingested (29,220 applications; 4,410 approval
+events for the 12 tickers since 2004, 298 original new-drug approvals;
+cached data/cache/drugsfda.json + fda_approval_events.csv). Rejections
+(CRLs) are NOT publishable data - stated limitation; the approval side is
+what exists. Results: stocks RISE +0.63% on average through original
+new-drug approvals (shorts win only 42%; 5x mean -3.35%/bet - twice as bad
+as earnings events); all-approvals +0.18%, shorts win 45%, -1.49%/bet.
+Combined account sim (earnings + ORIG approvals, 1,030 events, 100
+EUR/week, half-balance 5x shorts): EUR 86,400 deposited -> EUR 2,953
+(-96.6%) vs SPY DCA EUR 325,219. The FDA calendar strengthens the closure:
+decision dates are known to the entire market in advance and outcomes skew
+positive for large pharma - shorting into them is anti-edge at any
+leverage, catastrophic at 5x with half-account sizing.
