@@ -428,3 +428,23 @@ dense, and the smallest at which the edge outruns costs. Sub-5% swings are
 mostly daily noise (stock daily vol 1.5-2%) taxed at full freight; true
 intraday swings are untestable here (59 sessions of 15m history) and face
 worse spread-per-swing economics. No change to the deployed rule.
+
+### Small-cap extension: the edge grows below the institutional radar (2026-07-23)
+
+User hypothesis: a small trader's structural advantage is trading where funds
+cannot. Catalog extended with the S&P SmallCap 600 (549 new symbols; catalog
+now 1365; nightly maintains them automatically). Within LARGE caps the swing
+edge SHRINKS with illiquidity (least-liquid third +0.64% vs most-liquid
++1.04% at 20bps) - but that third still trades $88M/day. In the truly
+obscure band (dollar volume $1-30M/day, 327 stocks, 32,529 walk-forward
+trades): **+1.05%/trade at 20bps vs +0.66% for large caps - the edge is
+~60% larger - and still +0.65% at a punishing 40bps/side.** Hypothesis
+confirmed where it actually applies.
+
+Robust obscure swingers (both halves positive, active 2025+, zones alive):
+LMAT, CPK, USLM, AMSF, CTS, EIG, DXPE, GIII, TILE, AGYS, PRK, FCF, KLIC,
+INDB, MGEE - added to the swing-zone watchlist (33 symbols). Caveats
+sharper here: survivorship bias is STRONGER in a current small-cap
+membership list (failed small caps delist and vanish from the data);
+real spreads vary per name; broker availability must be checked per name.
+Paper-gate discipline unchanged.
