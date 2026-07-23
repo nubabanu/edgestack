@@ -323,3 +323,17 @@ floor) - consistent with the production-cost-anchor story, but floors move
 broke OUT of their bands already (CNP 2.2x, VTR 2.5x, REP.MC 3.5x). No
 strategy promoted; buy-floor/sell-ceiling would owe the standard survivor-
 bar study, plus roll-yield modeling for any futures expression.
+
+### Stocks-only three-thirds range screen (2026-07-23, follow-up)
+
+Band from the first THIRD of history (real p10/p90), required to keep
+oscillating in both later thirds and still be in-band today. Strict bar
+(>=2 trips per third, containment >=0.85): ZERO of 710 world stocks pass
+(and 0/500 random walks - fair bar). Relaxed bar (>=1 trip/third, >=4
+total): 1 hit (Takeda 4502.T, real band 3479-5809 JPY, now at 87%) vs ~5.7
+expected by chance - i.e. even the single hit is attributable to luck.
+Conclusion: level-periodic stocks do not exist in this universe. Stocks
+lack the anchors that create price-level cycles (no production-cost floor,
+no demand-destruction ceiling; retained earnings drift value); every
+visually-ranging stock eventually breaks out (HST, REP.MC, VTR did).
+Level periodicity lives in commodities and volatility, not equities.
