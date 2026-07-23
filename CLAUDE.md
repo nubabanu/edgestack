@@ -181,6 +181,17 @@ zone (close <= trough_zone*1.10, 10-session cooldown, state in
 floor-bounce edge - these are context alerts, never tickets. Rerun the scan
 periodically to refresh zones.
 
+### Swing-zone PAPER book (added 2026-07-23)
+
+`scripts/swing_paper_book.py` (nightly stage) runs the frozen theta-5% dip-zone
+rule that passed `scripts/swing_zone_strategy_study.py` (walk-forward, all
+splits, beats random-entry null; t-stats inflated by cross-correlation - the
+paper book IS the correction). EUR 500/position paper, max 10 open, 3
+entries/night, fills next adjusted open, ledger `artifacts/paper_swing.json`.
+Pre-registered review gate in the docstring (>= 100 closed trades AND >= 6
+months; mean net > 0 at 20 bps AND book >= SPY, else retire). Never propose
+funding it before the gate; never turn alerts into live orders.
+
 ### Oil surge watch (CL=F shock reaction, added 2026-07-23)
 
 `scripts/oil_surge_watch.py` REACTS to crude price shocks — it predicts no events.

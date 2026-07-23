@@ -28,6 +28,8 @@ REM Oil surge watch EOD pass: canonical-close shock/dip state machine (dip ticke
 %PY% scripts\run_stage.py --stage oil_surge_watch -- scripts\oil_surge_watch.py --eod >> "%LOG%" 2>&1
 REM Swing-zone watcher: display-only dip-zone entry alerts for scan survivors.
 %PY% scripts\run_stage.py --stage swing_zone_watch -- scripts\swing_zone_watch.py >> "%LOG%" 2>&1
+REM Swing-zone PAPER book: pre-registered forward experiment (paper only, review gate in docstring).
+%PY% scripts\run_stage.py --stage swing_paper_book -- scripts\swing_paper_book.py >> "%LOG%" 2>&1
 REM Retired WIND leverage handler: settles only exposure pending at retirement, never opens new.
 %PY% scripts\run_stage.py --stage wind_paper_book -- scripts\wind_paper_book.py >> "%LOG%" 2>&1
 REM Prospective unlevered paired-fill audit; research ledger only, never orders or alerts.

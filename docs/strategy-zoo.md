@@ -361,3 +361,29 @@ its dip zone (2.95 vs ~3.1, top zone +60%). Standing verdict applies: the
 range study measured ZERO floor-bounce edge in stocks - these alerts are
 context for a human, never tickets; no promotion without a survivor-bar
 study.
+
+## Swing-zone strategy study + paper book (2026-07-23)
+
+Walk-forward simulation of buying point-in-time dip zones
+(swing_zone_strategy_study.py): trailing-756-session confirmed zigzag pivots
+define zones causally; entry close <= dip*1.05; exit at top*0.95 / dip*0.85
+zone-break / timeout; fill next close; 3 thetas pre-registered.
+
+Results (stocks group): theta 5% PASSED all gates - mean +1.02%/trade net at
+2 bps/side (+0.66% at 20 bps retail), 60% win, positive in dev
+(+0.85%), val (+1.13%) AND holdout (+0.92%), and above the random-entry
+null (same symbols/holding lengths, p95 +0.85%) - i.e. the TIMING adds
+~+0.2%/trade over drift. Theta 30% also passed; 15% failed dev. CRITICAL
+caveat: pooled t-stats (up to 26) are inflated by cross-sectional
+correlation - thousands of simultaneous dip entries share the same market
+bounce; treat significance as far lower than printed. VIX-group results
+(+2.7-3.9%/trade) are untradeable references.
+
+Consequence: promoted to a PRE-REGISTERED PAPER experiment, not tickets.
+`scripts/swing_paper_book.py` (nightly stage) runs the frozen theta-5% rule
+on the stock universe: EUR 500/position, max 10 open, max 3 entries/night
+(deepest in zone first, entries only INSIDE the zone window [0.85, 1.05] x
+dip), fills at next adjusted open, ledger artifacts/paper_swing.json.
+Review gate frozen in the docstring: >= 100 closed trades AND >= 6 months;
+success = mean net > 0 at 20 bps AND book >= SPY; else retire. First
+entries 2026-07-23: LUMN, GNRC, LDOS.
