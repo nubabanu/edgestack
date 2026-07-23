@@ -32,11 +32,12 @@ class TestAuthFilter:
 
 class TestRouter:
     def test_commands_map_and_bot_suffix_is_stripped(self, monkeypatch):
-        for name in ("fmt_status", "fmt_watch", "fmt_oil", "fmt_paper"):
+        for name in ("fmt_status", "fmt_watch", "fmt_oil", "fmt_paper", "fmt_zones"):
             monkeypatch.setattr(bot, name, lambda name=name: name)
         assert bot.route("/watch") == "fmt_watch"
         assert bot.route("/watch@EdgeStackBot") == "fmt_watch"
         assert bot.route("/OIL") == "fmt_oil"
+        assert bot.route("/zones") == "fmt_zones"
         assert bot.route("/status extra words") == "fmt_status"
 
     def test_unknown_command_gets_help_and_chatter_gets_silence(self):

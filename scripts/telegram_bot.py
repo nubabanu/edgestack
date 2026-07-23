@@ -40,6 +40,7 @@ CONFIG_PATH = ROOT / "artifacts" / "telegram_config.json"  # shared with notify_
 STATE_PATH = ROOT / "artifacts" / "telegram_bot_state.json"
 WATCH_PATH = ROOT / "artifacts" / "tranche_watch.json"
 OIL_STATE_PATH = ROOT / "artifacts" / "oil_surge_state.json"
+SWING_ZONES_PATH = ROOT / "artifacts" / "swing_zones.json"
 OIL_VERDICT_PATH = ROOT / "artifacts" / "oil_shock_study_verdict.json"
 PAPER_TRANCHE_PATH = ROOT / "artifacts" / "paper_tranche.json"
 PAPER_OIL_PATH = ROOT / "artifacts" / "paper_oil.json"
@@ -223,12 +224,41 @@ def fmt_paper() -> str:
     return _ascii("\n".join(lines))
 
 
+def fmt_zones() -> str:
+    zones = _read_json(SWING_ZONES_PATH)
+    if not zones or not zones.get("entries"):
+        return "no swing zone watchlist yet (run scripts/swing_cycle_scan.py)"
+    lines = [f"SWING BUY ZONES ({_age_line(SWING_ZONES_PATH)})"]
+    for entry in zones["entries"]:
+        sym = entry["symbol"]
+        close = _last_close(sym)
+        if close is None:
+            continue
+        dip = float(entry["trough_zone"])
+        buy_at = dip * 1.05  # tested entry level
+        stop_at = dip * 0.85
+        price = close[1]
+        if stop_at <= price <= buy_at:
+            status = "BUY WINDOW NOW"
+        elif price < stop_at:
+            status = "zone broken - do not buy"
+        else:
+            status = f"waiting ({price / buy_at - 1:+.0%} above buy level)"
+        lines.append(f"{sym}: {price} | buy <= {buy_at:.2f} | {status}")
+    lines.append(
+        "Levels refresh nightly. Edge is small and unproven live - no guarantees, "
+        "your decision. Full playbook arrives as a BUY WINDOW alert when triggered."
+    )
+    return _ascii("\n".join(lines))
+
+
 def fmt_help() -> str:
     return _ascii(
         "EdgeStack bot (read-only, never places orders):\n"
         "/status - data + nightly pipeline health\n"
         "/watch - tranche trigger status (ACN/CTSH/EPAM/SPY)\n"
         "/oil - oil surge watcher state + dip watch\n"
+        "/zones - swing buy zones: is it buy time yet, and at what price\n"
         "/paper - paper trade books + P&L\n"
         "/help - this list"
     )
@@ -244,6 +274,7 @@ def route(text: str) -> str | None:
         "/status": fmt_status,
         "/watch": fmt_watch,
         "/oil": fmt_oil,
+        "/zones": fmt_zones,
         "/paper": fmt_paper,
         "/help": fmt_help,
         "/start": fmt_help,

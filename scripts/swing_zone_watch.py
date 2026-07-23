@@ -35,8 +35,15 @@ STATE_PATH = ROOT / "artifacts" / "swing_zone_state.json"
 LOG_PATH = ROOT / "logs" / "swing_zone_watch.log"
 TOAST_SCRIPT = ROOT / "scripts" / "notify_toast.ps1"
 
-ZONE_TOL = 1.10  # in-zone when close <= trough_zone * ZONE_TOL
+from swing_zone_strategy_study import (  # noqa: E402
+    ENTRY_TOL,
+    STOP_TOL,
+    TARGET_TOL,
+)
+
+PLAN_PATH = ROOT / "artifacts" / "tranche_plan.json"
 COOLDOWN_SESSIONS = 10
+DEFAULT_EUR = 500  # paper-book sizing; override per symbol via tranche_plan.json "SWING" key
 
 
 def load_json(path: Path) -> dict | None:
@@ -44,6 +51,33 @@ def load_json(path: Path) -> dict | None:
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
     except (OSError, ValueError):
         return None
+
+
+def live_zones(symbol: str, theta_pct: int) -> dict | None:
+    """Point-in-time zone refresh at the watchlist entry's own swing scale."""
+    import numpy as np
+    from swing_cycle_scan import load_prices
+    from swing_zone_strategy_study import (
+        MIN_PIVOTS_TRAILING,
+        MIN_ZONE_GAP,
+        TRAILING,
+        zigzag_confirmed,
+    )
+
+    px = load_prices(symbol)
+    if px is None or len(px) <= TRAILING:
+        return None
+    lp = np.log(px.to_numpy(dtype=float))
+    recent = [pv for pv in zigzag_confirmed(lp, theta_pct / 100) if pv[1] > len(lp) - TRAILING]
+    troughs = [pv[0] for pv in recent if pv[2] == "T"][-3:]
+    peaks = [pv[0] for pv in recent if pv[2] == "P"][-3:]
+    if len(recent) < MIN_PIVOTS_TRAILING or not troughs or not peaks:
+        return None
+    dip = float(np.exp(np.median(lp[troughs])))
+    top = float(np.exp(np.median(lp[peaks])))
+    if top / dip < MIN_ZONE_GAP:
+        return None
+    return {"trough_zone": round(dip, 2), "peak_zone": round(top, 2)}
 
 
 def last_close(symbol: str) -> tuple[str, float, int] | None:
@@ -61,14 +95,25 @@ def last_close(symbol: str) -> tuple[str, float, int] | None:
     )
 
 
+def _eur_size(symbol: str) -> int:
+    try:
+        plan = json.loads(PLAN_PATH.read_text(encoding="utf-8")) if PLAN_PATH.exists() else {}
+        return int(plan.get(symbol, {}).get("SWING", DEFAULT_EUR))
+    except (OSError, ValueError):
+        return DEFAULT_EUR
+
+
 def zone_alert_text(entry: dict, close: float, updated: str) -> str:
-    upside = entry["peak_zone"] / close - 1 if close > 0 else 0.0
+    dip, top = entry["trough_zone"], entry["peak_zone"]
+    target = top * TARGET_TOL
+    upside = target / close - 1 if close > 0 else 0.0
     return (
-        f"SWING ZONE (DISPLAY-ONLY): {entry['symbol']} entered its historical dip zone "
-        f"(close {close:.2f} vs trough zone ~{entry['trough_zone']}). Historical top zone "
-        f"~{entry['peak_zone']} ({upside:+.0%} away), {entry['swings_per_year']} swings/yr "
-        f"at the {entry['theta_pct']}% scale. No validated edge - the range study measured "
-        f"ZERO floor-bounce edge; context only. Zones from scan of {updated}."
+        f"BUY WINDOW: {entry['symbol']} closed {close:.2f} inside its dip zone "
+        f"(buy at <= {dip * ENTRY_TOL:.2f}). Tested plan: buy ~EUR {_eur_size(entry['symbol'])} "
+        f"at next open; SELL TARGET ~{target:.2f} ({upside:+.0%}); HARD EXIT if close drops "
+        f"below {dip * STOP_TOL:.2f} (zone broken); TIME EXIT after ~4 weeks either way. "
+        f"Edge ~+1-3%/trade historically, unproven live (paper gate pending) - no "
+        f"guarantees, only an edge; your decision. Zones as of {updated}."
     )
 
 
@@ -83,7 +128,8 @@ def evaluate(
         if info is None:
             continue
         bar_date, close, session_no = info
-        in_zone = close <= entry["trough_zone"] * ZONE_TOL
+        dip = entry["trough_zone"]
+        in_zone = dip * STOP_TOL <= close <= dip * ENTRY_TOL  # the TESTED buy window
         sym_state = state.setdefault(sym, {"in_zone": False, "last_alert_session": -(10**9)})
         if (
             in_zone
@@ -146,10 +192,14 @@ def main() -> int:
             continue
         if info:
             closes[entry["symbol"]] = info
-            in_zone = info[1] <= entry["trough_zone"] * ZONE_TOL
+            fresh = live_zones(entry["symbol"], entry.get("theta_pct", 5))
+            if fresh:
+                entry.update(fresh)  # levels track the market; stored zones are fallback
+            buy_at = entry["trough_zone"] * ENTRY_TOL
+            in_window = entry["trough_zone"] * STOP_TOL <= info[1] <= buy_at
             print(
-                f"{entry['symbol']:11s} close {info[1]:>9.2f} vs zone "
-                f"{entry['trough_zone']:>9} -> {'IN ZONE' if in_zone else 'above'}"
+                f"{entry['symbol']:11s} close {info[1]:>9.2f} | buy <= {buy_at:>9.2f} "
+                f"| {'BUY WINDOW' if in_window else 'waiting'}"
             )
 
     alerts = evaluate(zones["entries"], state, closes, zones.get("updated", "?"))
@@ -163,6 +213,7 @@ def main() -> int:
     if not args.dry_run:
         STATE_PATH.parent.mkdir(exist_ok=True)
         STATE_PATH.write_text(json.dumps(state, indent=2))
+        ZONES_PATH.write_text(json.dumps(zones, indent=2))  # persist refreshed levels
         LOG_PATH.parent.mkdir(exist_ok=True)
         with LOG_PATH.open("a", encoding="utf-8") as fh:
             fh.write(f"===== swing_zone_watch {date.today().isoformat()} =====\n")
