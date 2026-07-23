@@ -169,6 +169,18 @@ local via `scripts/precheck.bat`, logs to `logs/precheck.log`) fetches today's p
 bar 15 min before the US close and sends a provisional-T1 heads-up so entries can be
 planned the same evening; the nightly watcher on the real close stays canonical.
 
+### Swing zone watch (fuzzy-zone oscillators, added 2026-07-23)
+
+`scripts/swing_cycle_scan.py` finds assets that swing between fuzzy price zones
+(zigzag pivots at 15/30/50%, null-calibrated, drift-filtered) and writes the
+top-10 watchlist to `artifacts/swing_zones.json` (human-editable; zones = last
+3 pivots). `scripts/swing_zone_watch.py` (nightly.bat stage, DISPLAY-ONLY)
+alerts via Telegram/toast when a watched symbol first closes inside its dip
+zone (close <= trough_zone*1.10, 10-session cooldown, state in
+`artifacts/swing_zone_state.json`). The stock_range_study verdict stands: zero
+floor-bounce edge - these are context alerts, never tickets. Rerun the scan
+periodically to refresh zones.
+
 ### Oil surge watch (CL=F shock reaction, added 2026-07-23)
 
 `scripts/oil_surge_watch.py` REACTS to crude price shocks — it predicts no events.

@@ -337,3 +337,27 @@ lack the anchors that create price-level cycles (no production-cost floor,
 no demand-destruction ceiling; retained earnings drift value); every
 visually-ranging stock eventually breaks out (HST, REP.MC, VTR did).
 Level periodicity lives in commodities and volatility, not equities.
+
+## Swing-cycle scan + zone watcher (swing_cycle_scan.py, 2026-07-23)
+
+Fuzzy-zone zigzag oscillators (user request: "dips to around 50, rallies to
+around 120, repeatedly; eventually up or flat"). Log-scale zigzag pivots at
+15/30/50% reversal thresholds over 719 liquid series; zones = detrended
+log-pivot std (drift allowed); drift filter >= -2%/yr; split-half swing
+minimum; null = 300 zero-drift matched-vol random walks (discriminator is
+trough-zone TIGHTNESS - volatile walks swing plenty but bottom anywhere).
+
+Survivors above the null bar: 9 at 15% (led by ^VIX 22.7 swings/yr, ^OVX,
+MPWR, BHF, AXON, NG=F 7.9/yr in the 3.1-4.7 zone, URI, ANET, WYNN), 12 at
+30% (adds NOVO-B.CO - 50% swings AND +13%/yr drift, WDC, NCLH, CCL, BABA
+with zone std 0.033 at 50%, LW, FTNT, ZO=F oats), 23 at 50%. Watchlist
+(top 10 by score) in artifacts/swing_zones.json with zones from the LAST 3
+pivots (all-history medians are stale for trending names).
+
+`scripts/swing_zone_watch.py` (nightly.bat stage, display-only) alerts on
+first close <= trough_zone*1.10 with 10-session cooldown; state in
+artifacts/swing_zone_state.json. First live alert on arming day: NG=F in
+its dip zone (2.95 vs ~3.1, top zone +60%). Standing verdict applies: the
+range study measured ZERO floor-bounce edge in stocks - these alerts are
+context for a human, never tickets; no promotion without a survivor-bar
+study.
