@@ -448,3 +448,21 @@ sharper here: survivorship bias is STRONGER in a current small-cap
 membership list (failed small caps delist and vanish from the data);
 real spreads vary per name; broker availability must be checked per name.
 Paper-gate discipline unchanged.
+
+### Leveraged pharma announcement shorting (tested and closed, 2026-07-23)
+
+Proposal: 100 EUR/week deposits; before every important pharma announcement,
+short with 5x leverage using half the account (negative balance protection
+assumed). Test: 811 point-in-time earnings 8-K events, 12 pharma majors,
+2004-2026 (FDA decision calendars not systematically available - stated).
+
+Facts: announcements move pharma +0.17% on average (UP, not down - median
++0.01%, std 4.7%); a short wins exactly 50% of the time - a coin flip with
+no edge. At 5x plus realistic costs: -1.46% of stake per bet; 22/811 bets
+lose >50% of stake (worst underlying jumps +18%). Account simulation
+2010-2026: EUR 86,400 deposited -> EUR 4,290 final (-95%). Same deposits
+into SPY: EUR 325,219 (+276%). The strategy destroys 98.7% of the SPY
+alternative via three independent mechanisms: zero directional edge,
+cost drag multiplied by leverage, and half-account overbetting (geometric
+variance decay). Fourth leveraged proposal simulated and closed (after
+2x tech dips, 10-20x WIND days, 3x/20x paper experiments - all negative).
