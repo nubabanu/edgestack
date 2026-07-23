@@ -210,7 +210,7 @@ def main() -> int:
         "band_days": [MIN_PERIOD, MAX_PERIOD],
         "null": null,
         "survivors_beating_null_and_stable": {sym: results[sym] for sym in sorted(survivors)},
-        "top_by_sine_corr": {sym: row for sym, row in ranked[:TOP_N]},
+        "top_by_sine_corr": dict(ranked[:TOP_N]),
         "disclaimer": (
             "Historical scan on previously-accessed data; sine-fit R is biased "
             "upward because the period is chosen from the same data (compare "
@@ -228,8 +228,11 @@ def main() -> int:
         f"{null['sine_corr_p50']}, 95th pct {null['sine_corr_p95']}, "
         f"g 95th pct {null['fisher_g_p95']}, stable-by-chance rate {null['stable_rate']}"
     )
-    print(f"\nsurvivors (stable period AND beats null 95th pct on BOTH metrics):")
-    header = f"{'symbol':8s} {'period_d':>8s} {'h1/h2':>12s} {'sine_r':>7s} {'g':>7s} {'amp%':>6s} {'annual%':>8s}"
+    print("\nsurvivors (stable period AND beats null 95th pct on BOTH metrics):")
+    header = (
+        f"{'symbol':8s} {'period_d':>8s} {'h1/h2':>12s} "
+        f"{'sine_r':>7s} {'g':>7s} {'amp%':>6s} {'annual%':>8s}"
+    )
     print(header)
     for sym in sorted(survivors, key=lambda s: -abs(results[s]["sine_corr_r"])):
         row = results[sym]
