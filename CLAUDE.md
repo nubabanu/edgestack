@@ -204,7 +204,15 @@ automation would have done.
 Related one-offs on this machine: Windows Startup launcher
 (`%APPDATA%\...\Startup\EdgeStackAPI.bat`) keeps `scripts/api_serve.bat` (watchdog,
 0.0.0.0:8000) alive for the Android app; firewall rule "EdgeStack API" exists;
-`releases/EdgeStack-v1.8.apk` is the current companion build.
+`releases/EdgeStack-v1.9.apk` is the current companion build (adds the "Watch" tab
+mirroring the tranche + oil watchers via the read-only `GET /watchers/tranche` and
+`GET /watchers/oil-surge` endpoints, plus device notifications on oil regime
+transitions). A second Startup launcher (`EdgeStackTelegramBot.bat`) keeps
+`scripts/telegram_bot.bat` alive: `scripts/telegram_bot.py` long-polls getUpdates and
+answers /status /watch /oil /paper /help in the Depot Alerts chat — strictly read-only
+(never orders, never mutates state), answers ONLY the configured chat_id(s), offset in
+`artifacts/telegram_bot_state.json`, log `logs/telegram_bot.log`. Only one getUpdates
+poller may run per token (a second gets HTTP 409; the loop backs off 60 s).
 
 `scripts/tranche_policy_backtest.py` is the companion cohort study; its headline:
 staged entry is insurance, not alpha, and lump-sum recovery odds depend heavily on

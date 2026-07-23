@@ -6,8 +6,9 @@ promote, persist, or mutate the atomically published bundle.
 
 from __future__ import annotations
 
+import contextlib
 import json
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo
 
 from edgestack import __version__
@@ -456,6 +457,87 @@ def create_app(cfg: EdgeStackConfig, *, quote_service: LiveQuoteService | None =
             for item in state.get("realized_returns", [])
         ]
         return {"state": state, "equity_history": history, "disclaimer": DISCLAIMER}
+
+    def _artifact_json(name: str) -> tuple[dict, str]:
+        """Read a script-owned watcher artifact; 404 when the watcher has not run."""
+        path = catalog.artifacts_dir / name
+        if not path.exists():
+            raise HTTPException(status_code=404, detail=f"{name} not available; watcher not run")
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).isoformat()
+        return payload, modified
+
+    def _optional_artifact_json(name: str) -> dict | None:
+        path = catalog.artifacts_dir / name
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
+    @app.get("/watchers/tranche")
+    def watchers_tranche() -> dict:
+        """Tranche watcher status (artifacts/tranche_watch.json), display/context only."""
+        payload, modified = _artifact_json("tranche_watch.json")
+        run_date = payload.get("run_date")
+        stale = True
+        if run_date:
+            with contextlib.suppress(ValueError):
+                stale = (date.today() - date.fromisoformat(run_date)).days > 3
+        return {
+            "run_date": run_date,
+            "file_modified_at": modified,
+            "stale": stale,
+            "run_status": payload.get("run_status"),
+            "go_alerts_enabled": payload.get("go_alerts_enabled", False),
+            "breadth": payload.get("breadth"),
+            "wind": payload.get("wind"),
+            "symbols": payload.get("symbols", []),
+            "paper_book": _optional_artifact_json("paper_tranche.json"),
+            "disclaimer": DISCLAIMER,
+        }
+
+    @app.get("/watchers/oil-surge")
+    def watchers_oil_surge() -> dict:
+        """Oil surge watcher state (artifacts/oil_surge_state.json), display/context only."""
+        payload, modified = _artifact_json("oil_surge_state.json")
+        last_session = payload.get("last_session")
+        stale = True
+        if last_session:
+            with contextlib.suppress(ValueError):
+                stale = (date.today() - date.fromisoformat(last_session)).days > 5
+        latest_closes: dict[str, dict] = {}
+        import pandas as pd
+
+        for symbol in ("CL=F", "BNO"):
+            path = catalog.prices_dir / f"{symbol}.parquet"
+            if not path.exists():
+                continue
+            try:
+                frame = pd.read_parquet(path, columns=["date", "close"])
+                last = frame.iloc[-1]
+                latest_closes[symbol] = {
+                    "date": str(pd.Timestamp(last["date"]).date()),
+                    "close": round(float(last["close"]), 2),
+                }
+            except (OSError, ValueError, KeyError, IndexError):
+                continue
+        verdict = _optional_artifact_json("oil_shock_study_verdict.json")
+        return {
+            "state": payload,
+            "file_modified_at": modified,
+            "stale": stale,
+            "study_verdict": verdict,
+            # persisted by oil_surge_watch --eod: constant flip AND study PASS
+            "dip_tickets_enabled": bool(payload.get("tickets_enabled", False)),
+            "latest_closes": latest_closes,
+            "paper_book": _optional_artifact_json("paper_oil.json"),
+            "disclaimer": DISCLAIMER,
+        }
 
     @app.get("/picks", deprecated=True)
     def picks():

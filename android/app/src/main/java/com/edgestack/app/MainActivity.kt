@@ -39,6 +39,8 @@ import com.edgestack.app.ui.sniper.SniperScreen
 import com.edgestack.app.ui.sniper.SniperViewModel
 import com.edgestack.app.ui.trades.TradesScreen
 import com.edgestack.app.ui.trades.TradesViewModel
+import com.edgestack.app.ui.watch.WatchScreen
+import com.edgestack.app.ui.watch.WatchViewModel
 import com.edgestack.app.ui.theme.EdgeStackTheme
 
 class MainActivity : ComponentActivity() {
@@ -95,6 +97,8 @@ class MainActivity : ComponentActivity() {
                         container.researchRepo,
                         container.syncRepo,
                     ) as T
+                WatchViewModel::class.java ->
+                    WatchViewModel(container.watchersRepo, container.syncRepo) as T
                 SettingsViewModel::class.java ->
                     SettingsViewModel(container.settings, container.syncRepo) as T
                 else -> throw IllegalArgumentException("unknown $modelClass")
@@ -106,7 +110,7 @@ class MainActivity : ComponentActivity() {
                 var tab by remember { mutableIntStateOf(0) }
                 val tabs = listOf(
                     "Portfolio", "Calendar", "Risk", "Analyze",
-                    "Sniper", "Edge Lab", "Trades", "Settings",
+                    "Sniper", "Edge Lab", "Trades", "Watch", "Settings",
                 )
                 Scaffold(
                     bottomBar = { DisclaimerFooter() },
@@ -129,6 +133,7 @@ class MainActivity : ComponentActivity() {
                             4 -> SniperScreen(viewModel(factory = factory))
                             5 -> EdgesScreen(viewModel(factory = factory))
                             6 -> TradesScreen(viewModel(factory = factory))
+                            7 -> WatchScreen(viewModel(factory = factory))
                             else -> SettingsScreen(viewModel(factory = factory))
                         }
                     }

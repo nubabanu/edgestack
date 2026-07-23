@@ -18,6 +18,7 @@ object AlertNotifier {
     const val CHANNEL_CANONICAL = "canonical_recommendations"
     const val CHANNEL_RISK = "risk_alerts"
     const val CHANNEL_TIMING = "timing_windows"
+    const val CHANNEL_OIL = "oil_surge"
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -35,6 +36,11 @@ object AlertNotifier {
             NotificationChannel(CHANNEL_TIMING, "Timing windows",
                 NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Sniper candidate triggers, scheduled entries, turn-of-month windows"
+            })
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_OIL, "Oil surge watch",
+                NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "CL=F shock and dip regime transitions — display-only research"
             })
     }
 

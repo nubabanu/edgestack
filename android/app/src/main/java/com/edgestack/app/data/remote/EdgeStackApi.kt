@@ -23,6 +23,8 @@ import com.edgestack.app.domain.model.ResearchOverviewV1
 import com.edgestack.app.domain.model.ShadowStrategyV1
 import com.edgestack.app.domain.model.SniperPlanV2
 import com.edgestack.app.domain.model.SniperPreviewRequestV2
+import com.edgestack.app.domain.model.OilSurgeV1
+import com.edgestack.app.domain.model.TrancheWatchV1
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -87,6 +89,8 @@ interface EdgeStackApi {
     @GET("backtests/{runId}") suspend fun backtestDetail(@Path("runId") runId: String): JsonObject
     @GET("sniper/latest")
     suspend fun latestSniper(): SniperPlanV2
+    @GET("watchers/tranche") suspend fun trancheWatch(): TrancheWatchV1
+    @GET("watchers/oil-surge") suspend fun oilSurge(): OilSurgeV1
     @POST("sniper/preview")
     suspend fun previewSniper(
         @Body request: SniperPreviewRequestV2,

@@ -563,6 +563,10 @@ def run_eod(dry_run: bool) -> int:
     cutoff = (date.today() - timedelta(days=14)).isoformat()
     state["intraday"] = {k: v for k, v in state["intraday"].items() if k[-10:] >= cutoff}
 
+    # persisted so read-only consumers (API /watchers/oil-surge, Telegram bot)
+    # can report the double gate truthfully without importing this module
+    state["tickets_enabled"] = tickets_enabled()
+
     lines += paper_autopilot(dip_signal_dates)
 
     for line in lines:

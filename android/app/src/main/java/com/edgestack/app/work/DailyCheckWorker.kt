@@ -26,6 +26,7 @@ class DailyCheckWorker(
         val beforeRisk = container.settings.decodedRiskState(before)
         val beforePlan = container.sniperRepo.load()
         val beforeResearch = container.researchRepo.load()
+        val beforeOil = container.watchersRepo.loadOil()
         container.syncRepo.research().onSuccess { afterResearch ->
             notifyResearchTransitions(beforeResearch, afterResearch)
         }
@@ -80,6 +81,18 @@ class DailyCheckWorker(
             }
             if (after.timingAlerts) {
                 notifyTimingWindows(container, beforePlan)
+            }
+            container.watchersRepo.loadOil()?.let { afterOil ->
+                com.edgestack.app.domain.WatcherAlerts.oilAlerts(beforeOil, afterOil)
+                    .forEachIndexed { index, (title, text) ->
+                        AlertNotifier.notify(
+                            applicationContext,
+                            AlertNotifier.CHANNEL_OIL,
+                            500 + index,
+                            title,
+                            text,
+                        )
+                    }
             }
         }
         if (container.settings.current().timingAlerts) {

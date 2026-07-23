@@ -23,9 +23,11 @@ import com.edgestack.app.domain.model.PortfolioRecommendationV2
 import com.edgestack.app.domain.model.QuoteBatchV1
 import com.edgestack.app.domain.model.RecommendationPreviewRequestV2
 import com.edgestack.app.domain.model.ResearchSnapshotV1
+import com.edgestack.app.domain.model.OilSurgeV1
 import com.edgestack.app.domain.model.SniperPlanV2
 import com.edgestack.app.domain.model.SniperPreviewRequestV2
 import com.edgestack.app.domain.model.TrackedPosition
+import com.edgestack.app.domain.model.TrancheWatchV1
 import com.edgestack.app.domain.model.TrackedPositions
 import com.edgestack.app.core.AppJson
 import kotlinx.serialization.json.JsonObject
@@ -159,6 +161,22 @@ class ResearchRepository(private val store: JsonFileStore) {
         store.write("research_snapshot.json", ResearchSnapshotV1.serializer(), snapshot)
 }
 
+/** Last server-fetched watcher states (tranche triggers + oil surge) for offline display
+ *  and as the persisted last-seen snapshot the DailyCheckWorker diffs for notifications. */
+class WatchersRepository(private val store: JsonFileStore) {
+    fun loadTranche(): TrancheWatchV1? =
+        store.read("watchers_tranche.json", TrancheWatchV1.serializer())
+
+    fun saveTranche(watch: TrancheWatchV1) =
+        store.write("watchers_tranche.json", TrancheWatchV1.serializer(), watch)
+
+    fun loadOil(): OilSurgeV1? =
+        store.read("watchers_oil.json", OilSurgeV1.serializer())
+
+    fun saveOil(surge: OilSurgeV1) =
+        store.write("watchers_oil.json", OilSurgeV1.serializer(), surge)
+}
+
 /** Last server-evaluated sniper plan. Offline mode displays it without recalculating signals. */
 class SniperRepository(private val store: JsonFileStore) {
     fun load(): SniperPlanV2? =
@@ -176,6 +194,7 @@ class SyncRepository(
     private val sniperRepo: SniperRepository,
     private val edgesRepo: EdgesRepository,
     private val researchRepo: ResearchRepository,
+    private val watchersRepo: WatchersRepository,
     private val http: OkHttpClient,
 ) {
     private suspend fun api(): EdgeStackApi? {
@@ -320,6 +339,16 @@ class SyncRepository(
         plan
     }
 
+    suspend fun trancheWatch(): Result<TrancheWatchV1> = apiCatching {
+        val api = api() ?: error("no server URL configured")
+        api.trancheWatch().also(watchersRepo::saveTranche)
+    }
+
+    suspend fun oilSurge(): Result<OilSurgeV1> = apiCatching {
+        val api = api() ?: error("no server URL configured")
+        api.oilSurge().also(watchersRepo::saveOil)
+    }
+
     suspend fun previewSniper(
         accountEquity: Double,
         maxTolerableLoss: Double,
@@ -346,6 +375,8 @@ class SyncRepository(
         val bundle = api.latestRecommendation()
         recommendationRepo.saveBundle(bundle)
         runCatching { api.latestSniper() }.onSuccess(sniperRepo::save)
+        runCatching { api.trancheWatch() }.onSuccess(watchersRepo::saveTranche)
+        runCatching { api.oilSurge() }.onSuccess(watchersRepo::saveOil)
         runCatching { api.edges() }.onSuccess(edgesRepo::saveCatalog)
         runCatching { api.monitoringEdges() }.onSuccess(edgesRepo::saveMonitoring)
         runCatching {

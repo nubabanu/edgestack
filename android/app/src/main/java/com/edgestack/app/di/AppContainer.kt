@@ -16,6 +16,7 @@ import com.edgestack.app.data.repo.RecommendationRepository
 import com.edgestack.app.data.repo.ResearchRepository
 import com.edgestack.app.data.repo.SniperRepository
 import com.edgestack.app.data.repo.SyncRepository
+import com.edgestack.app.data.repo.WatchersRepository
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -39,6 +40,7 @@ class AppContainer(context: Context) {
     val researchRepo = ResearchRepository(fileStore)
     val positionsRepo = PositionsRepository(fileStore)
     val calendarRepo = CalendarRepository(seed)
+    val watchersRepo = WatchersRepository(fileStore)
     val syncRepo = SyncRepository(
         settings,
         recommendationRepo,
@@ -47,6 +49,7 @@ class AppContainer(context: Context) {
         sniperRepo,
         edgesRepo,
         researchRepo,
+        watchersRepo,
         http,
     )
     val yahoo = YahooChartClient(http)
