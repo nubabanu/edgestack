@@ -58,8 +58,32 @@ NEAR_CEIL = 0.75
 MIN_DVOL_M = 5.0
 MAX_ABS_RETURN = 2.0
 ETFS = frozenset(
-    "SPY TLT SHY GLD SLV USO BNO UNG UGA QQQ IWM DIA XLK SMH XLF XLE XLY XLP XLV "
-    "EWJ EWC UUP DBC DBA".split()
+    [
+        "SPY",
+        "TLT",
+        "SHY",
+        "GLD",
+        "SLV",
+        "USO",
+        "BNO",
+        "UNG",
+        "UGA",
+        "QQQ",
+        "IWM",
+        "DIA",
+        "XLK",
+        "SMH",
+        "XLF",
+        "XLE",
+        "XLY",
+        "XLP",
+        "XLV",
+        "EWJ",
+        "EWC",
+        "UUP",
+        "DBC",
+        "DBA",
+    ]
 )
 
 
