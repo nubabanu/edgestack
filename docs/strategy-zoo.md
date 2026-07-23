@@ -387,3 +387,24 @@ dip), fills at next adjusted open, ledger artifacts/paper_swing.json.
 Review gate frozen in the docstring: >= 100 closed trades AND >= 6 months;
 success = mean net > 0 at 20 bps AND book >= SPY; else retire. First
 entries 2026-07-23: LUMN, GNRC, LDOS.
+
+### Portfolio-vs-market simulation + entry-window correction (2026-07-23)
+
+Q: does the swing-zone rule BEAT THE MARKET as a capital-constrained book
+(10 slots x 10%, first-come admission, idle slots in cash)? First finding:
+the study's entry allowed buying stocks that had already CRASHED THROUGH the
+floor (below dip*0.85) - those become 1-day crash-rebound trades (96% of
+theta-30% exits were zone breaks) and inflated results with survivorship-
+flavored reversal alpha. Corrected rule (entries only INSIDE [0.85,1.05] x
+dip - what swing_paper_book.py already runs):
+
+  theta 5%:  book CAGR +26.4% at 2bps, +15.9% at 20bps retail vs SPY +14.1%
+             (2003-2026); exits 54% target / 37% timeout / 10% zone-break.
+  theta 15%: NEGATIVE (-0.3%/-3.3%). theta 30%: +11.4%/+10.2% - below SPY.
+
+So: only the fast lane beats the market in simulation, by ~1.8pp/yr at
+retail costs. Standing caveats that could erase exactly that margin: the
+universe is TODAY'S index members (survivorship-biased; SPY is not) and the
+bounded-entry variant is a post-study correction (made for correctness, not
+tuned, but a variant nonetheless). The pre-registered paper book measures
+precisely this rule forward and remains the arbiter.
