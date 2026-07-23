@@ -41,6 +41,8 @@ WATCH = (
     "XLE",
     "XLY",
     "XLP",  # opening-fade index, sector, and style proxies
+    "USO",
+    "BNO",  # oil surge watch proxies (oil_surge_watch.py)
     "TLT",
     "SHY",
     "GLD",  # benchmarks + baseline policy

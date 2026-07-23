@@ -169,6 +169,26 @@ local via `scripts/precheck.bat`, logs to `logs/precheck.log`) fetches today's p
 bar 15 min before the US close and sends a provisional-T1 heads-up so entries can be
 planned the same evening; the nightly watcher on the real close stays canonical.
 
+### Oil surge watch (CL=F shock reaction, added 2026-07-23)
+
+`scripts/oil_surge_watch.py` REACTS to crude price shocks — it predicts no events.
+SHOCK alerts (CL=F >= +4% day or >= +8%/5 sessions, descriptive facts, geopolitical
+headlines quoted as corroboration only) fire live; while a 10-session surge regime is
+armed, pullbacks >= 1.5% from the post-shock closing high fire DIP alerts. Two runs:
+Task Scheduler **"EdgeStack Oil Surge Watch"** polls `--intraday` every 30 min
+(08:00-23:00 via `scripts/oil_watch.bat`, provisional live-bar alerts), and
+`nightly.bat` runs `--eod` on curated closes (canonical; state in
+`artifacts/oil_surge_state.json`, log `logs/oil_surge_watch.log`, status via
+`agent_toolkit.py oil-surge`). DIP alerts are **DISPLAY-ONLY**:
+`scripts/oil_shock_study.py` (24 trials, 2000-2026) FAILED — best cell E2/R3@20d
+t=1.84 < 2 (docs/strategy-zoo.md) — so `DIP_TICKETS_ENABLED = False`; enabling
+requires a fresh study PASS naming R3 in `artifacts/oil_shock_study_verdict.json`
+AND a human flip, at which point paper tickets would size from tranche_plan.json key
+`"BNO": {"OILDIP": eur}` into `artifacts/paper_oil.json`. BNO is a data proxy only —
+PRIIPs blocks US ETFs for EU retail; a real purchase is a UCITS Brent ETC. The
+SHIPPING_DISRUPTION hard veto in `edgestack oil check` (fresh CFD entries) is
+intentionally unchanged and opposite in polarity to this dip program.
+
 SPY is watched too (T1 = calm regime AND any dip — the best-compounding entry in the
 research; T3 alerts on the reclaim cross only, REL/earnings skipped for the index).
 

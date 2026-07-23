@@ -253,3 +253,30 @@ a negative-score session's open with a mandatory fill exactly one XNYS session
 later. Review requires at least 252 prospective sessions and 30 completed
 events, and cannot promote automatically. See `docs/market-cycle-claim-audit.md`
 for the source-claim evidence ledger.
+
+## Oil shock dip-entry study (oil_shock_study.py, 2026-07-23)
+
+Question, asked after the Bab al-Mandab closure surge was missed: once CL=F
+has already jumped (>= +4% day or >= +8% over 5 sessions), does buying the
+subsequent pullback beat unconditional entry? The study question was selected
+after observing a 2026 episode — selection bias is baked in, and the 2024+
+holdout is previously-accessed twice over.
+
+Setup: CL=F daily 2000-2026 (Yahoo silently dropped the negative-price rows
+of April 2020; the 2020-04-15..2020-05-01 window is excised and logged).
+Episode definitions E1 (raw threshold, 196 episodes) and E2 (E1 minus
+crash-rebound days with trailing 20-session return <= -10%, 167 episodes).
+Entry rules R1 immediate / R2 first down close / R3 pullback >= 1.5% from the
+post-shock closing high / R4 pullback >= 2.5%; horizons 5/10/20 sessions;
+fill at close t+1; 24 trials with a batch id, Bonferroni-deflated bar (~2.9)
+reported alongside the repo t >= 2.
+
+**Verdict: FAIL — no trial clears the event gate plus survivor bar.** The
+directional picture is consistent but weak: E2/R3 (pullback-buy during a
+non-crash surge) beats unconditional in all three splits at every horizon,
+best cell E2/R3@20d at +2.2% pooled excess, t = 1.84. +4% oil days are
+common (196 in 26 years), and their average follow-through is small relative
+to oil's daily noise. Operational consequence: `scripts/oil_surge_watch.py`
+SHOCK alerts are live (descriptive facts), DIP alerts stay DISPLAY-ONLY, and
+`DIP_TICKETS_ENABLED` remains False. Re-run the study before ever proposing
+to flip it; INSUFFICIENT/FAIL forever is a valid end state.

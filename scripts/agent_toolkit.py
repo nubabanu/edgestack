@@ -118,6 +118,10 @@ def cmd_manual(_args: argparse.Namespace) -> dict:
             "universe [--as-of DATE]": "point-in-time S&P 500 membership",
             "research-summary": "headline verdicts of every stored research campaign",
             "watch": "tranche watcher status (triggers for ACN/CTSH/EPAM)",
+            "oil-surge": (
+                "oil shock/dip watcher state, study verdict, latest CL=F/BNO closes "
+                "and recent alert lines (reads artifacts only)"
+            ),
         },
         "caveats": [
             DISCLAIMER,
@@ -1118,6 +1122,33 @@ def cmd_watch(_args: argparse.Namespace) -> dict:
     return json.loads(f.read_text())
 
 
+def cmd_oil_surge(_args: argparse.Namespace) -> dict:
+    """Oil surge watcher status: state machine, study verdict, latest closes."""
+    state_path = ARTIFACTS / "oil_surge_state.json"
+    if not state_path.exists():
+        return {"error": "no oil surge state yet; run scripts/oil_surge_watch.py --eod"}
+    out: dict = {"state": json.loads(state_path.read_text())}
+    verdict_path = ARTIFACTS / "oil_shock_study_verdict.json"
+    out["study_verdict"] = (
+        json.loads(verdict_path.read_text())
+        if verdict_path.exists()
+        else "not run yet; dip alerts are DISPLAY-ONLY"
+    )
+    for symbol in ("CL=F", "BNO", "^OVX"):
+        path = ROOT / "data" / "curated" / "prices" / f"{symbol}.parquet"
+        if path.exists():
+            df = pd.read_parquet(path)
+            out[symbol] = {
+                "last_date": str(pd.to_datetime(df["date"]).max().date()),
+                "last_close": round(float(df["close"].iloc[-1]), 2),
+            }
+    log_path = ROOT / "logs" / "oil_surge_watch.log"
+    if log_path.exists():
+        out["recent_log"] = log_path.read_text(encoding="utf-8").splitlines()[-10:]
+    out["disclaimer"] = DISCLAIMER
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1142,6 +1173,7 @@ def main() -> int:
     p.add_argument("--full", action="store_true")
     sub.add_parser("research-summary")
     sub.add_parser("watch")
+    sub.add_parser("oil-surge")
     p = sub.add_parser("vol-screen")
     p.add_argument("--top", type=int, default=15)
     p = sub.add_parser("leverage-check")
@@ -1171,6 +1203,7 @@ def main() -> int:
         "universe": cmd_universe,
         "research-summary": cmd_research_summary,
         "watch": cmd_watch,
+        "oil-surge": cmd_oil_surge,
         "vol-screen": cmd_vol_screen,
         "leverage-check": cmd_leverage_check,
         "go-backtest": cmd_go_backtest,
